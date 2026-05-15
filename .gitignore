@@ -84,7 +84,7 @@ frontend/functions/.env
 .DS_Store
 *.DS_Store
 **/.DS_Store
-*.txt
+
 *.zip
 *.log
 *.vscode
