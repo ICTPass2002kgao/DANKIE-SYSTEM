@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DANKIE Church - Official App & Ministry Information</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="shortcut icon" href="./assets/dankie_logo.PNG" type="image/x-icon">
+    
+    <style>
+      :root {
+          /* Neumorphic Palette */
+          --bg-color: #EFF4F9;
+          --primary-color: #1976D2;
+          --text-main: #455A64;
+          --text-light: #78909C;
+          
+          /* Shadows */
+          --shadow-light: -9px -9px 18px #ffffff;
+          --shadow-dark: 9px 9px 18px #dbe4eb;
+          --shadow-inset: inset 6px 6px 12px #dbe4eb, inset -6px -6px 12px #ffffff;
+      }
+
+      body { 
+        background-color: var(--bg-color); 
+        color: var(--text-main); 
+        font-family: 'Poppins', sans-serif;
+      }
+
+      h1, h2, h3, h5 {
+        color: var(--primary-color);
+        font-weight: 800;
+        letter-spacing: -0.5px;
+      }
+
+      p {
+        color: var(--text-main);
+        line-height: 1.7;
+      }
+
+      /* --- NEUMORPHIC COMPONENTS --- */
+
+      /* 1. Navbar */
+      .navbar {
+        background-color: var(--bg-color);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.03); /* Very subtle float */
+        padding: 15px 0;
+      }
+
+      .navbar-brand {
+        color: var(--primary-color) !important;
+        font-weight: 900;
+        letter-spacing: 1px;
+        background: var(--bg-color);
+        padding: 10px 20px;
+        border-radius: 50px;
+        box-shadow: var(--shadow-dark), var(--shadow-light);
+      }
+
+      .nav-link {
+        color: var(--text-main) !important;
+        font-weight: 600;
+        margin: 0 5px;
+        padding: 8px 16px !important;
+        border-radius: 12px;
+        transition: all 0.2s ease;
+      }
+
+      .nav-link:hover {
+        color: var(--primary-color) !important;
+        background: var(--bg-color);
+        box-shadow: var(--shadow-dark), var(--shadow-light);
+        transform: translateY(-2px);
+      }
+
+      .dropdown-menu {
+        background-color: var(--bg-color);
+        border: none;
+        border-radius: 15px;
+        box-shadow: var(--shadow-dark), var(--shadow-light);
+        padding: 10px;
+      }
+
+      .dropdown-item {
+        color: var(--text-main);
+        border-radius: 8px;
+        margin-bottom: 5px;
+      }
+
+      .dropdown-item:hover {
+        background-color: var(--bg-color);
+        color: var(--primary-color);
+        box-shadow: var(--shadow-inset);
+      }
+
+      /* 2. Hero Section */
+      #hero {
+        padding: 120px 0 80px;
+        overflow: hidden;
+      }
+
+      /* Neumorphic Buttons */
+      .btn-neu-primary {
+        background-color: var(--bg-color);
+        color: var(--primary-color);
+        font-weight: 700;
+        border-radius: 50px;
+        padding: 15px 35px;
+        border: none;
+        box-shadow: var(--shadow-dark), var(--shadow-light);
+        transition: all 0.2s ease;
+      }
+
+      .btn-neu-primary:hover {
+        color: var(--primary-color);
+        box-shadow: var(--shadow-inset); /* Pressed effect on hover */
+        transform: translateY(1px);
+      }
+      
+      .btn-neu-secondary {
+        background-color: var(--bg-color);
+        color: var(--text-light);
+        font-weight: 600;
+        border-radius: 50px;
+        padding: 15px 35px;
+        border: none;
+        box-shadow: var(--shadow-dark), var(--shadow-light);
+        transition: all 0.2s ease;
+      }
+
+      .btn-neu-secondary:hover {
+        color: var(--text-main);
+        transform: translateY(-2px);
+      }
+
+      /* 3. Feature Cards (Raised) */
+      .neu-card {
+        background-color: var(--bg-color);
+        border-radius: 25px;
+        padding: 40px 25px;
+        border: none;
+        box-shadow: var(--shadow-dark), var(--shadow-light);
+        transition: transform 0.3s ease;
+        height: 100%;
+        text-align: center;
+      }
+
+      .neu-card:hover {
+        transform: translateY(-10px);
+      }
+
+      .card-icon-wrapper {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 25px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--bg-color);
+        box-shadow: var(--shadow-inset); /* Inset/Sunken circle for icon */
+        color: var(--primary-color);
+        font-size: 1.8rem;
+      }
+
+      /* 4. Download Section (Inset Container) */
+      #download-section {
+        padding: 80px 0;
+      }
+      
+      .download-container {
+        background-color: var(--bg-color);
+        border-radius: 30px;
+        padding: 60px;
+        box-shadow: var(--shadow-inset); /* The whole section looks pressed in */
+      }
+
+      /* 5. Footer */
+      footer {
+        background-color: var(--bg-color);
+        padding: 50px 0;
+        margin-top: 50px;
+        border-top: 1px solid rgba(0,0,0,0.05);
+      }
+
+      .footer-legal-links a {
+        color: var(--text-light);
+        text-decoration: none;
+        margin: 0 10px;
+        font-weight: 500;
+        transition: color 0.2s;
+      }
+
+      .footer-legal-links a:hover {
+        color: var(--primary-color);
+      }
+
+      /* Animations */
+      @keyframes float {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-10px); }
+        100% { transform: translateY(0px); }
+      }
+      
+      .floating-logo {
+        animation: float 4s ease-in-out infinite;
+      }
+    </style>
+  </head>
+  <body>
+
+    <nav class="navbar navbar-expand-lg sticky-top">
+      <div class="container">
+        <a class="navbar-brand" href="#">
+          <i class="fas fa-church me-2"></i> DANKIE
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" style="border:none; box-shadow: var(--shadow-dark), var(--shadow-light); border-radius: 10px; padding: 10px;">
+          <span style="color: var(--primary-color);"><i class="fas fa-bars"></i></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav ms-auto mt-3 mt-lg-0">
+            <li class="nav-item"><a class="nav-link" href="#mission">Mission</a></li>
+            <li class="nav-item"><a class="nav-link" href="#app-features">Features</a></li>
+            
+            <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  Legal
+                </a>
+                <ul class="dropdown-menu" aria-labelledby="navbarDropdown">
+                  <li><a class="dropdown-item" href="terms_and_conditions.html">Terms and Conditions</a></li>
+                  <li><a class="dropdown-item" href="privacy_policy.html">Privacy Policy</a></li>
+                </ul>
+            </li>
+
+            <li class="nav-item ms-lg-3 mt-2 mt-lg-0">
+              <a class="btn-neu-primary text-decoration-none" href="#download-section">
+                Download
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <header id="hero">
+      <div class="container">
+        <div class="row align-items-center">
+          
+          <div class="col-md-6 text-md-start text-center mb-5 mb-md-0">
+            <h1 class="display-4 mb-3">Faith meets<br>Innovation.</h1>
+            <p class="lead mb-5" style="color: var(--text-light);">
+              Serving the community through technology. Download the official DANKIE app for spiritual growth, shopping, and connection.
+            </p>
+            <div class="d-flex justify-content-center justify-content-md-start gap-4 flex-wrap">
+              <a href="#download-section" class="btn-neu-primary text-decoration-none">
+                <i class="fas fa-mobile-alt me-2"></i> Get App
+              </a>
+              <a href="https://tact-3c612.web.app" class="btn-neu-secondary text-decoration-none">
+                <i class="fas fa-globe me-2"></i> Web Portal
+              </a>
+            </div>
+          </div>
+
+          <div class="col-md-6 text-center">
+            <div style="background: var(--bg-color); padding: 40px; border-radius: 50%; box-shadow: var(--shadow-dark), var(--shadow-light); display: inline-block;">
+               <img src="./assets/dankie_logo.PNG" alt="DANKIE Logo" class="img-fluid floating-logo" style="max-height: 200px; border-radius: 20px;">
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </header>
+
+    <section id="mission" class="container my-5 pt-5">
+      <div class="text-center mb-5">
+        <h2>Our Pillars</h2>
+        <p style="color: var(--text-light);">The foundation of our digital ministry</p>
+      </div>
+      <div class="row g-4"> 
+        <div class="col-md-4">
+          <div class="neu-card">
+            <div class="card-icon-wrapper">
+              <i class="fas fa-users"></i>
+            </div>
+            <h5>Community</h5>
+            <p class="small text-muted">Connect with overseers, view events, and receive instant support.</p>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="neu-card">
+            <div class="card-icon-wrapper">
+              <i class="fas fa-shield-alt"></i>
+            </div>
+            <h5>Security</h5>
+            <p class="small text-muted">Advanced facial recognition ensures your data remains secure and private.</p>
+          </div>
+        </div>
+        <div class="col-md-4">
+            <div class="neu-card">
+              <div class="card-icon-wrapper">
+                <i class="fas fa-heart"></i>
+              </div>
+              <h5>Charity</h5>
+              <p class="small text-muted">Transparent giving channels for church projects and community aid.</p>
+            </div>
+          </div>
+      </div>
+    </section>
+
+    <section id="app-features" class="container my-5 pt-5">
+      <div class="text-center mb-5">
+        <h2>App Features</h2>
+      </div>
+      <div class="row g-4">
+        <div class="col-md-4">
+          <div class="neu-card">
+            <div class="card-icon-wrapper"><i class="fas fa-shopping-basket"></i></div>
+            <h5>Marketplace</h5>
+            <p class="small text-muted">Buy or sell TACT products seamlessly.</p>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="neu-card">
+            <div class="card-icon-wrapper"><i class="fas fa-graduation-cap"></i></div>
+            <h5>Education</h5>
+            <p class="small text-muted">Apply to universities with committee assistance.</p>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="neu-card">
+            <div class="card-icon-wrapper"><i class="fas fa-music"></i></div>
+            <h5>TACT Music</h5>
+            <p class="small text-muted">Stream songs freely without subscriptions.</p>
+          </div>
+        </div>
+        <div class="col-md-4 offset-md-2">
+          <div class="neu-card">
+            <div class="card-icon-wrapper"><i class="fas fa-chart-line"></i></div>
+            <h5>Balance Sheets</h5>
+            <p class="small text-muted">Automated financial reporting for Overseers.</p>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="neu-card">
+            <div class="card-icon-wrapper"><i class="fas fa-lock"></i></div>
+            <h5>Encryption</h5>
+            <p class="small text-muted">Military-grade data protection.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download-section" class="text-center container mt-5">
+      <div class="download-container">
+        <h2 class="mb-3">Get Connected</h2>
+        <p class="lead mb-4" style="color: var(--text-main);">Available exclusively on Google Play and App Gallery.</p>
+
+        <div class="d-flex justify-content-center gap-4 flex-wrap">
+          <a href="https://play.google.com/store/apps/details?id=com.thetact.ttact" target="_blank" class="btn-neu-primary text-decoration-none" style="font-size: 1.1rem; padding: 20px 40px;">
+            <i class="fab fa-google-play me-2"></i> Download for Android
+          </a> 
+          <a href="https://appgallery.huawei.com/app/C115359927" target="_blank" class="btn-neu-primary text-decoration-none" style="font-size: 1.1rem; padding: 20px 40px;">
+          <i class="fab fa-huawei me-2 "></i> Download for Huawei
+          </a>
+        </div>
+      </div> 
+      
+    </section>
+     <footer class="text-center">
+      <div class="container">
+        <div style="width: 50px; height: 50px; background: var(--bg-color); border-radius: 50%; box-shadow: var(--shadow-dark), var(--shadow-light); margin: 0 auto 20px; display: flex; align-items: center; justify-content: center;">
+          <img src="./assets/dankie_logo.PNG" style="width: 30px; opacity: 0.7;">
+        </div>
+
+        <p class="text-muted mb-3">&copy; 2026 DANKIE Ministry. All rights reserved.</p>
+        
+        <div class="footer-legal-links">
+            <a href="terms_and_conditions.html">Terms</a>
+            <span style="color: var(--text-light);">•</span>
+            <a href="privacy_policy.html">Privacy</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

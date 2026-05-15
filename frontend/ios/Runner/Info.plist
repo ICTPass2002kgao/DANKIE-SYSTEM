@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CADisableMinimumFrameDurationOnPhone</key>
+    <true/>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <key>CFBundleDisplayName</key>
+    <string>DANKIE</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>ttact</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$(FLUTTER_BUILD_NAME)</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleVersion</key>
+    <string>$(FLUTTER_BUILD_NUMBER)</string>
+    <key>GADApplicationIdentifier</key>
+    <string>ca-app-pub-6759693957212853~6140038253</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_http._tcp</string>
+    </array>
+    <key>NSCameraUsageDescription</key>
+    <string>This app needs access to your camera for face verification.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Dankie needs to access your local network to connect to the server.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>This app needs access to your location to auto-fill your address and give you communities around you.</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>This app needs access to your location to auto-fill your address and give you communities around you.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>This app needs access to your location to auto-fill your address and give you communities around you.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>We need microphone access to record video (optional, but often required by the camera plugin even for photos).</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Dankie needs access to your photo library to let you upload profile pictures and share photos within your community.</string>
+    
+    <!-- NEW: Audio and Bluetooth Safety Entitlements -->
+    <key>NSAppleMusicUsageDescription</key>
+    <string>Dankie needs access to Apple Music to play audio streams seamlessly.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Dankie needs Bluetooth access to manage audio playback via wireless devices.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>Dankie needs Bluetooth access to manage audio playback via wireless devices.</string>
+    
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+        <string>fetch</string>
+    </array>
+    <key>UILaunchScreens</key>
+    <dict>
+        <key>UILaunchScreenDefinitions</key>
+        <array>
+            <dict>
+                <key>UILaunchScreenIdentifier</key>
+                <string></string>
+                <key>UIImageName</key>
+                <string></string>
+            </dict>
+        </array>
+        <key>UIURLToLaunchScreenAssociations</key>
+        <dict/>
+        <key>UIDefaultLaunchScreen</key>
+        <string></string>
+    </dict>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>UIMainStoryboardFile~ipad</key>
+    <string>Main</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+</dict>
+</plist>

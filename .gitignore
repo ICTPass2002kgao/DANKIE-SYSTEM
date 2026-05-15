@@ -1,0 +1,90 @@
+# Miscellaneous
+Frontend/*.class
+Frontend/*.log
+Frontend/*.pyc
+frontend/*.swp
+frontend/.DS_Store
+frontend/.atom/
+frontend/build/
+frontend/.buildlog/
+frontend/.history
+frontend/.svn/
+frontend/.swiftpm/
+frontend/migrate_working_dir/
+frontend/*.pem
+# IntelliJ related
+frontend/*.iml
+frontend/*.ipr
+frontend/*.iws
+frontend/*env
+frontend/android/app/upload-keystore.jks
+frontend/android/local.properties
+frontend/.idea/ 
+frontend/node_modules
+frontend/.txt
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+Front-end/**/doc/api/
+Front-end/**/ios/Flutter/.last_build_id
+Front-end/.dart_tool/
+Front-end/.flutter-plugins
+Front-end/.flutter-plugins-dependencies
+Front-end/.pub-cache/
+Front-end/.pub/
+Front-end/build/
+
+# Symbolication related
+Front-end/app.*.symbols
+
+# Obfuscation related
+Front-end/app.*.map.json
+
+# Android Studio will place build artifacts here
+Front-end/android/app/debug
+Front-end/android/app/profile
+Front-end/android/app/release
+Front-end/android/.gradle
+Front-end/android/.kotlin
+Front-end/android/*.iml
+
+Back-end/*.env
+Back-end/new_env
+Back-end/api/utils.py
+Back-end/serviceAccount.json
+new_env/
+Back-end/new_env/
+*.pyc
+__pycache__/
+db.sqlite3
+staticfiles/
+# Fixed lowercase frontend mappings
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/ios/Flutter/Flutter.framework
+frontend/ios/Flutter/Flutter.podspec
+frontend/ios/DerivedData/
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.pub-cache/
+frontend/.pub/
+frontend/build/
+frontend/android/build/
+frontend/android/.gradle/
+frontend/android/.kotlin/
+frontend/android/app/debug/
+frontend/android/app/profile/
+frontend/android/app/release/
+frontend/functions/node_modules/
+frontend/functions/.env
+.DS_Store
+*.DS_Store
+**/.DS_Store
+*.txt
+*.zip
+*.log
+*.vscode

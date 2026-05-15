@@ -1,0 +1,121 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.thetact.ttact">
+
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="com.android.vending.BILLING" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="true" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+ 
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- [FIX 1] REMOVED the AD_ID 'tools:node=remove' block. 
+         Huawei parser crashes on this. If you don't want AD_ID, simply don't include the line. -->
+
+    <!-- [FIX 2] Removed 'tools:targetApi'. Build.gradle handles this. -->
+    <application
+        android:label="DANKIE"
+        android:icon="@mipmap/launcher_icon"
+        android:usesCleartextTraffic="false">
+
+        <!-- AdMob App ID -->
+        <meta-data 
+            android:name="com.google.android.gms.ads.APPLICATION_ID" 
+            android:value="ca-app-pub-6759693957212853~5704923982"/>
+
+        <!-- [FIX 3] Switched back to relative path '.MainActivity' 
+             This is safer. Ensure your Kotlin MainActivity extends AudioServiceActivity instead. -->
+             <meta-data
+            android:name="com.ryanheise.audioservice.notification_icon"
+            android:resource="@drawable/ic_notification" />
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <meta-data 
+                android:name="io.flutter.embedding.android.NormalTheme" 
+                android:resource="@style/NormalTheme"/>
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Deep Links -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="tact-3c612.web.app" android:pathPrefix="/song" />
+                <data android:scheme="https" android:host="tact-3c612.web.app" android:pathPrefix="/career" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ttact" android:host="open" />
+            </intent-filter>
+        </activity>
+
+        <meta-data 
+            android:name="flutterEmbedding" 
+            android:value="2" />
+
+        <!-- Audio Service -->
+        <service 
+            android:name="com.ryanheise.audioservice.AudioService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <receiver 
+            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+        
+        <meta-data
+            android:name="com.ryanheise.audioservice.android.DEFAULT_RESTART_ACTIVITY_CLASS"
+            android:value="com.thetact.ttact.MainActivity" />
+
+        <meta-data
+            android:name="com.ryanheise.audioservice.NotificationChannelId"
+            android:value="com.thetact.ttact.audio"/>
+        <meta-data
+            android:name="com.ryanheise.audioservice.NotificationChannelName"
+            android:value="TTact Music"/>
+        <meta-data
+            android:name="com.ryanheise.audioservice.NotificationColor"
+            android:resource="@color/notification_color"/>
+    </application>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+    </queries>
+
+</manifest>

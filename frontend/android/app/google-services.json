@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "219784074240",
+    "project_id": "tact-3c612",
+    "storage_bucket": "tact-3c612.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:219784074240:android:242aea938dfeb6d907b4e5",
+        "android_client_info": {
+          "package_name": "com.thetact.ttact"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "219784074240-in4p1nmutaqb8nfehikns0fj091tm6rl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.thetact.ttact",
+            "certificate_hash": "d9a87df044318946708075f0e85b756cfbe68635"
+          }
+        },
+        {
+          "client_id": "219784074240-sibqjr68odge1lpcdmn239brfosbefk6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDAigV-EJXPZq41U1-K6930yVIvuCv_P9o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "219784074240-sibqjr68odge1lpcdmn239brfosbefk6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "219784074240-541mlg2sfbt70rltaijrrs70c8kt8h32.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.ttact"
+              }
+            }
+          ]
+        }
+      },
+      "admob_app_id": "ca-app-pub-6759693957212853~5704923982"
+    }
+  ],
+  "configuration_version": "1"
+}
