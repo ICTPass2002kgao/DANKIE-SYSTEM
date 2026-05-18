@@ -1,5 +1,4 @@
-# Use an official Python runtime as a parent image (Debian based)
-# Using python:3.11-slim for better compatibility with ML libraries
+
 FROM python:3.11-slim 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED 1
