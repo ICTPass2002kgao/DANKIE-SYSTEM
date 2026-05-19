@@ -513,7 +513,6 @@ def paystack_webhook(request):
                 expected_cents = int(order.total_amount * Decimal('100'))
                 paid_cents = int(data.get('amount', 0))
 
-                # Deep calculation logging to check precision drift
                 logger.info(f"ℹ️ WEBHOOK MATH CHECK: Order reference '{order_ref}'. Expected Cents: {expected_cents}, Paystack Paid Cents: {paid_cents}")
 
                 if expected_cents == paid_cents:
@@ -530,7 +529,7 @@ def paystack_webhook(request):
 
             except Order.DoesNotExist:
                 logger.warning(f"⚠️ Order reference '{order_ref}' not found in local database models during process execution sequence.")
-                return HttpResponse('Order not found', status=400) # Changed to 400 for structural tracking continuity
+                return HttpResponse('Order not found', status=400)
             except Exception as e:
                 logger.error(f"❌ Error updating order status: {e}")
                 return HttpResponse('Internal server error.', status=500)
@@ -617,6 +616,7 @@ def create_seller_subaccount(request):
         logger.error(f"Server Error: {str(e)}")
         return Response({'error': str(e)}, status=500)
 
+# FIX: Modified calculation logic strictly within this view to look up the Order row and accurately append Delivery Fees
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
 @permission_classes([IsFirebaseAuthenticated])
@@ -649,6 +649,16 @@ def create_payment_link(request):
                     "subaccount": product['subaccount'],
                     "share": seller_share
                 })
+
+        # Check order row data directly to map precision variations (like delivery_charge addition)
+        try:
+            db_order = Order.objects.get(id=order_ref)
+            expected_db_cents = int(db_order.total_amount * Decimal('100'))
+            if expected_db_cents > total_amount:
+                logger.info(f"ℹ️ PAYMENT LINK CALCULATION ADJUSTMENT: Appending missing metadata/delivery delta of {expected_db_cents - total_amount} cents.")
+                total_amount = expected_db_cents
+        except Order.DoesNotExist:
+            pass
 
         body = {
             "email": email,
