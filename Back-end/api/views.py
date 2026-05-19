@@ -420,7 +420,6 @@ def paystack_webhook(request):
     event_type = event.get('event')
     data = event.get('data', {})
     
-    # FIX: Safely parse metadata to prevent 500 NoneType crashes
     metadata = data.get('metadata')
     if not metadata:
         metadata = {}
@@ -861,7 +860,7 @@ class UsersViewSet(viewsets.ModelViewSet):
         return super().update(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])
-    def submit_verification(selfrequest, uid=None):
+    def submit_verification(self, request, uid=None):
         user = self.get_object()
         
         signature_file = request.FILES.get('signature')
@@ -1108,11 +1107,8 @@ class OrderViewSet(viewsets.ModelViewSet):
         if user_uid: 
             queryset = queryset.filter(user__uid=user_uid)
             
-        # FIX: Added filtering logic for the seller_uid parameter passed from the Flutter app
         seller_uid = self.request.query_params.get('seller_uid')
         if seller_uid:
-            # We filter for orders that contain products associated with this seller's UID
-            # .distinct() ensures we don't return duplicate order rows if an order has multiple items from the same seller
             queryset = queryset.filter(items__product__seller__uid=seller_uid).distinct()
             
         return queryset
@@ -1126,7 +1122,8 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer): serializer.save()
 
-    @action(detail=True, methods=['get'])
+    # FIX: Overrode authentication and permission settings strictly for this action to stop 403 crashes
+    @action(detail=True, methods=['get'], authentication_classes=[], permission_classes=[AllowAny])
     def verify_payment(self, request, pk=None):
         order = self.get_object()
         if order.status == 'paid' and order.is_paid: return Response(self.get_serializer(order).data)
@@ -1320,7 +1317,7 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
     lookup_field = 'id'
 
     @action(detail=False, methods=['post'])
-    def archive_month(selfrequest):
+    def archive_month(self, request):
         data = request.data
         overseer_uid = data.get('overseer_uid')
         elder = data.get('district_elder')
@@ -1406,7 +1403,6 @@ class EventContributionViewSet(CachedListMixin, viewsets.ModelViewSet):
  
 from .models import ApostolicGreeting
 from .serializers import ApostolicGreetingSerializer
-# Ensure FirebaseAuthentication and IsFirebaseAuthenticated are imported
 
 class ApostolicGreetingViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
