@@ -196,12 +196,17 @@ class UpcomingEventSerializer(serializers.ModelSerializer):
 class CareerOpportunitySerializer(serializers.ModelSerializer):
     class Meta:
         model = CareerOpportunity
-        fields = "__all__"
+        fields = "__all__" 
 
 class TactsoBranchSerializer(serializers.ModelSerializer):
+    # This reaches into the related Overseer model and grabs their full_name
+    overseer_name = serializers.CharField(source='overseer.full_name', read_only=True)
+    # This reaches into the related District model and grabs the district name
+    district_name = serializers.CharField(source='assigned_district.name', read_only=True)
+
     class Meta:
         model = TactsoBranch
-        fields = "__all__"
+        fields = '__all__' # This will now include overseer_name and district_name
  
 class TactsoCommitteeMemberSerializer(serializers.ModelSerializer):
     class Meta:
