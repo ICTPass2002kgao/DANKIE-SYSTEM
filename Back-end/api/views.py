@@ -388,6 +388,10 @@ def paystack_webhook(request):
         return HttpResponse("Method not allowed", status=405)
 
     secret = settings.PAYSTACK_SECRET_KEY
+    if not secret:
+        logger.error("PAYSTACK_SECRET_KEY is missing from settings.")
+        return HttpResponse("Server Error", status=500)
+
     signature = request.headers.get('x-paystack-signature')
     
     if not signature:
@@ -416,7 +420,12 @@ def paystack_webhook(request):
     event_type = event.get('event')
     data = event.get('data', {})
     
-    metadata_fields = data.get('metadata', {}).get('custom_fields', [])
+    # FIX: Safely parse metadata to prevent 500 NoneType crashes
+    metadata = data.get('metadata')
+    if not metadata:
+        metadata = {}
+        
+    metadata_fields = metadata.get('custom_fields', []) if isinstance(metadata, dict) else []
     
     def get_meta(variable_name):
         field = next((f for f in metadata_fields if f.get('variable_name') == variable_name), None)
@@ -852,7 +861,7 @@ class UsersViewSet(viewsets.ModelViewSet):
         return super().update(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])
-    def submit_verification(self, request, uid=None):
+    def submit_verification(selfrequest, uid=None):
         user = self.get_object()
         
         signature_file = request.FILES.get('signature')
