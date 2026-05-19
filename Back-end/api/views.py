@@ -389,13 +389,12 @@ def paystack_webhook(request):
 
     secret = settings.PAYSTACK_SECRET_KEY
     if not secret:
-        logger.error("PAYSTACK_SECRET_KEY is missing from settings.")
+        logger.error("🚨 WEBHOOK ERROR: PAYSTACK_SECRET_KEY is missing from settings configuration.")
         return HttpResponse("Server Error", status=500)
 
     signature = request.headers.get('x-paystack-signature')
-    
     if not signature:
-        logger.warning("Webhook Security Failure: No signature.")
+        logger.warning("🚨 WEBHOOK WARNING: Received request completely lacking 'x-paystack-signature' header.")
         return HttpResponse("No signature", status=401)
 
     try:
@@ -406,32 +405,33 @@ def paystack_webhook(request):
         ).hexdigest()
 
         if hash_calc != signature:
-            logger.warning("Webhook Security Failure: Mismatched signature.")
+            logger.warning("🚨 WEBHOOK WARNING: Security signature validation calculation failed. Header mismatch.")
             return HttpResponse("Unauthorized", status=401)
     except Exception as e:
-        logger.error(f"Signature Verification Error: {e}")
+        logger.error(f"🚨 WEBHOOK EXCEPTION: Signature Verification parsing anomaly: {e}")
         return HttpResponse("Server Error", status=500)
 
     try:
         event = json.loads(request.body)
-    except json.JSONDecodeError:
+        logger.info(f"ℹ️ WEBHOOK DATA: Received webhook payload successfully decoded. Event type: {event.get('event')}")
+    except json.JSONDecodeError as json_err:
+        logger.error(f"🚨 WEBHOOK ERROR: JSON body could not be decoded. Raw string context: {request.body}. Error: {json_err}")
         return HttpResponse("Invalid JSON", status=400)
 
     event_type = event.get('event')
     data = event.get('data', {})
     
-    metadata = data.get('metadata')
-    if not metadata:
+    metadata = data.get('metadata', {})
+    if not isinstance(metadata, dict):
         metadata = {}
         
-    metadata_fields = metadata.get('custom_fields', []) if isinstance(metadata, dict) else []
+    metadata_fields = metadata.get('custom_fields', [])
     
     def get_meta(variable_name):
         field = next((f for f in metadata_fields if f.get('variable_name') == variable_name), None)
         return field['value'] if field else None
 
     if event_type == 'charge.success' and data.get('status') == 'success':
-        
         subscription_type = get_meta('subscription_type')
         contribution_type = get_meta('contribution_type')
 
@@ -443,8 +443,8 @@ def paystack_webhook(request):
             paid_zar = Decimal(str(paid_cents)) / Decimal('100')
 
             if not event_id or not overseer_id:
-                logger.error("Event Contribution missing critical metadata IDs.")
-                return HttpResponse('Missing metadata.', status=200)
+                logger.error("🚨 WEBHOOK ERROR: Event Contribution triggered, but missing required metadata parameters.")
+                return HttpResponse('Missing metadata.', status=400)
 
             try:
                 updated_count = EventContribution.objects.filter(
@@ -513,6 +513,9 @@ def paystack_webhook(request):
                 expected_cents = int(order.total_amount * Decimal('100'))
                 paid_cents = int(data.get('amount', 0))
 
+                # Deep calculation logging to check precision drift
+                logger.info(f"ℹ️ WEBHOOK MATH CHECK: Order reference '{order_ref}'. Expected Cents: {expected_cents}, Paystack Paid Cents: {paid_cents}")
+
                 if expected_cents == paid_cents:
                     order.is_paid = True
                     order.status = 'paid'
@@ -526,8 +529,8 @@ def paystack_webhook(request):
                     return HttpResponse('Amount mismatch', status=400)
 
             except Order.DoesNotExist:
-                logger.warning(f"⚠️ Order {order_ref} not found.")
-                return HttpResponse('Order not found', status=404)
+                logger.warning(f"⚠️ Order reference '{order_ref}' not found in local database models during process execution sequence.")
+                return HttpResponse('Order not found', status=400) # Changed to 400 for structural tracking continuity
             except Exception as e:
                 logger.error(f"❌ Error updating order status: {e}")
                 return HttpResponse('Internal server error.', status=500)
@@ -1122,7 +1125,6 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer): serializer.save()
 
-    # FIX: Overrode authentication and permission settings strictly for this action to stop 403 crashes
     @action(detail=True, methods=['get'], authentication_classes=[], permission_classes=[AllowAny])
     def verify_payment(self, request, pk=None):
         order = self.get_object()
