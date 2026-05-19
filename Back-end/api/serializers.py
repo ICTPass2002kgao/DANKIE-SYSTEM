@@ -197,17 +197,17 @@ class CareerOpportunitySerializer(serializers.ModelSerializer):
     class Meta:
         model = CareerOpportunity
         fields = "__all__" 
+ 
 
 class TactsoBranchSerializer(serializers.ModelSerializer):
-    # This reaches into the related Overseer model and grabs their full_name
-    overseer_name = serializers.CharField(source='overseer.full_name', read_only=True)
-    # This reaches into the related District model and grabs the district name
-    district_name = serializers.CharField(source='assigned_district.name', read_only=True)
+    # This tells Django to follow the Foreign Key and grab the actual text names
+    overseer_name = serializers.CharField(source='overseer.overseer_initials_surname', read_only=True, default='Not Assigned')
+    district_name = serializers.CharField(source='assigned_district.district_elder_name', read_only=True, default='Not Assigned')
 
     class Meta:
         model = TactsoBranch
-        fields = '__all__' # This will now include overseer_name and district_name
- 
+        fields = '__all__'
+        
 class TactsoCommitteeMemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = TactsoCommitteeMember
