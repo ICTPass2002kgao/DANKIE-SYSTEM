@@ -13,6 +13,11 @@ MEMBER_TYPE_CHOICES = (
     ('Testify', 'Testify'),
 )
 
+ARTIST_TYPE_CHOICES = (
+    ('Overseer', 'Overseer Chairperson'),
+    ('Tactso', 'Tactso Chairperson'),
+)
+
 # ===============================================================================================
 # 1. CORE CONTENT MODELS
 # ===============================================================================================
@@ -20,10 +25,19 @@ MEMBER_TYPE_CHOICES = (
 class Songs(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     artist = models.CharField(max_length=255, verbose_name="Artist", blank=False)
+    artist_type = models.CharField(max_length=50, choices=ARTIST_TYPE_CHOICES, blank=True, null=True, verbose_name="Artist Type")
     category = models.CharField(max_length=255, verbose_name="Category", blank=False)
     released = models.CharField(max_length=255, null=True, blank=True, verbose_name="Released Date")
     song_url = models.TextField(verbose_name="Song url", blank=False)
     song_name = models.CharField(max_length=255, verbose_name="Song Name", blank=False)
+    
+    # Contract & Visibility Workflow
+    signature = models.TextField(verbose_name="Signature", blank=True, null=True)
+    contract_signed = models.BooleanField(default=False, verbose_name="Contract Signed")
+    is_visible = models.BooleanField(default=False, verbose_name="Is Visible")
+    
+    # Links directly to the Committee members, restricted ONLY to Chairpersons
+     
     
     def __str__(self):
         return self.song_name
@@ -427,12 +441,13 @@ class TactsoCommitteeMember(models.Model):
 
 class AdminStaffMember(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    uid = models.CharField(max_length=255, unique=True, verbose_name="UID") 
+    uid = models.CharField(max_length=255, verbose_name="UID") 
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     name = models.CharField(max_length=255, verbose_name="First Name")
     surname = models.CharField(max_length=255, verbose_name="Surname")
     gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True)
     email = models.EmailField(verbose_name="Email")
+    personal_email = models.EmailField(blank=True, verbose_name="Personal Email")
     role = models.CharField(max_length=255, verbose_name="Role")
     portfolio = models.CharField(max_length=255, blank=True, verbose_name="Portfolio")
     province = models.CharField(max_length=255, blank=True, verbose_name="Province")

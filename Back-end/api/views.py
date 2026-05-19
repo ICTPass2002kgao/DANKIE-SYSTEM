@@ -267,6 +267,7 @@ def send_legal_broadcast(request):
     
     process_bulk_email_task.delay(inc_terms, inc_policy)
     return Response({'message': 'Broadcast started via background worker.'})
+
 class ServeDecryptedImageView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -673,34 +674,7 @@ def create_payment_link(request):
     except Exception as e: 
         logger.error(f"Payment Link Error: {e}")
         return Response({'error': 'Server error'}, status=500)
-    
-@api_view(['POST']) 
-def send_custom_email(request):
-    to = request.data.get('to')
-    subject = request.data.get('subject')
-    body = request.data.get('body') 
-    if not to or not subject or not body:
-        return Response({'error': "Missing required fields"}, status=400)
-
-    try:
-        text_content = body
-        html_content = body.replace('\n', '<br>')
-        
-        email = EmailMultiAlternatives(
-            subject=subject,
-            body=text_content,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[to]
-        )
-        email.attach_alternative(html_content, "text/html")
-
-        email.send()
-        return Response({'success': True})
-
-    except Exception as e: 
-        logger.error(f"Detailed Email Error: {str(e)}")
-        return Response({'error': str(e)}, status=500)
-
+ 
 # ===========================================================================================================
 # 4. MODEL VIEWSETS
 # ===========================================================================================================
@@ -796,8 +770,27 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         if uid: queryset = queryset.filter(uid__iexact=uid)
         return queryset
 
+    def create(self, request, *args, **kwargs):
+        data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
+        face_file = request.FILES.get('face_image')
+        
+        if face_file:
+            secure_url = encrypt_and_upload_to_firebase(face_file, 'secure_faces')
+            if secure_url: 
+                data['face_url'] = secure_url
+            else: 
+                return Response({"error": "Failed to encrypt and upload face."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            return Response({"error": "Face image is required for biometric access."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     @action(detail=False, methods=['get'])
-    def find_by_face(self, request):
+    def find_by_face(selfrequest):
         url = request.query_params.get('url')
         if not url: return Response({"error": "Missing url"}, status=400)
         staff = AdminStaffMember.objects.filter(face_url=url).first()
@@ -1101,8 +1094,18 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Order.objects.prefetch_related('items__product').select_related('user').all()
+        
         user_uid = self.request.query_params.get('user_uid')
-        if user_uid: return queryset.filter(user__uid=user_uid)
+        if user_uid: 
+            queryset = queryset.filter(user__uid=user_uid)
+            
+        # FIX: Added filtering logic for the seller_uid parameter passed from the Flutter app
+        seller_uid = self.request.query_params.get('seller_uid')
+        if seller_uid:
+            # We filter for orders that contain products associated with this seller's UID
+            # .distinct() ensures we don't return duplicate order rows if an order has multiple items from the same seller
+            queryset = queryset.filter(items__product__seller__uid=seller_uid).distinct()
+            
         return queryset
 
     def create(self, request, *args, **kwargs):
@@ -1308,7 +1311,7 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
     lookup_field = 'id'
 
     @action(detail=False, methods=['post'])
-    def archive_month(self, request):
+    def archive_month(selfrequest):
         data = request.data
         overseer_uid = data.get('overseer_uid')
         elder = data.get('district_elder')
@@ -1416,4 +1419,3 @@ class ApostolicGreetingViewSet(viewsets.ModelViewSet):
         greeting.views += 1
         greeting.save()
         return Response({'likes': greeting.likes, 'views': greeting.views})
-  

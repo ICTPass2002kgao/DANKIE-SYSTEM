@@ -15,8 +15,7 @@ from .views import (
     initialize_subscription,
     create_seller_subaccount,
     create_payment_link,
-    paystack_webhook,
-    send_custom_email,
+    paystack_webhook, 
     ContributionHistoryViewSet
     ,MonthlyReportViewSet,VisitorViewSet,EventDiaryViewSet,EventContributionViewSet
 ) 
@@ -64,7 +63,5 @@ urlpatterns = [
     path('paystack-webhook/', paystack_webhook),
     # Add this to your urlpatterns in urls.py
     path('monthly_attendance_report/', views.monthly_attendance_report, name='monthly_attendance_report'),
-    
-    # Utilities
-    path('send_custom_email/', send_custom_email), 
+     
 ]
