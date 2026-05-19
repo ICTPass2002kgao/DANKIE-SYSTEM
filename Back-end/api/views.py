@@ -790,7 +790,7 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=False, methods=['get'])
-    def find_by_face(selfrequest):
+    def find_by_face(self,request):
         url = request.query_params.get('url')
         if not url: return Response({"error": "Missing url"}, status=400)
         staff = AdminStaffMember.objects.filter(face_url=url).first()
