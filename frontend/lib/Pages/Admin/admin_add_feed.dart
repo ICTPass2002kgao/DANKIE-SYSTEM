@@ -1271,7 +1271,7 @@ class _PortalAddFeedState extends State<PortalAddFeed>
   }
 
   Widget _buildUpcomingEventsTab() {
-    final dailyVerse = BibleVerseRepository.getDailyVerse();
+    final dailyVerse = GreetingsQuoteRepository.getDailyQuote();
     final color = Theme.of(context);
     if (_isLoadingEvents) return _buildPlatformLoader();
 

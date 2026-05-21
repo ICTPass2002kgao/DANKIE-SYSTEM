@@ -53,6 +53,10 @@ class _TactsoBranchesApplicationsState
   bool _isLoadingUniversityData = true;
   int _selectedIndex = 0;
 
+  // Added for application status toggle
+  bool _isApplicationOpen = false;
+  bool _isTogglingStatus = false;
+
   Color get _primaryColor => Theme.of(context).primaryColor;
 
   @override
@@ -265,6 +269,9 @@ class _TactsoBranchesApplicationsState
             _overseerId = data['overseer']?.toString();
             _districtId = data['assigned_district']?.toString();
 
+            // Set application open status from backend
+            _isApplicationOpen = data['is_application_open'] ?? false;
+
             _activeMemberName ??= data['education_officer_name'];
             _activeMemberRole ??= "Authorized Member";
             _activeMemberFace ??= data['education_officer_face_url'];
@@ -309,6 +316,57 @@ class _TactsoBranchesApplicationsState
       }
     }
     setState(() => _isLoadingUniversityData = false);
+  }
+
+  // --- ⭐️ Added API call to toggle Application Open Status ---
+  Future<void> _toggleApplicationStatus(bool newValue) async {
+    if (_branchId == null) return;
+
+    setState(() {
+      _isTogglingStatus = true;
+    });
+
+    try {
+      User? currentUser = _auth.currentUser;
+      String token = await currentUser?.getIdToken() ?? "";
+      final url = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/tactso_branches/$_branchId/',
+      );
+
+      final response = await http.patch(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'is_application_open': newValue}),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        setState(() {
+          _isApplicationOpen = newValue;
+        });
+        Api().showMessage(
+          context,
+          "Applications are now ${newValue ? 'OPEN' : 'CLOSED'}",
+          "Status Updated",
+          Colors.green,
+        );
+      } else {
+        Api().showMessage(
+          context,
+          "Failed to update application status.",
+          "Error",
+          Colors.red,
+        );
+      }
+    } catch (e) {
+      Api().showMessage(context, "An error occurred.", "Error", Colors.red);
+    } finally {
+      setState(() {
+        _isTogglingStatus = false;
+      });
+    }
   }
 
   String _getSecureImageUrl(String? originalUrl) {
@@ -522,6 +580,39 @@ class _TactsoBranchesApplicationsState
         color: Theme.of(context).textTheme.bodyLarge!.color,
       ),
       actions: [
+        // --- ⭐️ Applications Switch placed in AppBar ---
+        Row(
+          children: [
+            Text(
+              "Applications: ",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.blueGrey,
+              ),
+            ),
+            Text(
+              _isApplicationOpen ? "OPEN" : "CLOSED",
+              style: TextStyle(
+                fontSize: 12,
+                color: _isApplicationOpen ? Colors.green : Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(width: 6),
+            _isTogglingStatus
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                    child: CupertinoActivityIndicator(radius: 10),
+                  )
+                : CupertinoSwitch(
+                    value: _isApplicationOpen,
+                    activeColor: Colors.green,
+                    onChanged: (value) => _toggleApplicationStatus(value),
+                  ),
+          ],
+        ),
+        SizedBox(width: 10),
         IconButton(icon: Icon(Icons.logout_rounded), onPressed: _logout),
         SizedBox(width: 5),
         Padding(

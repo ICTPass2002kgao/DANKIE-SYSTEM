@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart'; // ADDED
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
@@ -336,15 +337,17 @@ class _ProfessionalDashboardState extends State<ProfessionalDashboard> {
     final List<dynamic> pagedOverseers = (totalItems > 0)
         ? _filteredOverseers.sublist(startIndex, endIndex)
         : [];
-
     return Scaffold(
       backgroundColor: _baseColor,
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? (Api().isIOSPlatform
+              ? Center(child: CupertinoActivityIndicator(color: Theme.of(context).primaryColor,))
+              : Center(child: CircularProgressIndicator(color: Theme.of(context).primaryColor)))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+              
                 children: [
                   Text(
                     "Dashboard Overview",

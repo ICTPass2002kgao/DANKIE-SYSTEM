@@ -45,11 +45,53 @@ class _EventsTabState extends State<EventsTab> {
     _loadEvents();
   }
 
-  // --- NEW: FETCH FROM DJANGO API (SECURED & CACHED) ---
+  // --- NEW: FETCH FROM BOTH DJANGO APIs (EVENTS & DIARY), MERGE AND SORT ---
   void _loadEvents() {
     setState(() {
       _eventsFuture = _fetchEventsFromDjango();
     });
+  }
+
+  // Helper function to extract month numbers for chronological sorting
+  int _parseMonth(String monthStr) {
+    if (monthStr.isEmpty) return 12;
+    final cleanStr = monthStr.split('-')[0].trim().toLowerCase();
+    if (cleanStr.length < 3) return 12;
+    final m = cleanStr.substring(0, 3);
+    const months = {
+      'jan': 1,
+      'feb': 2,
+      'mar': 3,
+      'apr': 4,
+      'may': 5,
+      'jun': 6,
+      'jul': 7,
+      'aug': 8,
+      'sep': 9,
+      'oct': 10,
+      'nov': 11,
+      'dec': 12,
+    };
+    return months[m] ?? 12;
+  }
+
+  // Helper function to convert an event's string dates into a sortable DateTime
+  DateTime _parseEventDate(dynamic event) {
+    String dayStr = (event['day']?.toString() ?? '').toLowerCase();
+    String monthStr = (event['month']?.toString() ?? '').toLowerCase();
+    int year = event['year'] != null
+        ? int.tryParse(event['year'].toString()) ?? DateTime.now().year
+        : DateTime.now().year;
+
+    // Push "To Be Communicated" events to the far future so they appear last
+    if (dayStr.contains('communicated') || monthStr.contains('communicated')) {
+      return DateTime(year + 1, 12, 31);
+    }
+
+    int day = int.tryParse(dayStr.split('-')[0].trim()) ?? 31;
+    int month = _parseMonth(monthStr);
+
+    return DateTime(year, month, day);
   }
 
   Future<List<dynamic>> _fetchEventsFromDjango() async {
@@ -57,68 +99,104 @@ class _EventsTabState extends State<EventsTab> {
 
     try {
       // 1. Check for Cached Data FIRST
-      String? cachedEvents = prefs.getString('saved_events_data');
+      String? cachedEvents = prefs.getString('saved_combined_events_data');
       if (cachedEvents != null) {
         print("⚡ Loading events instantly from Local Storage");
-        // We don't return here! We just show it fast, but keep going
-        // to fetch fresh data from Django in the background.
       }
 
       // 2. SECURE FIX: Get the current Firebase user and Token
       User? user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         print("❌ Blocked: No user is currently logged in.");
-        // Fallback to offline data if not logged in
-        if (cachedEvents != null)
+        if (cachedEvents != null) {
           return json.decode(cachedEvents).take(3).toList();
+        }
         return [];
       }
 
       String? token = await user.getIdToken();
       if (token == null) {
         print("❌ Blocked: Could not retrieve Firebase token.");
-        if (cachedEvents != null)
-          return json.decode(cachedEvents).take(3).toList();
-        return [];
-      }
-
-      // 3. Build the URL
-      final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/events/');
-
-      print("Fetching events from: $url");
-
-      // 4. Make the GET Request WITH the Authorization Header
-      final response = await http
-          .get(
-            url,
-            headers: {
-              'Authorization': 'Bearer $token', // Injecting the key
-              'Content-Type': 'application/json',
-            },
-          )
-          .timeout(const Duration(seconds: 10)); // Added timeout
-
-      if (response.statusCode == 200) {
-        // 5. SAVE THE FRESH DATA TO LOCAL STORAGE
-        await prefs.setString('saved_events_data', response.body);
-        print("💾 Fresh events saved to Local Storage");
-
-        List<dynamic> data = json.decode(response.body);
-
-        // 6. Return data
-        return data.take(3).toList(); // Limit to 3 as requested
-      } else {
-        print("Server Error: ${response.statusCode} - ${response.body}");
-        // If Django fails (e.g., 500 error), try to show cached data
         if (cachedEvents != null) {
           return json.decode(cachedEvents).take(3).toList();
         }
         return [];
       }
+
+      // 3. Build the URLs for BOTH tables
+      final eventsUrl = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/events/');
+      final diaryUrl = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/event_diary/',
+      );
+
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      // 4. Fetch from both endpoints concurrently
+      final responses = await Future.wait([
+        http
+            .get(eventsUrl, headers: headers)
+            .timeout(const Duration(seconds: 10)),
+        http
+            .get(diaryUrl, headers: headers)
+            .timeout(const Duration(seconds: 10)),
+      ]);
+
+      List<dynamic> combinedEvents = [];
+
+      // Helper to extract JSON safely from DRF responses
+      List<dynamic> extractData(http.Response res) {
+        if (res.statusCode == 200) {
+          final decoded = json.decode(res.body);
+          if (decoded is Map<String, dynamic> &&
+              decoded.containsKey('results')) {
+            return decoded['results'];
+          }
+          if (decoded is List) return decoded;
+        }
+        return [];
+      }
+
+      // Merge data
+      combinedEvents.addAll(extractData(responses[0])); // Data from /events/
+      combinedEvents.addAll(
+        extractData(responses[1]),
+      ); // Data from /event_diary/
+
+      // 5. Filter out past events and sort by nearest upcoming date
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+
+      // Keep only events occurring today or in the future
+      combinedEvents = combinedEvents.where((event) {
+        DateTime eventDate = _parseEventDate(event);
+        return eventDate.isAfter(today.subtract(const Duration(days: 1)));
+      }).toList();
+
+      // Sort chronologically ascending (nearest first)
+      combinedEvents.sort((a, b) {
+        DateTime dateA = _parseEventDate(a);
+        DateTime dateB = _parseEventDate(b);
+        return dateA.compareTo(dateB);
+      });
+
+      // 6. SAVE THE FRESH SORTED DATA TO LOCAL STORAGE
+      if (combinedEvents.isNotEmpty) {
+        await prefs.setString(
+          'saved_combined_events_data',
+          json.encode(combinedEvents),
+        );
+        print("💾 Fresh merged events saved to Local Storage");
+      }
+
+      // 7. Return the top 3 nearest events
+      return combinedEvents.take(3).toList();
     } catch (e) {
       print("Network Error: $e");
-      // If the user has no internet, show them the saved data!
-      String? cachedEvents = prefs.getString('saved_events_data');
+      // If the user has no internet, show them the saved data
+      String? cachedEvents = prefs.getString('saved_combined_events_data');
       if (cachedEvents != null) {
         print("📴 No internet! Showing offline cached events.");
         return json.decode(cachedEvents).take(3).toList();
@@ -130,7 +208,7 @@ class _EventsTabState extends State<EventsTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dailyVerse = BibleVerseRepository.getDailyVerse();
+    final dailyVerse = GreetingsQuoteRepository.getDailyQuote();
 
     final Color neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.05),
@@ -180,7 +258,7 @@ class _EventsTabState extends State<EventsTab> {
             ),
             const SizedBox(height: 20),
 
-            // 5. EVENTS LIST (UPDATED FOR API)
+            // 5. EVENTS LIST (MERGED AND SORTED API DATA)
             FutureBuilder<List<dynamic>>(
               future: _eventsFuture,
               builder: (context, snapshot) {
@@ -233,12 +311,11 @@ class _EventsTabState extends State<EventsTab> {
 
         Color iconColor = isNextUpcoming ? theme.primaryColor : theme.hintColor;
 
-        // NOTE: Django Serializers typically return snake_case (e.g., poster_url)
-        // Adjust these keys based on your actual Django API response
         String day = event['day']?.toString() ?? '';
         String month = event['month']?.toString() ?? '';
         String title = event['title'] ?? 'No Title';
-        String description = event['description'] ?? 'No Description';
+        String description =
+            event['description'] ?? 'Event details to be communicated.';
         // Check for 'poster_url' (Django default) OR 'posterUrl' (if camelCase configured)
         String posterUrl = event['poster_url'] ?? event['posterUrl'] ?? '';
 
@@ -278,20 +355,28 @@ class _EventsTabState extends State<EventsTab> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          day.split('-')[0].trim(),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                            color: isNextUpcoming
-                                ? theme.primaryColor
-                                : textColor,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        if (month.isNotEmpty)
+                        day.toLowerCase().contains("communicated")
+                            ? Icon(
+                                Icons.pending_actions,
+                                color: isNextUpcoming
+                                    ? theme.primaryColor
+                                    : textColor,
+                              )
+                            : Text(
+                                day.split('-')[0].trim(),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  color: isNextUpcoming
+                                      ? theme.primaryColor
+                                      : textColor,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                        if (month.isNotEmpty &&
+                            !month.toLowerCase().contains("communicated"))
                           Text(
-                            month.toUpperCase(),
+                            month.split(' ')[0].toUpperCase(),
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
@@ -323,7 +408,8 @@ class _EventsTabState extends State<EventsTab> {
                             color: textColor,
                           ),
                         ),
-                        if (day.contains('-'))
+                        if (day.contains('-') &&
+                            !day.toLowerCase().contains("communicated"))
                           Padding(
                             padding: const EdgeInsets.only(top: 4.0),
                             child: Text(
@@ -356,7 +442,7 @@ class _EventsTabState extends State<EventsTab> {
     );
   }
 
-  // --- UI HELPERS (Unchanged logic, just keeping structure) ---
+  // --- UI HELPERS ---
 
   Widget _buildNeumorphicEmptyState(ThemeData theme, Color baseColor) {
     return NeumorphicContainer(

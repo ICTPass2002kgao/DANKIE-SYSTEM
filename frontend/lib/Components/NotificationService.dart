@@ -59,7 +59,7 @@ class NotificationService {
 
     for (int i = 0; i < 30; i++) {
       final targetDate = now.add(Duration(days: i));
-      final verse = BibleVerseRepository.getDailyVerse(date: targetDate);
+      final verse = GreetingsQuoteRepository.getDailyQuote(date: targetDate);
 
       await _scheduleNotification(
         id: i,

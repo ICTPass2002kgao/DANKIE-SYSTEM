@@ -84,9 +84,11 @@ class _EventsPageState extends State<EventsPage> {
     if (day == null || day.toLowerCase().contains('confirmed')) return null;
 
     try {
+      String dayPart = day.split('-').first.trim();
+
       if (month != null && month.isNotEmpty) {
-        final dayPart = day.split('-').first.trim();
-        return DateFormat('dd MMM yyyy').parse('$dayPart $month $year');
+        String monthPart = month.split('-').first.trim();
+        return DateFormat('dd MMM yyyy').parse('$dayPart $monthPart $year');
       }
       if (day.contains('-') && (month == null || month.isEmpty)) {
         final startMonth = day.split('-').first.trim();
@@ -101,6 +103,7 @@ class _EventsPageState extends State<EventsPage> {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day); // ZERO OUT TIME
     final theme = Theme.of(context);
 
     // ⭐️ NEUMORPHIC TINT
@@ -113,7 +116,8 @@ class _EventsPageState extends State<EventsPage> {
     if (!isLoading && upcomingEvents.isNotEmpty) {
       for (int i = 0; i < upcomingEvents.length; i++) {
         final eventDate = _parseEventDate(upcomingEvents[i]);
-        if (eventDate != null && eventDate.isAfter(now)) {
+        // Use !eventDate.isBefore(today) instead of isAfter(now)
+        if (eventDate != null && !eventDate.isBefore(today)) {
           firstUpcomingIndex = i;
           break;
         }
@@ -133,6 +137,7 @@ class _EventsPageState extends State<EventsPage> {
                   theme,
                   neumoBaseColor,
                   now,
+                  today,
                   firstUpcomingIndex,
                 ),
               ),
@@ -147,6 +152,7 @@ class _EventsPageState extends State<EventsPage> {
     ThemeData theme,
     Color neumoBaseColor,
     DateTime now,
+    DateTime today,
     int? firstUpcomingIndex,
   ) {
     if (isLoading) {
@@ -184,7 +190,7 @@ class _EventsPageState extends State<EventsPage> {
         final event = upcomingEvents[index];
         final eventDate = _parseEventDate(event);
 
-        bool isPast = eventDate != null && eventDate.isBefore(now);
+        bool isPast = eventDate != null && eventDate.isBefore(today);
         bool isNextUpcoming = index == firstUpcomingIndex;
         bool isConfirmed =
             event['day']?.toString().toLowerCase().contains('confirmed') ==

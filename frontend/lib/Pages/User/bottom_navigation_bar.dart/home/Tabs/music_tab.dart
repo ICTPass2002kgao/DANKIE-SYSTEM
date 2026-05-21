@@ -19,7 +19,7 @@ import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AdBanner.dart' hide isAndroidPlatform;
 import 'package:ttact/Components/HomePageHelpers.dart';
 import 'package:ttact/Components/LiabraryHelper.dart';
-import 'package:ttact/Components/MusicPlayerSheet.dart';
+import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/music_player.dart';
 import 'package:ttact/Pages/User/downloaded_songs.dart' hide isIOSPlatform;
 import 'package:ttact/Pages/User/library_songs.dart' hide isIOSPlatform;
 import 'package:ttact/main.dart';
@@ -44,10 +44,18 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
   String _musicSearchQuery = '';
   String _selectedCategory = 'All';
   int? _selectedSongIndex;
-  
-  // Data State (Replaces QuerySnapshot)
+
+  // Lazy Loading / Pagination State Variables
+  final ScrollController _scrollController = ScrollController();
+  final List<dynamic> _allLoadedSongs = [];
+  bool _isLoadingNextPage = false;
+  bool _hasMoreSongs = true;
+  int _currentPage = 1;
+  final int _pageSize = 20;
+
+  // Data State
   List<dynamic> _currentFilteredSongs = [];
-  late Future<List<dynamic>> _musicFuture;
+  late Future<void> _initialLoadFuture;
   late AnimationController _rotationController;
 
   String? _localAppPath;
@@ -61,14 +69,13 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
     }
   }
 
-  // --- 1. FETCH MUSIC (DJANGO - SECURED) ---
-  Future<List<dynamic>> _fetchMusic() async {
+  // --- 1. FETCH MUSIC PAGE (DJANGO - SECURED) ---
+  Future<List<dynamic>> _fetchMusicPage(int page) async {
     try {
-      // SECURE FIX: Grab the current user and their token
       User? user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         print("❌ Blocked: No user is currently logged in.");
-        return []; 
+        return [];
       }
 
       String? token = await user.getIdToken();
@@ -77,22 +84,32 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
         return [];
       }
 
-      // URL: /api/tact_music/
-      final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/songs/');
-      
-      // SECURE FIX: Add Authorization header
+      final url = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/songs/?page=$page&page_size=$_pageSize',
+      );
+
       final response = await http.get(
         url,
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
-        }
+        },
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final decodedData = json.decode(response.body);
+
+        if (decodedData is Map<String, dynamic> &&
+            decodedData.containsKey('results')) {
+          return decodedData['results'] as List<dynamic>;
+        } else if (decodedData is List<dynamic>) {
+          return decodedData;
+        }
+        return [];
       } else {
-        print("Error fetching music: ${response.statusCode} - ${response.body}");
+        print(
+          "Error fetching music page $page: ${response.statusCode} - ${response.body}",
+        );
         return [];
       }
     } catch (e) {
@@ -101,12 +118,77 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
     }
   }
 
-  // --- PUBLIC METHOD FOR DEEP LINKING ---
+  Future<void> _loadInitialData() async {
+    _currentPage = 1;
+    _hasMoreSongs = true;
+    _allLoadedSongs.clear();
+
+    final firstPageData = await _fetchMusicPage(_currentPage);
+    if (firstPageData.isEmpty || firstPageData.length < _pageSize) {
+      _hasMoreSongs = false;
+    }
+
+    // ⭐️ FIX: Basic Deduplication for the first load to be safe
+    final Set<String> seenUrls = {};
+    for (var song in firstPageData) {
+      final url = song['song_url'] ?? song['songUrl'];
+      if (url != null && !seenUrls.contains(url)) {
+        seenUrls.add(url);
+        _allLoadedSongs.add(song);
+      }
+    }
+  }
+
+  void _onScroll() async {
+    if (!_scrollController.hasClients || _isLoadingNextPage || !_hasMoreSongs)
+      return;
+
+    final threshold = _scrollController.position.maxScrollExtent * 0.85;
+    if (_scrollController.position.pixels >= threshold) {
+      setState(() {
+        _isLoadingNextPage = true;
+      });
+
+      int nextPage = _currentPage + 1;
+      final nextPageData = await _fetchMusicPage(nextPage);
+
+      if (mounted) {
+        setState(() {
+          if (nextPageData.isEmpty || nextPageData.length < _pageSize) {
+            _hasMoreSongs = false;
+          }
+
+          // ⭐️ FIX FOR INFINITE REPEATING SONGS: Deduplication logic
+          // Collect all the URLs we currently have in the list to prevent duplicates
+          final existingUrls = _allLoadedSongs
+              .map((song) => song['song_url'] ?? song['songUrl'])
+              .toSet();
+
+          // Only keep songs from the new page that are NOT already in our list
+          final newSongs = nextPageData.where((song) {
+            final url = song['song_url'] ?? song['songUrl'];
+            return url != null && !existingUrls.contains(url);
+          }).toList();
+
+          // If the backend sent us data, but every single item was a duplicate,
+          // it means the backend pagination is failing and looping Page 1. Stop fetching.
+          if (nextPageData.isNotEmpty && newSongs.isEmpty) {
+            _hasMoreSongs = false;
+          } else {
+            _allLoadedSongs.addAll(newSongs);
+            _currentPage =
+                nextPage; // Only increment if we successfully found new data
+          }
+
+          _isLoadingNextPage = false;
+        });
+      }
+    }
+  }
+
   Future<void> playDeepLinkedSong(String targetUrl) async {
     try {
-      List<dynamic> allSongs = await _musicFuture;
-
-      final validSongs = allSongs.where((song) {
+      final validSongs = _allLoadedSongs.where((song) {
         final sUrl = song['song_url'] ?? song['songUrl'];
         return sUrl != null && sUrl.toString().trim().startsWith('https://');
       }).toList();
@@ -149,7 +231,6 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
     }
   }
 
-  // --- DOWNLOAD LOGIC ---
   Future<void> _downloadSong(String url, String title, String artist) async {
     if (!kIsWeb && isAndroidPlatform) {
       var status = await Permission.storage.status;
@@ -210,7 +291,9 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
       vsync: this,
     );
     _initLocalPath();
-    _musicFuture = _fetchMusic();
+
+    _initialLoadFuture = _loadInitialData();
+    _scrollController.addListener(_onScroll);
 
     _musicSearchController.addListener(() {
       setState(() {
@@ -224,6 +307,8 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _rotationController.dispose();
     _musicSearchController.dispose();
     super.dispose();
@@ -239,124 +324,123 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
       theme.scaffoldBackgroundColor,
     );
 
+    Widget bodyContent;
+
     if (widget.isDesktop) {
-      // DESKTOP LAYOUT
-      return Row(
+      bodyContent = Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 300,
-            padding: const EdgeInsets.all(20.0),
-            child: _buildMusicControls(theme, neumoBaseColor),
-          ),
           Expanded(
+            flex: 2,
             child: Padding(
               padding: const EdgeInsets.all(20.0),
-              child: _buildSongList(theme, neumoBaseColor),
+              child: _buildMusicControls(theme, neumoBaseColor),
             ),
           ),
-          Container(
-            alignment: Alignment.centerRight,
-            width: 350, 
-            padding: const EdgeInsets.all(20.0),
-            child: _buildDesktopPlayer(theme, neumoBaseColor),
+          Expanded(
+            flex: 5,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                vertical: 20.0,
+                horizontal: 10.0,
+              ),
+              child: _buildSongList(theme, neumoBaseColor),
+            ),
           ),
         ],
       );
     } else {
-      // MOBILE LAYOUT
-      return Stack(
+      bodyContent = Column(
         children: [
-          Column(
-            children: [
-              SizedBox(height: 10),
-              _buildMusicControls(theme, neumoBaseColor),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10.0,
-                    vertical: 10,
-                  ),
-                  child: _buildSongList(theme, neumoBaseColor),
-                ),
+          SizedBox(height: 10),
+          _buildMusicControls(theme, neumoBaseColor),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10.0,
+                vertical: 10,
               ),
-              StreamBuilder<MediaItem?>(
-                stream: audioHandler?.mediaItem,
-                builder: (context, snapshot) =>
-                    snapshot.hasData ? SizedBox(height: 80) : SizedBox.shrink(),
-              ),
-            ],
-          ),
-
-          _buildMiniPlayer(theme, neumoBaseColor),
-
-          if (!kIsWeb)
-            StreamBuilder<MediaItem?>(
-              stream: audioHandler?.mediaItem,
-              builder: (context, snapshot) {
-                double bottomPos = snapshot.hasData ? 95 : 15;
-                return AnimatedPositioned(
-                  duration: Duration(milliseconds: 300),
-                  right: 15,
-                  bottom: bottomPos,
-                  child: GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => DownloadedSongs(),
-                        ),
-                      );
-                    },
-                    child: NeumorphicContainer(
-                      color: neumoBaseColor,
-                      borderRadius: 50,
-                      padding: EdgeInsets.all(12),
-                      child: Icon(
-                        Icons.download_done_outlined,
-                        size: 28,
-                        color: theme.primaryColor,
-                      ),
-                    ),
-                  ),
-                );
-              },
+              child: _buildSongList(theme, neumoBaseColor),
             ),
+          ),
           StreamBuilder<MediaItem?>(
             stream: audioHandler?.mediaItem,
-            builder: (context, snapshot) {
-              double bottomPos = snapshot.hasData ? 95 : 15;
-              return AnimatedPositioned(
-                duration: Duration(milliseconds: 300),
-                right: kIsWeb ? 15 : 85,
-                bottom: bottomPos,
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => LibrarySongs()),
-                    );
-                  },
-                  child: NeumorphicContainer(
-                    color: neumoBaseColor,
-                    borderRadius: 50,
-                    padding: EdgeInsets.all(12),
-                    child: Icon(
-                      Icons.library_add,
-                      size: 28,
-                      color: theme.primaryColor,
-                    ),
-                  ),
-                ),
-              );
-            },
+            builder: (context, snapshot) =>
+                snapshot.hasData ? SizedBox(height: 80) : SizedBox.shrink(),
           ),
         ],
       );
     }
+
+    return Stack(
+      children: [
+        bodyContent,
+        _buildMiniPlayer(theme, neumoBaseColor),
+
+        StreamBuilder<MediaItem?>(
+          stream: audioHandler?.mediaItem,
+          builder: (context, snapshot) {
+            double bottomPos = snapshot.hasData ? 95 : 15;
+            return AnimatedPositioned(
+              duration: Duration(milliseconds: 300),
+              right: 85, // Positioned beside the Library button
+              bottom: bottomPos,
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => DownloadedSongs()),
+                  );
+                },
+                child: NeumorphicContainer(
+                  color: neumoBaseColor,
+                  borderRadius: 50,
+                  padding: EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.download_done_outlined,
+                    size: 28,
+                    color: theme.primaryColor,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+
+        // Library Button
+        StreamBuilder<MediaItem?>(
+          stream: audioHandler?.mediaItem,
+          builder: (context, snapshot) {
+            double bottomPos = snapshot.hasData ? 95 : 15;
+            return AnimatedPositioned(
+              duration: Duration(milliseconds: 300),
+              right: 15, // Fixed position for consistency across all screens
+              bottom: bottomPos,
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => LibrarySongs()),
+                  );
+                },
+                child: NeumorphicContainer(
+                  color: neumoBaseColor,
+                  borderRadius: 50,
+                  padding: EdgeInsets.all(12),
+                  child: Icon(
+                    Icons.library_add,
+                    size: 28,
+                    color: theme.primaryColor,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
   }
 
-  // --- MINI PLAYER WIDGET ---
   Widget _buildMiniPlayer(ThemeData theme, Color baseColor) {
     return StreamBuilder<MediaItem?>(
       stream: audioHandler?.mediaItem,
@@ -370,15 +454,14 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
           bottom: 10,
           child: GestureDetector(
             onTap: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                useSafeArea: true,
-                backgroundColor: Colors.transparent,
-                builder: (context) => MusicPlayerSheet(
-                  themeColor: theme,
-                  onDownload: (url, title, artist) =>
-                      _downloadSong(url, title, artist),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MusicPlayerPage(
+                    themeColor: theme,
+                    onDownload: (url, title, artist) =>
+                        _downloadSong(url, title, artist),
+                  ),
                 ),
               );
             },
@@ -458,77 +541,6 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
               ),
             ),
           ),
-        );
-      },
-    );
-  }
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
-  Widget _buildSeekBar(ThemeData theme) {
-    return StreamBuilder<PlaybackState>(
-      stream: audioHandler?.playbackState,
-      builder: (context, playbackSnapshot) {
-        final state = playbackSnapshot.data;
-        final position = state?.updatePosition ?? Duration.zero;
-        final duration =
-            audioHandler?.mediaItem.value?.duration ?? Duration.zero;
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SliderTheme(
-              data: SliderThemeData(
-                trackHeight: 6,
-                activeTrackColor: theme.primaryColor,
-                inactiveTrackColor: theme.primaryColor.withOpacity(0.2),
-                thumbColor: theme.primaryColor,
-                overlayColor: theme.primaryColor.withOpacity(0.1),
-                thumbShape: RoundSliderThumbShape(enabledThumbRadius: 8),
-              ),
-              child: Slider(
-                value:
-                    (position.inMilliseconds > 0 &&
-                        position.inMilliseconds < duration.inMilliseconds)
-                    ? position.inMilliseconds.toDouble()
-                    : 0.0,
-                max: (duration.inMilliseconds > 0)
-                    ? duration.inMilliseconds.toDouble()
-                    : 1.0,
-                onChanged: (value) {
-                  audioHandler?.seek(Duration(milliseconds: value.round()));
-                },
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _formatDuration(position),
-                    style: TextStyle(
-                      color: theme.hintColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    _formatDuration(duration),
-                    style: TextStyle(
-                      color: theme.hintColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         );
       },
     );
@@ -670,17 +682,18 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
   }
 
   Widget _buildSongList(ThemeData theme, Color baseColor) {
-    return FutureBuilder<List<dynamic>>(
-      future: _musicFuture,
+    return FutureBuilder<void>(
+      future: _initialLoadFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            _allLoadedSongs.isEmpty) {
           return Center(
             child: isIOSPlatform
                 ? CupertinoActivityIndicator()
                 : CircularProgressIndicator(),
           );
         }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+        if (_allLoadedSongs.isEmpty) {
           return Center(
             child: Text(
               'No songs available',
@@ -689,15 +702,20 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
           );
         }
 
-        final allSongs = snapshot.data!;
         final String query = _musicSearchQuery.toLowerCase().trim();
 
-        final filteredSongs = allSongs.where((songData) {
-          // Handle Django snake_case vs legacy keys
-          final String songName = (songData['song_name'] ?? songData['songName'] ?? '').toString().toLowerCase();
-          final String artist = (songData['artist'] ?? '').toString().toLowerCase();
-          final String category = (songData['category'] ?? '').toString().toLowerCase();
-          
+        final filteredSongs = _allLoadedSongs.where((songData) {
+          final String songName =
+              (songData['song_name'] ?? songData['songName'] ?? '')
+                  .toString()
+                  .toLowerCase();
+          final String artist = (songData['artist'] ?? '')
+              .toString()
+              .toLowerCase();
+          final String category = (songData['category'] ?? '')
+              .toString()
+              .toLowerCase();
+
           final bool categoryMatches =
               _selectedCategory == 'All' ||
               category == _selectedCategory.toLowerCase();
@@ -708,24 +726,39 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
           return categoryMatches && searchMatches;
         }).toList();
 
-        if (filteredSongs.isEmpty)
+        if (filteredSongs.isEmpty) {
           return Center(
             child: Text(
               'No songs found.',
               style: TextStyle(color: theme.hintColor),
             ),
           );
+        }
 
         _currentFilteredSongs = filteredSongs;
+
         return ListView.builder(
+          controller: _scrollController,
           physics: BouncingScrollPhysics(),
-          itemCount: _currentFilteredSongs.length,
-          itemBuilder: (context, index) => _buildSongListItem(
-            theme,
-            baseColor,
-            _currentFilteredSongs,
-            index,
-          ),
+          itemCount: _currentFilteredSongs.length + (_hasMoreSongs ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index == _currentFilteredSongs.length) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Center(
+                  child: isIOSPlatform
+                      ? CupertinoActivityIndicator()
+                      : CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
+            return _buildSongListItem(
+              theme,
+              baseColor,
+              _currentFilteredSongs,
+              index,
+            );
+          },
         );
       },
     );
@@ -739,14 +772,23 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
   ) {
     final song = filteredSongs[index];
 
+    bool isDownloaded = false;
+    if (_localAppPath != null && !kIsWeb) {
+      final title = song['song_name'] ?? song['songName'] ?? 'Untitled';
+      final artist = song['artist'] ?? 'Unknown';
+      final safeTitle = title.replaceAll(RegExp(r'[^\w\s]+'), '').trim();
+      final safeArtist = artist.replaceAll(RegExp(r'[^\w\s]+'), '').trim();
+      final filename = '${safeTitle}_${safeArtist}.mp3';
+      final savePath = '$_localAppPath/$filename';
+      isDownloaded = File(savePath).existsSync();
+    }
+
     return StreamBuilder<MediaItem?>(
       stream: audioHandler?.mediaItem,
       builder: (context, mediaItemSnapshot) {
         final currentlyPlayingId = mediaItemSnapshot.data?.id;
         final songUrl = song['song_url'] ?? song['songUrl'];
-        final isSelected =
-            (widget.isDesktop && index == _selectedSongIndex) ||
-            (songUrl != null && currentlyPlayingId == songUrl);
+        final isSelected = (songUrl != null && currentlyPlayingId == songUrl);
 
         return Padding(
           padding: const EdgeInsets.only(bottom: 10.0),
@@ -801,202 +843,35 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
                   style: TextStyle(color: theme.hintColor, fontSize: 11),
                   maxLines: 1,
                 ),
-                trailing: IconButton(
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(),
-                  icon: Icon(Icons.more_vert_rounded, color: theme.hintColor),
-                  onPressed: () => _showSongOptions(context, theme, song),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDesktopPlayer(ThemeData theme, Color baseColor) {
-    return StreamBuilder<MediaItem?>(
-      stream: audioHandler?.mediaItem,
-      builder: (context, mediaItemSnapshot) {
-        final mediaItem = mediaItemSnapshot.data;
-        if (mediaItem == null)
-          return Center(
-            child: NeumorphicContainer(
-              color: baseColor,
-              isPressed: true,
-              borderRadius: 20,
-              padding: EdgeInsets.all(30),
-              child: Text(
-                'Select a song to play!',
-                style: TextStyle(color: theme.hintColor),
-              ),
-            ),
-          );
-
-        return NeumorphicContainer(
-          color: baseColor,
-          isPressed: false,
-          borderRadius: 30,
-          padding: EdgeInsets.all(20),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              StreamBuilder<PlaybackState>(
-                stream: audioHandler?.playbackState,
-                builder: (context, playbackStateSnapshot) {
-                  final playbackState = playbackStateSnapshot.data;
-                  final isPlaying = playbackState?.playing ?? false;
-                  final processingState = playbackState?.processingState;
-                  if (isPlaying &&
-                      processingState != AudioProcessingState.loading)
-                    _rotationController.repeat();
-                  else
-                    _rotationController.stop();
-                  return RotationTransition(
-                    turns: Tween(
-                      begin: 1.0,
-                      end: 0.0,
-                    ).animate(_rotationController),
-                    child: NeumorphicContainer(
-                      color: baseColor,
-                      isPressed: false,
-                      padding: EdgeInsets.all(10),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(100),
-                        child: Image.asset(
-                          "assets/dankie_logo.PNG",
-                          height: 180,
-                          width: 180,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-              SizedBox(height: 25),
-              Text(
-                mediaItem.title,
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: theme.primaryColor,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: 5),
-              Text(
-                mediaItem.artist ?? 'Unknown Artist',
-                style: TextStyle(fontSize: 14, color: theme.hintColor),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-              ),
-              SizedBox(height: 30),
-              _buildSeekBar(theme),
-              SizedBox(height: 20),
-              StreamBuilder<PlaybackState>(
-                stream: audioHandler?.playbackState,
-                builder: (context, playbackStateSnapshot) {
-                  final playbackState = playbackStateSnapshot.data;
-                  final isPlaying = playbackState?.playing ?? false;
-                  final shuffleMode =
-                      playbackState?.shuffleMode ??
-                      AudioServiceShuffleMode.none;
-                  final repeatMode =
-                      playbackState?.repeatMode ?? AudioServiceRepeatMode.none;
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildNeuControlButton(
-                        theme,
-                        baseColor,
-                        Ionicons.shuffle,
-                        () => audioHandler?.setShuffleMode(
-                          shuffleMode == AudioServiceShuffleMode.all
-                              ? AudioServiceShuffleMode.none
-                              : AudioServiceShuffleMode.all,
-                        ),
-                        isActive: shuffleMode == AudioServiceShuffleMode.all,
-                      ),
-                      _buildNeuControlButton(
-                        theme,
-                        baseColor,
-                        Icons.skip_previous_rounded,
-                        () => audioHandler?.skipToPrevious(),
-                      ),
-                      GestureDetector(
-                        onTap: isPlaying
-                            ? audioHandler?.pause
-                            : audioHandler?.play,
-                        child: NeumorphicContainer(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isDownloaded)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 5.0),
+                        child: Icon(
+                          Icons.download_done_rounded,
                           color: theme.primaryColor,
-                          padding: EdgeInsets.all(16),
-                          child: Icon(
-                            isPlaying
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                            color: Colors.white,
-                            size: 32,
-                          ),
+                          size: 20,
                         ),
                       ),
-                      _buildNeuControlButton(
-                        theme,
-                        baseColor,
-                        Icons.skip_next_rounded,
-                        () => audioHandler?.skipToNext(),
+                    IconButton(
+                      iconSize: 20,
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints(),
+                      icon: Icon(
+                        Icons.more_vert_rounded,
+                        color: theme.hintColor,
                       ),
-                      _buildNeuControlButton(
-                        theme,
-                        baseColor,
-                        repeatMode == AudioServiceRepeatMode.one
-                            ? Icons.repeat_one_rounded
-                            : Ionicons.repeat,
-                        () {
-                          final newMode =
-                              repeatMode == AudioServiceRepeatMode.none
-                              ? AudioServiceRepeatMode.all
-                              : (repeatMode == AudioServiceRepeatMode.all
-                                    ? AudioServiceRepeatMode.one
-                                    : AudioServiceRepeatMode.none);
-                          audioHandler?.setRepeatMode(newMode);
-                        },
-                        isActive: repeatMode != AudioServiceRepeatMode.none,
-                      ),
-                    ],
-                  );
-                },
+                      onPressed: () => _showSongOptions(context, theme, song),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
         );
       },
-    );
-  }
-
-  Widget _buildNeuControlButton(
-    ThemeData theme,
-    Color baseColor,
-    IconData icon,
-    VoidCallback onTap, {
-    bool isActive = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: NeumorphicContainer(
-        color: baseColor,
-        isPressed: isActive,
-        padding: EdgeInsets.all(12),
-        child: Icon(
-          icon,
-          color: isActive ? theme.primaryColor : theme.hintColor,
-          size: 20,
-        ),
-      ),
     );
   }
 
@@ -1084,23 +959,19 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
     List<dynamic> filteredSongs,
     ThemeData color,
   ) {
-    final isDesktop = isLargeScreen(context);
     final songData = filteredSongs[index];
-    final clickedSongUrl = songData['song_url'] ?? songData['songUrl'] as String?;
+    final clickedSongUrl =
+        songData['song_url'] ?? songData['songUrl'] as String?;
     final currentMediaItem = audioHandler?.mediaItem.value;
 
     if (clickedSongUrl != null && currentMediaItem?.id == clickedSongUrl) {
-      if (isDesktop)
-        setState(() => _selectedSongIndex = index);
-      else
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          backgroundColor: Colors.transparent,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
           builder: (context) =>
-              MusicPlayerSheet(themeColor: color, onDownload: _downloadSong),
-        );
+              MusicPlayerPage(themeColor: color, onDownload: _downloadSong),
+        ),
+      );
       return;
     }
 
@@ -1125,26 +996,23 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
     }
 
     if (validSongIndex == -1) return;
+
     void playAction() {
       audioHandler?.loadPlaylist(mediaItems, validSongIndex);
-      if (isDesktop)
-        setState(() => _selectedSongIndex = index);
-      else
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          backgroundColor: Colors.transparent,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
           builder: (context) =>
-              MusicPlayerSheet(themeColor: color, onDownload: _downloadSong),
-        );
+              MusicPlayerPage(themeColor: color, onDownload: _downloadSong),
+        ),
+      );
     }
 
-    if (isDesktop)
+    if (widget.isDesktop) {
       playAction();
-    else {
+    } else {
       _songPlayCount++;
-      if (_songPlayCount >= 4)
+      if (_songPlayCount >= 4) {
         adManager.showRewardedInterstitialAd(
           (ad, r) {
             playAction();
@@ -1155,8 +1023,9 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
             setState(() => _songPlayCount = 0);
           },
         );
-      else
+      } else {
         playAction();
+      }
     }
   }
 }

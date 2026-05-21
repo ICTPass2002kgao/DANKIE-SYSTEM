@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -1001,7 +1002,10 @@ class _AdminVerifySellerState extends State<AdminVerifySeller> {
       future: _fetchAllSellers(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting)
-          return Center(child: CircularProgressIndicator());
+          return 
+           (Api().isIOSPlatform
+              ? Center(child: CupertinoActivityIndicator(color: Theme.of(context).primaryColor,))
+              : Center(child: CircularProgressIndicator(color: Theme.of(context).primaryColor)));
         if (snapshot.hasError)
           return Center(child: Text('Error: ${snapshot.error}'));
         final sellers = snapshot.data ?? [];

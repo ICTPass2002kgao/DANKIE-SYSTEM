@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:ionicons/ionicons.dart';
 import 'package:ttact/Components/API.dart'; // Ensure API is imported
 import 'package:ttact/Components/HomePageHelpers.dart';
-import 'package:ttact/Components/Tactso_Branch_Details.dart' hide isIOSPlatform;
+import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/Tactso_Branch_Details.dart' hide isIOSPlatform;
 import 'package:ttact/Components/UniversityCard.dart';
 
 // ⭐️ IMPORT YOUR NEUMORPHIC COMPONENT
@@ -53,7 +53,7 @@ class _BranchesTabState extends State<BranchesTab> {
       User? user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         print("❌ Blocked: No user is currently logged in.");
-        return []; 
+        return [];
       }
 
       String? token = await user.getIdToken();
@@ -64,7 +64,7 @@ class _BranchesTabState extends State<BranchesTab> {
 
       // URL: /api/tactso_branches/
       final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/tactso_branches/');
-      
+
       // SECURE FIX: Make the GET Request WITH the Authorization Header
       final response = await http.get(
         url,
@@ -79,7 +79,9 @@ class _BranchesTabState extends State<BranchesTab> {
         print(response.body);
         return json.decode(response.body);
       } else {
-        print('Error fetching branches: ${response.statusCode} - ${response.body}');
+        print(
+          'Error fetching branches: ${response.statusCode} - ${response.body}',
+        );
         return [];
       }
     } catch (e) {
@@ -240,19 +242,14 @@ class _BranchesTabState extends State<BranchesTab> {
                     padding: EdgeInsets.all(0),
                     child: GestureDetector(
                       onTap: () {
-                        showModalBottomSheet(
-                          scrollControlDisabledMaxHeightRatio: 0.9,
-                          context: context,
-                          backgroundColor: Colors.transparent,
-                          isScrollControlled: true,
-                          builder: (context) {
-                            return TactsoBranchDetails(
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TactsoBranchDetails(
                               universityDetails: representativeCampusData,
-                              // If 'campuses' list isn't nested in Django response,
-                              // we pass the grouped list we just created.
                               campusListForUniversity: campuses,
-                            );
-                          },
+                            ),
+                          ),
                         );
                       },
                       child: ClipRRect(
@@ -266,17 +263,14 @@ class _BranchesTabState extends State<BranchesTab> {
                               representativeCampusData['application_link'] ??
                               '',
                           onPressed: () {
-                            showModalBottomSheet(
-                              scrollControlDisabledMaxHeightRatio: 0.9,
-                              context: context,
-                              backgroundColor: Colors.transparent,
-                              isScrollControlled: true,
-                              builder: (context) {
-                                return TactsoBranchDetails(
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => TactsoBranchDetails(
                                   universityDetails: representativeCampusData,
                                   campusListForUniversity: campuses,
-                                );
-                              },
+                                ),
+                              ),
                             );
                           },
                           applicationIsOpen: anyCampusApplicationOpen,

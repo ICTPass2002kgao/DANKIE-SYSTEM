@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_const_constructors, avoid_print, use_build_context_synchronously
 
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +31,6 @@ class DashboardTab extends StatefulWidget {
   State<DashboardTab> createState() => _DashboardTabState();
 }
 
-// ⭐️ ADDED WidgetsBindingObserver to detect when user returns from Paystack browser
 class _DashboardTabState extends State<DashboardTab>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   // --- CHART DATA STATE ---
@@ -63,7 +63,6 @@ class _DashboardTabState extends State<DashboardTab>
   @override
   void initState() {
     super.initState();
-    // ⭐️ Register the observer
     WidgetsBinding.instance.addObserver(this);
 
     _loadDashboardData();
@@ -81,13 +80,11 @@ class _DashboardTabState extends State<DashboardTab>
 
   @override
   void dispose() {
-    // ⭐️ Remove the observer
     WidgetsBinding.instance.removeObserver(this);
     _pulseController.dispose();
     super.dispose();
   }
 
-  // ⭐️ AUTO REFRESH: When user returns from Paystack browser, refresh the alert!
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -95,7 +92,6 @@ class _DashboardTabState extends State<DashboardTab>
     }
   }
 
-  // --- FETCH NEAREST (UNPAID) EVENT ---
   Future<void> _loadNearestEvent() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -103,7 +99,6 @@ class _DashboardTabState extends State<DashboardTab>
       final token = await user.getIdToken();
       final uid = user.uid;
 
-      // 1. Fetch all events
       final eventsResponse = await http.get(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/event_diary/'),
         headers: {
@@ -112,7 +107,6 @@ class _DashboardTabState extends State<DashboardTab>
         },
       );
 
-      // 2. Fetch the overseer's contributions
       final contribResponse = await http.get(
         Uri.parse(
           '${Api().BACKEND_BASE_URL_DEBUG}/event_contributions/?overseer_uid=$uid',
@@ -128,7 +122,6 @@ class _DashboardTabState extends State<DashboardTab>
         List<dynamic> events = json.decode(eventsResponse.body);
         List<dynamic> contributions = json.decode(contribResponse.body);
 
-        // 3. Build a set of Event IDs that the overseer has ALREADY PAID for
         Set<String> paidEventIds = {};
         for (var c in contributions) {
           if (c['has_contributed'] == true) {
@@ -137,17 +130,18 @@ class _DashboardTabState extends State<DashboardTab>
         }
 
         final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
         Map<String, dynamic>? closestEvent;
         DateTime? closestDate;
 
         for (var event in events) {
           String eventId = event['id'].toString();
 
-          // ⭐️ MAGIC FIX: Skip this event if they already paid for it!
           if (paidEventIds.contains(eventId)) continue;
 
           final eventDate = _parseEventDate(event);
-          if (eventDate != null && eventDate.isAfter(now)) {
+
+          if (eventDate != null && !eventDate.isBefore(today)) {
             if (closestDate == null || eventDate.isBefore(closestDate)) {
               closestDate = eventDate;
               closestEvent = event;
@@ -179,9 +173,11 @@ class _DashboardTabState extends State<DashboardTab>
     if (day == null || day.toLowerCase().contains('communicated')) return null;
 
     try {
+      String dayPart = day.split('-').first.trim();
+
       if (month != null && month.isNotEmpty) {
-        final dayPart = day.split('-').first.trim();
-        return DateFormat('dd MMM yyyy').parse('$dayPart $month $year');
+        String monthPart = month.split('-').first.trim();
+        return DateFormat('dd MMM yyyy').parse('$dayPart $monthPart $year');
       }
       if (day.contains('-') && (month == null || month.isEmpty)) {
         final startMonth = day.split('-').first.trim();
@@ -193,18 +189,32 @@ class _DashboardTabState extends State<DashboardTab>
     return null;
   }
 
+  String _generateUuidV4() {
+    final random = math.Random();
+    String generate(int length) {
+      String result = '';
+      for (int i = 0; i < length; i++) {
+        result += random.nextInt(16).toRadixString(16);
+      }
+      return result;
+    }
+
+    return '${generate(8)}-${generate(4)}-4${generate(3)}-a${generate(3)}-${generate(12)}';
+  }
+
   // --- HANDLE PAYMENT & CONTRIBUTION LOGGING ---
   Future<void> _processContribution(double amount, String eventId) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final token = await user.getIdToken();
-    final uniqueRef =
-        "EVT_${eventId.substring(0, 8)}_${DateTime.now().millisecondsSinceEpoch}";
+    final uniqueRef = _generateUuidV4();
     final userEmail = user.email ?? "admin@dankie.co.za";
 
+    // ⭐️ Show loading indicator immediately
+    Api().isIOSPlatform ? Api().showIosLoading : Api().showLoading(context);
+
     try {
-      // Fetch Overseer ID first
       String? overseerId;
       final profileResp = await http.get(
         Uri.parse(
@@ -218,6 +228,7 @@ class _DashboardTabState extends State<DashboardTab>
       }
 
       if (overseerId == null) {
+        Navigator.pop(context); // Dismiss loader
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Error identifying your profile.")),
         );
@@ -241,7 +252,7 @@ class _DashboardTabState extends State<DashboardTab>
             {
               "price": amount,
               "quantity": 1,
-              "subaccount": "ACCT_hvj7wvps74catuq",
+              "subaccount": "ACCT_1ccy6yrutt98s2j",
             },
           ],
         }),
@@ -252,7 +263,6 @@ class _DashboardTabState extends State<DashboardTab>
       if (payResponse.statusCode == 200 || payResponse.statusCode == 201) {
         final paymentUrl = responseData['paymentLink'];
 
-        // Log a "Pending" attempt locally
         await http.post(
           Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/event_contributions/'),
           headers: {
@@ -263,23 +273,26 @@ class _DashboardTabState extends State<DashboardTab>
             "event": eventId,
             "overseer": overseerId,
             "amount": amount,
-            "has_contributed": false, // Pending until webhook confirms
+            "has_contributed": false,
             "remarks": "Payment Initiated (Pending)",
           }),
         );
 
+        // ⭐️ Stop loader before redirecting to browser
+        Navigator.pop(context);
+
         if (await canLaunchUrl(Uri.parse(paymentUrl))) {
           await launchUrl(
             Uri.parse(paymentUrl),
-            mode: LaunchMode.externalApplication,
+            mode: LaunchMode.inAppBrowserView,
           );
-          // Once they return from the browser, didChangeAppLifecycleState will trigger!
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Could not launch secure payment gateway.")),
           );
         }
       } else {
+        Navigator.pop(context); // Stop loader
         final errorMsg = responseData['error'] ?? 'Initialization failed';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -290,6 +303,7 @@ class _DashboardTabState extends State<DashboardTab>
         );
       }
     } catch (e) {
+      Navigator.pop(context); // Stop loader
       print("Payment Error: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("A critical network error occurred.")),
@@ -328,7 +342,7 @@ class _DashboardTabState extends State<DashboardTab>
                 ),
                 SizedBox(height: 16),
                 Text(
-                  "Support Your District",
+                  "Support Your Community",
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w900,
@@ -601,7 +615,6 @@ class _DashboardTabState extends State<DashboardTab>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // NEUMORPHIC HEADER
             NeumorphicContainer(
               padding: EdgeInsets.zero,
               borderRadius: 16,
@@ -676,7 +689,6 @@ class _DashboardTabState extends State<DashboardTab>
 
             const SizedBox(height: 24),
 
-            // --- ⭐️ ELEGANT NEAREST EVENT ALERT BANNER ---
             if (!_isLoadingEvent && _nearestEvent != null)
               ScaleTransition(
                 scale: _pulseAnimation,

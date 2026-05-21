@@ -1,13 +1,13 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, avoid_print
 
-import 'dart:convert'; // Added for JSON
+import 'dart:convert';
 import 'dart:io' as io;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart'; // For kIsWeb
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http; // Added for API
+import 'package:http/http.dart' as http;
 import 'package:ttact/Components/API.dart';
 
 // ⭐️ IMPORT YOUR DESIGN COMPONENT
@@ -34,6 +34,7 @@ class _StaffMembersState extends State<StaffMembers> {
   // --- CONTROLLERS ---
   final TextEditingController nameController = TextEditingController();
   final TextEditingController surnameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
   final TextEditingController otherPortfolioController =
       TextEditingController();
 
@@ -43,7 +44,6 @@ class _StaffMembersState extends State<StaffMembers> {
   bool _isLoading = false;
   final bool _isWeb = kIsWeb;
 
-  // Data State
   List<dynamic> _staffList = [];
   bool _isFetching = true;
 
@@ -82,8 +82,24 @@ class _StaffMembersState extends State<StaffMembers> {
   void dispose() {
     nameController.dispose();
     surnameController.dispose();
+    emailController.dispose();
     otherPortfolioController.dispose();
     super.dispose();
+  }
+
+  // --- NATIVE FEEDBACK HELPER (Guarantees you see the error) ---
+  void _showFeedback(String title, String message, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "$title: $message",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 4),
+      ),
+    );
   }
 
   // --- LOGIC: FETCH DATA (DJANGO) ---
@@ -103,11 +119,11 @@ class _StaffMembersState extends State<StaffMembers> {
           _isFetching = false;
         });
       } else {
-        print("Error fetching staff: ${response.body}");
+        print("❌ Error fetching staff: ${response.body}");
         setState(() => _isFetching = false);
       }
     } catch (e) {
-      print("Network Error: $e");
+      print("❌ Network Error: $e");
       setState(() => _isFetching = false);
     }
   }
@@ -131,27 +147,27 @@ class _StaffMembersState extends State<StaffMembers> {
 
   // --- LOGIC: ADD STAFF (DJANGO MULTIPART) ---
   Future<void> _addStaffMember() async {
+    print("➡️ [DEBUG] Save button was pressed.");
+
     String finalPortfolio = _selectedPortfolio == "Other"
         ? otherPortfolioController.text.trim()
         : (_selectedPortfolio ?? "");
 
+    // 1. Validation Check
     if (nameController.text.isEmpty ||
         surnameController.text.isEmpty ||
+        emailController.text.isEmpty ||
         _selectedPortfolio == null ||
         _selectedProvince == null ||
         finalPortfolio.isEmpty) {
-      Api().showMessage(
-        context,
-        'Missing Info',
-        'Please fill all fields.',
-        Colors.orange,
-      );
+      print("⚠️ [DEBUG] Validation failed: Missing text fields.");
+      _showFeedback('Missing Info', 'Please fill all fields.', Colors.orange);
       return;
     }
 
     if (_faceImageFile == null) {
-      Api().showMessage(
-        context,
+      print("⚠️ [DEBUG] Validation failed: No face image uploaded.");
+      _showFeedback(
         'Face Required',
         'Upload face for biometric login.',
         Colors.red,
@@ -162,30 +178,30 @@ class _StaffMembersState extends State<StaffMembers> {
     setState(() => _isLoading = true);
 
     try {
+      print("⏳ [DEBUG] Preparing to send request to backend...");
       var uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/staff/');
       var request = http.MultipartRequest('POST', uri);
 
-      // 1. Text Fields (Snake Case for Django)
       request.fields['name'] = nameController.text.trim();
       request.fields['surname'] = surnameController.text.trim();
       request.fields['full_name'] =
           "${nameController.text.trim()} ${surnameController.text.trim()}";
       request.fields['portfolio'] = finalPortfolio;
       request.fields['province'] = _selectedProvince!;
-      request.fields['email'] = 'admin@dankie.co.za'; // Or input
+      request.fields['email'] = "admin@dankie.co.za";
       request.fields['role'] = 'Admin';
-      request.fields['uid'] =
-          "generated_${DateTime.now().millisecondsSinceEpoch}"; // Or use Auth UID if available
+      request.fields['personal_email'] = emailController.text.trim();
+      request.fields['uid'] = FirebaseAuth.instance.currentUser!.uid ?? '';
 
       String token =
           await FirebaseAuth.instance.currentUser?.getIdToken() ?? '';
       request.headers['Authorization'] = 'Bearer $token';
-      // 2. Image File
+
       if (_isWeb) {
         var bytes = await _faceImageFile!.readAsBytes();
         request.files.add(
           http.MultipartFile.fromBytes(
-            'face_image', // Key expected by backend for upload
+            'face_image',
             bytes,
             filename: _faceImageFile!.name,
           ),
@@ -196,34 +212,72 @@ class _StaffMembersState extends State<StaffMembers> {
         );
       }
 
-      // 3. Send
+      print("🚀 [DEBUG] Firing request to Django...");
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
+      print("📩 [DEBUG] Response Status Code: ${response.statusCode}");
+      print("📩 [DEBUG] Response Body: ${response.body}");
+
       if (response.statusCode == 201) {
-        if (mounted) {
-          Api().showMessage(
+        print("✅ [DEBUG] Successfully saved to database.");
+
+        // ISOLATED EMAIL BLOCK: Errors here won't crash the save process
+        try {
+          print("⏳ [DEBUG] Attempting to send welcome email...");
+          await Api().sendEmail(
+            emailController.text.trim(),
+            'Welcome to the Admin Team',
+            """
+Hello ${nameController.text.trim()} ${surnameController.text.trim()},
+
+Welcome to the team! You have successfully been added as an Admin Staff Member.
+
+Your Role Details:
+Portfolio: $finalPortfolio
+Province: ${_selectedProvince!}
+
+Thank you for your dedication to serving the community. We look forward to working with you.
+
+Best regards,
+The Admin Team
+            """,
             context,
+          );
+          print("✅ [DEBUG] Email sent successfully.");
+        } catch (emailError) {
+          print(
+            "⚠️ [DEBUG] Email failed to send, but user was created. Error: $emailError",
+          );
+        }
+
+        if (mounted) {
+          _showFeedback(
             'Success',
             'Staff Member Added Successfully',
             Colors.green,
           );
           _clearForm();
-          _fetchStaffMembers(); // Refresh list
+          _fetchStaffMembers();
         }
       } else {
-        print("Server Error: ${response.body}");
-        if (mounted)
-          Api().showMessage(
-            context,
-            'Error',
-            'Failed to add staff: ${response.statusCode}',
-            Colors.red,
-          );
+        // Handle Django Errors safely
+        String errMsg = "Failed to add staff: ${response.statusCode}";
+        try {
+          var errorJson = json.decode(response.body);
+          errMsg = errorJson
+              .toString(); // Shows exactly what Django complained about
+        } catch (_) {}
+
+        if (mounted) {
+          _showFeedback('Server Error', errMsg, Colors.red);
+        }
       }
     } catch (e) {
-      if (mounted)
-        Api().showMessage(context, 'Error', e.toString(), Colors.red);
+      print("🔥 [DEBUG] Fatal Catch Block Error: $e");
+      if (mounted) {
+        _showFeedback('App Error', e.toString(), Colors.red);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -232,6 +286,7 @@ class _StaffMembersState extends State<StaffMembers> {
   void _clearForm() {
     nameController.clear();
     surnameController.clear();
+    emailController.clear();
     otherPortfolioController.clear();
     setState(() {
       _selectedPortfolio = null;
@@ -249,8 +304,7 @@ class _StaffMembersState extends State<StaffMembers> {
 
       if (_staffList.length <= 1) {
         Navigator.pop(context); // Pop loading
-        Api().showMessage(
-          context,
+        _showFeedback(
           "Action Denied",
           "At least one staff member must remain.",
           Colors.orange,
@@ -258,7 +312,9 @@ class _StaffMembersState extends State<StaffMembers> {
         return;
       }
 
-      final uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/staff/?id=$id/');
+      final uri = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/staff/$id/',
+      ); // FIXED URL FORMAT
       final response = await http.delete(
         uri,
         headers: {
@@ -270,23 +326,22 @@ class _StaffMembersState extends State<StaffMembers> {
       Navigator.pop(context); // Pop loading
 
       if (response.statusCode == 204) {
-        Api().showMessage(
-          context,
-          "Deleted",
-          "Staff member removed.",
-          Colors.grey,
-        );
+        _showFeedback("Deleted", "Staff member removed.", Colors.grey);
         _fetchStaffMembers(); // Refresh
       } else {
-        Api().showMessage(context, "Error", "Failed to delete.", Colors.red);
+        _showFeedback(
+          "Error",
+          "Failed to delete: ${response.body}",
+          Colors.red,
+        );
       }
     } catch (e) {
       Navigator.pop(context);
-      Api().showMessage(context, "Error", e.toString(), Colors.red);
+      _showFeedback("Error", e.toString(), Colors.red);
     }
   }
 
-  // --- ⭐️ NEUMORPHIC WIDGET HELPERS (Unchanged UI) ---
+  // --- ⭐️ NEUMORPHIC WIDGET HELPERS ---
 
   Widget _buildNeumorphicTextField({
     required TextEditingController controller,
@@ -502,6 +557,13 @@ class _StaffMembersState extends State<StaffMembers> {
                               baseColor: neumoBaseColor,
                             ),
                             SizedBox(height: 15),
+                            _buildNeumorphicTextField(
+                              controller: emailController,
+                              label: "Email Address",
+                              icon: Icons.email,
+                              baseColor: neumoBaseColor,
+                            ),
+                            SizedBox(height: 15),
                             _buildNeumorphicDropdown(
                               value: _selectedPortfolio,
                               label: "Portfolio",
@@ -565,6 +627,19 @@ class _StaffMembersState extends State<StaffMembers> {
                                       Row(
                                         children: [
                                           Expanded(
+                                            child: _buildNeumorphicTextField(
+                                              controller: emailController,
+                                              label: "Email Address",
+                                              icon: Icons.email,
+                                              baseColor: neumoBaseColor,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      SizedBox(height: 20),
+                                      Row(
+                                        children: [
+                                          Expanded(
                                             child: _buildNeumorphicDropdown(
                                               value: _selectedPortfolio,
                                               label: "Portfolio",
@@ -609,6 +684,8 @@ class _StaffMembersState extends State<StaffMembers> {
                           SizedBox(height: 30),
 
                           GestureDetector(
+                            behavior: HitTestBehavior
+                                .opaque, // Ensures the tap registers anywhere on the container
                             onTap: _isLoading ? null : _addStaffMember,
                             child: NeumorphicContainer(
                               color: theme.primaryColor,
@@ -686,7 +763,6 @@ class _StaffMembersState extends State<StaffMembers> {
                             itemCount: _staffList.length,
                             itemBuilder: (context, index) {
                               final staff = _staffList[index];
-                              // Map Django 'id' (int) or 'uid' (string)
                               final String id = staff['id'];
 
                               return NeumorphicContainer(
@@ -710,7 +786,7 @@ class _StaffMembersState extends State<StaffMembers> {
                                                     .toString()
                                                     .isNotEmpty)
                                             ? Image.network(
-                                                staff['face_url'],
+                                                '${Api().BACKEND_BASE_URL_DEBUG}/serve_image/?url=${Uri.encodeComponent(staff['face_url'])}',
                                                 fit: BoxFit.cover,
                                               )
                                             : Icon(

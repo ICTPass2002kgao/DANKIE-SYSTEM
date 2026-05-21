@@ -9,24 +9,24 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http; // HTTP Package
+import 'package:http/http.dart' as http;
 import 'package:ionicons/ionicons.dart';
+import 'package:url_launcher/url_launcher.dart'; // REQUIRED to open and view the contract
 import 'package:ttact/Components/API.dart';
-import 'package:ttact/Components/CustomOutlinedButton.dart';
 
 // --- PLATFORM UTILITIES ---
 const double _desktopContentMaxWidth = 600.0;
-
-// Helper list for video formats
-const List<String> videoExtensions = ['mp4', 'mov', 'avi', 'wmv'];
 
 class AddMusic extends StatefulWidget {
   final String? uid;
   final String? portfolio;
   final String? fullName;
   final String? province;
+
   const AddMusic({
     super.key,
     this.uid,
@@ -40,26 +40,40 @@ class AddMusic extends StatefulWidget {
 }
 
 class _AddMusicState extends State<AddMusic> {
+  // --- TABS STATE ---
+  int _selectedTab = 0; // 0 for Upload, 1 for Manage
+
+  // --- UPLOAD MUSIC STATE ---
   TextEditingController songNameController = TextEditingController();
   TextEditingController artistController = TextEditingController();
   DateTime? _releasedDate;
-
-  // Holds the selected file (either PlatformFile for web or io.File for mobile)
   dynamic _selectedFile;
-  PlatformFile? _webFile; // Helper for Web bytes
-
-  String? _audioUrl; // Final URL for playback if needed
+  PlatformFile? _webFile;
+  String? _audioUrl;
   final AudioPlayer _audioPlayer = AudioPlayer();
   final bool _isWeb = kIsWeb;
 
   List categories = [
-    'Slow Jam',
+    'Spiritual songs',
     'Apostle choir',
-    'choreography',
+    'Contemporary gospel',
     'Instrumental songs',
     'Evangelical Brothers Songs',
   ];
   String category = '';
+
+  // --- ARTIST CONTRACT STATE ---
+  bool _isLoadingArtists = false;
+  Map<String, String> _artistDisplayNames = {}; // normalized -> display
+  Map<String, bool> _artistContractSigned = {}; // normalized -> true/false
+  Map<String, String?> _artistContractUrls = {}; // normalized -> signature url
+  Map<String, List<String>> _artistSongIds = {}; // normalized -> [id1, id2]
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchArtistsAndSongs();
+  }
 
   @override
   void dispose() {
@@ -69,16 +83,192 @@ class _AddMusicState extends State<AddMusic> {
     super.dispose();
   }
 
-  // --- FILE PICKER LOGIC ---
-  Future<void> pickFile() async {
+  // --- ARTIST FETCHING LOGIC ---
+
+  Future<void> _fetchArtistsAndSongs() async {
+    setState(() => _isLoadingArtists = true);
+    try {
+      String token = '';
+      if (FirebaseAuth.instance.currentUser != null) {
+        token = await FirebaseAuth.instance.currentUser!.getIdToken() ?? '';
+      }
+
+      final uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/songs/');
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Token $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        List<dynamic> songs = json.decode(response.body);
+        Map<String, String> displayNames = {};
+        Map<String, bool> contractSigned = {};
+        Map<String, String?> contractUrls = {};
+        Map<String, List<String>> songIds = {};
+
+        for (var song in songs) {
+          String rawArtist = song['artist'] ?? 'Unknown';
+          String normalized = rawArtist.trim().toUpperCase();
+          String songId = song['id'].toString();
+          bool isSigned = song['contract_signed'] == true;
+          String? signatureUrl = song['signature'];
+
+          displayNames.putIfAbsent(normalized, () => rawArtist.trim());
+
+          if (!songIds.containsKey(normalized)) {
+            songIds[normalized] = [];
+          }
+          songIds[normalized]!.add(songId);
+
+          if (!contractSigned.containsKey(normalized)) {
+            contractSigned[normalized] = isSigned;
+          } else {
+            if (isSigned) contractSigned[normalized] = true;
+          }
+
+          if (isSigned && signatureUrl != null && signatureUrl.isNotEmpty) {
+            contractUrls[normalized] = signatureUrl;
+          }
+        }
+
+        setState(() {
+          _artistDisplayNames = displayNames;
+          _artistContractSigned = contractSigned;
+          _artistContractUrls = contractUrls;
+          _artistSongIds = songIds;
+        });
+      }
+    } catch (e) {
+      print("Error fetching songs/artists: $e");
+    } finally {
+      setState(() => _isLoadingArtists = false);
+    }
+  }
+
+  // --- CONTRACT ACTIONS ---
+
+  Future<void> _viewContract(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      Api().showMessage(
+        context,
+        'Could not open the contract document.',
+        'Error',
+        Colors.red,
+      );
+    }
+  }
+
+  Future<void> pickAndUploadContract(String normalizedArtist) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: [...videoExtensions, 'mp3', 'wav', 'm4a'],
-      withData: _isWeb, // Important: Load bytes for Web
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: _isWeb,
     );
 
     if (result != null && result.files.isNotEmpty) {
       final file = result.files.single;
+
+      Api().isIOSPlatform
+          ? Api().showIosLoading(context)
+          : Api().showLoading(context);
+
+      try {
+        Uint8List finalBytes;
+
+        if (_isWeb && file.bytes != null) {
+          finalBytes = file.bytes!;
+        } else if (!_isWeb && file.path != null) {
+          finalBytes = await io.File(file.path!).readAsBytes();
+        } else {
+          throw Exception("Could not read contract file data.");
+        }
+
+        final cleanName = normalizedArtist
+            .replaceAll(RegExp(r'[^\w\s]+'), '')
+            .trim();
+        final fileName =
+            '${cleanName}_contract_${DateTime.now().millisecondsSinceEpoch}.${file.extension ?? 'pdf'}';
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('contracts')
+            .child(fileName);
+
+        final uploadTask = ref.putData(
+          finalBytes,
+          SettableMetadata(
+            contentType: file.extension == 'pdf'
+                ? 'application/pdf'
+                : 'image/${file.extension}',
+          ),
+        );
+
+        final snapshot = await uploadTask;
+        final finalContractUrl = await snapshot.ref.getDownloadURL();
+
+        // Update all songs for this artist on Django Backend
+        String token = '';
+        if (FirebaseAuth.instance.currentUser != null) {
+          token = await FirebaseAuth.instance.currentUser!.getIdToken() ?? '';
+        }
+
+        List<String> ids = _artistSongIds[normalizedArtist] ?? [];
+        for (String id in ids) {
+          final uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/songs/$id/');
+          await http.patch(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Token $token',
+            },
+            body: json.encode({
+              "signature": finalContractUrl,
+              "contract_signed": true,
+            }),
+          );
+        }
+
+        setState(() {
+          _artistContractSigned[normalizedArtist] = true;
+          _artistContractUrls[normalizedArtist] = finalContractUrl;
+        });
+
+        Api().showMessage(
+          context,
+          'Contract Uploaded Successfully for ${_artistDisplayNames[normalizedArtist]}!',
+          'Success',
+          Colors.green,
+        );
+      } catch (e) {
+        Api().showMessage(
+          context,
+          'Error: ${e.toString()}',
+          'Upload Failed',
+          Colors.red,
+        );
+      } finally {
+        Navigator.pop(context); // Dismiss loading
+      }
+    }
+  }
+
+  // --- MUSIC UPLOAD LOGIC ---
+
+  Future<void> pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['mp3', 'wav', 'm4a'],
+      withData: _isWeb,
+    );
+
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.single;
+
       setState(() {
         if (_isWeb) {
           _selectedFile = file;
@@ -87,11 +277,12 @@ class _AddMusicState extends State<AddMusic> {
           _selectedFile = io.File(file.path!);
         }
         _audioUrl = null;
-        // Auto-fill name if empty
+
         if (songNameController.text.isEmpty) {
           songNameController.text = file.name.split('.').first;
         }
       });
+
       Api().showMessage(
         context,
         'File selected: ${file.name}',
@@ -108,7 +299,24 @@ class _AddMusicState extends State<AddMusic> {
     }
   }
 
-  // --- UPLOAD LOGIC (DJANGO API) ---
+  Future<String> _uploadBytesToFirebase(
+    Uint8List audioBytes,
+    String songName,
+  ) async {
+    final cleanName = songName.replaceAll(RegExp(r'[^\w\s]+'), '').trim();
+    final fileName =
+        '${cleanName}_${DateTime.now().millisecondsSinceEpoch}.mp3';
+    final ref = FirebaseStorage.instance.ref().child('songs').child(fileName);
+
+    final uploadTask = ref.putData(
+      audioBytes,
+      SettableMetadata(contentType: 'audio/mpeg'),
+    );
+
+    final snapshot = await uploadTask;
+    return await snapshot.ref.getDownloadURL();
+  }
+
   Future<void> uploadSong() async {
     if (_selectedFile == null ||
         category.isEmpty ||
@@ -123,95 +331,92 @@ class _AddMusicState extends State<AddMusic> {
       return;
     }
 
-    Api().showLoading(context);
+    Api().isIOSPlatform
+        ? Api().showIosLoading(context)
+        : Api().showLoading(context);
 
     try {
-      // 1. Prepare Endpoint
-      var uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/songs/');
-      var request = http.MultipartRequest('POST', uri);
+      Uint8List finalAudioBytes;
 
-      // 2. Add Text Fields (Snake Case for Django)
-      request.fields['title'] = songNameController.text.trim();
-      request.fields['artist'] = artistController.text.trim();
-      request.fields['category'] = category;
+      if (_isWeb && _webFile?.bytes != null) {
+        finalAudioBytes = _webFile!.bytes!;
+      } else if (!_isWeb && _selectedFile is io.File) {
+        finalAudioBytes = await (_selectedFile as io.File).readAsBytes();
+      } else {
+        throw Exception("Could not read audio file data.");
+      }
+
+      final finalAudioUrl = await _uploadBytesToFirebase(
+        finalAudioBytes,
+        songNameController.text,
+      );
+
+      final uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/songs/');
+
+      final Map<String, dynamic> requestBody = {
+        "song_name": songNameController.text.trim(),
+        "artist": artistController.text.trim(),
+        "song_url": finalAudioUrl,
+        "category": category,
+        "contract_signed": false,
+      };
 
       if (_releasedDate != null) {
-        // Format: YYYY-MM-DD
-        request.fields['release_date'] = _releasedDate!.toIso8601String().split(
+        requestBody["released"] = _releasedDate!.toIso8601String().split(
           'T',
         )[0];
       }
 
-      // 3. Add File
-      if (_isWeb) {
-        if (_webFile?.bytes != null) {
-          request.files.add(
-            http.MultipartFile.fromBytes(
-              'audio_file', // Key expected by Django Serializer
-              _webFile!.bytes!,
-              filename: _webFile!.name,
-            ),
-          );
-        } else {
-          throw Exception("Web file data is missing/corrupted.");
-        }
-      } else {
-        // Native Mobile
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'audio_file', // Key expected by Django Serializer
-            (_selectedFile as io.File).path,
-          ),
+      String token = '';
+      if (FirebaseAuth.instance.currentUser != null) {
+        token = await FirebaseAuth.instance.currentUser!.getIdToken() ?? '';
+      }
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Token $token',
+        },
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode != 201 && response.statusCode != 200) {
+        throw Exception(
+          'Server returned ${response.statusCode}: ${response.body}',
         );
       }
 
-      // 4. Send Request
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
+      setState(() {
+        _audioUrl = finalAudioUrl;
+        _selectedFile = null;
+        songNameController.clear();
+        artistController.clear();
+        _releasedDate = null;
+        category = '';
+      });
 
-      Navigator.pop(context); // Dismiss loading
+      // Refresh artist list to include new song's artist
+      _fetchArtistsAndSongs();
 
-      // 5. Handle Response
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        var responseData = json.decode(response.body);
-
-        setState(() {
-          // Assuming Django returns the full object with the new 'audio_file' URL
-          _audioUrl = responseData['audio_file'];
-          _selectedFile = null;
-          songNameController.clear();
-          artistController.clear();
-          _releasedDate = null;
-          category = '';
-        });
-
-        Api().showMessage(
-          context,
-          'Song Uploaded Successfully!',
-          'Success',
-          Colors.green,
-        );
-      } else {
-        print("Server Error: ${response.body}");
-        Api().showMessage(
-          context,
-          'Upload Failed: ${response.statusCode}\n${response.body}',
-          'Server Error',
-          Colors.red,
-        );
-      }
+      Api().showMessage(
+        context,
+        'Song Uploaded Successfully!',
+        'Success',
+        Colors.green,
+      );
     } catch (e) {
-      Navigator.pop(context); // Dismiss loading if error
       Api().showMessage(
         context,
         'Error: ${e.toString()}',
-        'Connection Error',
+        'Upload Failed',
         Colors.red,
       );
+    } finally {
+      Navigator.pop(context);
     }
   }
 
-  // --- AUDIO PLAYBACK ---
   Future<void> playAudio() async {
     if (_audioUrl != null) {
       await _audioPlayer.play(
@@ -221,12 +426,64 @@ class _AddMusicState extends State<AddMusic> {
     }
   }
 
-  // --- WIDGET BUILDER ---
-  @override
-  Widget build(BuildContext context) {
-    final color = Theme.of(context);
+  // --- WIDGET BUILDERS ---
 
-    // Determine file name for display
+  Widget _buildTabBar(ThemeData color, Color bgColor, Color primary) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _selectedTab = 0),
+              child: NeoContainer(
+                color: _selectedTab == 0 ? primary : bgColor,
+                borderRadius: 12,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Center(
+                  child: Text(
+                    'Upload Song',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w600,
+                      color: _selectedTab == 0
+                          ? bgColor
+                          : color.textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _selectedTab = 1),
+              child: NeoContainer(
+                color: _selectedTab == 1 ? primary : bgColor,
+                borderRadius: 12,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                child: Center(
+                  child: Text(
+                    'Manage Artists',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w600,
+                      color: _selectedTab == 1
+                          ? bgColor
+                          : color.textTheme.bodyLarge?.color,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUploadTab(ThemeData color, Color bgColor, Color primary) {
     String? selectedFileName;
     if (_isWeb && _webFile != null) {
       selectedFileName = _webFile!.name;
@@ -234,245 +491,462 @@ class _AddMusicState extends State<AddMusic> {
       selectedFileName = (_selectedFile as io.File).path.split('/').last;
     }
 
-    final isVideoFile =
-        selectedFileName != null &&
-        videoExtensions.contains(
-          selectedFileName.split('.').last.toLowerCase(),
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      children: [
+        // 1. Neumorphic File Picker
+        Center(
+          child: GestureDetector(
+            onTap: pickFile,
+            child: NeoContainer(
+              color: bgColor,
+              height: 220,
+              width: 220,
+              borderRadius: 110,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _selectedFile == null
+                        ? Ionicons.cloud_upload_outline
+                        : Ionicons.musical_notes,
+                    size: 55,
+                    color: primary,
+                  ),
+                  const SizedBox(height: 15),
+                  Text(
+                    _selectedFile == null ? 'Select Audio' : 'Audio Ready',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: primary,
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                  if (selectedFileName != null)
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        top: 8.0,
+                        left: 20,
+                        right: 20,
+                      ),
+                      child: Text(
+                        selectedFileName,
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'Poppins',
+                          color: color.hintColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: 40),
+
+        // 2. Input Fields
+        NeoContainer(
+          color: bgColor,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: CupertinoTextField(
+            controller: songNameController,
+            placeholder: 'Song Title',
+            keyboardType: TextInputType.text,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              color: color.textTheme.bodyLarge?.color,
+            ),
+            placeholderStyle: TextStyle(
+              fontFamily: 'Poppins',
+              color: color.hintColor,
+            ),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.transparent),
+          ),
+        ),
+        SizedBox(height: 20),
+
+        NeoContainer(
+          color: bgColor,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: CupertinoTextField(
+            controller: artistController,
+            placeholder: 'Artist Name',
+            keyboardType: TextInputType.name,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              color: color.textTheme.bodyLarge?.color,
+            ),
+            placeholderStyle: TextStyle(
+              fontFamily: 'Poppins',
+              color: color.hintColor,
+            ),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.transparent),
+          ),
+        ),
+        SizedBox(height: 20),
+
+        // 3. Category Selection
+        NeoContainer(
+          color: bgColor,
+          child: ExpansionTile(
+            collapsedIconColor: primary,
+            iconColor: primary,
+            shape: const Border(),
+            title: Text(
+              category.isEmpty ? 'Select Category' : category,
+              style: TextStyle(
+                color: primary,
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            children: [
+              ...categories.map(
+                (cat) => RadioListTile<String>(
+                  value: cat,
+                  groupValue: category,
+                  onChanged: (val) {
+                    setState(() => category = val as String);
+                  },
+                  title: Text(cat, style: TextStyle(fontFamily: 'Poppins')),
+                  activeColor: primary,
+                  controlAffinity: ListTileControlAffinity.trailing,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+        SizedBox(height: 20),
+
+        // 4. Date Picker
+        GestureDetector(
+          onTap: () async {
+            DateTime? pickedDate = await showDatePicker(
+              context: context,
+              initialDate: _releasedDate ?? DateTime.now(),
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2100),
+              builder: (context, child) {
+                return Theme(
+                  data: color.copyWith(
+                    colorScheme: ColorScheme.light(
+                      primary: primary,
+                      onPrimary: bgColor,
+                      onSurface:
+                          color.textTheme.bodyLarge?.color ?? Colors.black,
+                    ),
+                    textTheme: TextTheme(
+                      bodyLarge: TextStyle(fontFamily: 'Poppins'),
+                      bodyMedium: TextStyle(fontFamily: 'Poppins'),
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+
+            if (pickedDate != null) {
+              setState(() {
+                _releasedDate = pickedDate;
+              });
+            }
+          },
+          child: NeoContainer(
+            color: bgColor,
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _releasedDate != null
+                      ? 'Released: ${_releasedDate!.toLocal().toString().split(' ')[0]}'
+                      : 'Select Release Date',
+                  style: TextStyle(
+                    color: _releasedDate != null
+                        ? color.textTheme.bodyLarge?.color
+                        : color.hintColor,
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                  ),
+                ),
+                Icon(Ionicons.calendar_outline, color: primary),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: 35),
+
+        // 5. Play Preview Button
+        if (_audioUrl != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 25.0),
+            child: GestureDetector(
+              onTap: playAudio,
+              child: NeoContainer(
+                color: bgColor,
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                borderRadius: 30,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Ionicons.play_circle, color: primary, size: 24),
+                    SizedBox(width: 10),
+                    Text(
+                      'Play Uploaded Audio',
+                      style: TextStyle(
+                        color: primary,
+                        fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+        // 6. Upload Button
+        GestureDetector(
+          onTap: uploadSong,
+          child: NeoContainer(
+            color: primary,
+            padding: EdgeInsets.symmetric(vertical: 18),
+            borderRadius: 15,
+            child: Center(
+              child: Text(
+                'Upload Song',
+                style: TextStyle(
+                  color: bgColor,
+                  fontFamily: 'Poppins',
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(height: 40),
+      ],
+    );
+  }
+
+  Widget _buildManageTab(ThemeData color, Color bgColor, Color primary) {
+    if (_isLoadingArtists) {
+      return Center(child: CircularProgressIndicator(color: primary));
+    }
+
+    if (_artistDisplayNames.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Ionicons.folder_open_outline,
+              size: 60,
+              color: color.hintColor,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No artists found.\nUpload songs to manage contracts.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 16,
+                color: color.hintColor,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      itemCount: _artistDisplayNames.length,
+      itemBuilder: (context, index) {
+        final normalizedArtist = _artistDisplayNames.keys.elementAt(index);
+        final displayName = _artistDisplayNames[normalizedArtist]!;
+        final hasContract = _artistContractSigned[normalizedArtist] ?? false;
+        final contractUrl = _artistContractUrls[normalizedArtist];
+        final totalSongs = _artistSongIds[normalizedArtist]?.length ?? 0;
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 20.0),
+          child: NeoContainer(
+            color: bgColor,
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: color.textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Total Songs: $totalSongs',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 13,
+                          color: color.hintColor,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        hasContract ? 'Contract Signed' : 'Pending Contract',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: hasContract ? Colors.green : Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // View / Download Button
+                    if (hasContract && contractUrl != null) ...[
+                      GestureDetector(
+                        onTap: () => _viewContract(contractUrl),
+                        child: NeoContainer(
+                          color: bgColor,
+                          borderRadius: 12,
+                          padding: EdgeInsets.all(12),
+                          child: Icon(
+                            Ionicons.eye_outline,
+                            color: primary,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                    ],
+                    // Upload / Re-Upload Button
+                    GestureDetector(
+                      onTap: () => pickAndUploadContract(normalizedArtist),
+                      child: NeoContainer(
+                        color: bgColor,
+                        borderRadius: 12,
+                        padding: EdgeInsets.all(12),
+                        child: Icon(
+                          hasContract
+                              ? Ionicons.sync_outline
+                              : Ionicons.cloud_upload_outline,
+                          color: hasContract ? Colors.green : primary,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context);
+    final bgColor = color.scaffoldBackgroundColor;
+    final primary = color.primaryColor;
 
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: _desktopContentMaxWidth),
         child: Padding(
-          padding: const EdgeInsets.all(18.0),
-          child: ListView(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
             children: [
-              // 1. File Picker Card
-              Center(
-                child: Card(
-                  elevation: 10,
-                  color: Colors.transparent,
-                  child: GestureDetector(
-                    onTap: pickFile,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(30),
-                        gradient: SweepGradient(
-                          transform: const GradientRotation(5),
-                          center: Alignment.center,
-                          startAngle: 0.1,
-                          endAngle: 10,
-                          colors: [
-                            color.primaryColor.withOpacity(0.9),
-                            color.hintColor,
-                            color.primaryColor,
-                            color.primaryColorDark,
-                          ],
-                        ),
-                      ),
-                      height: 200,
-                      width: 200,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _selectedFile == null
-                                ? Ionicons.add_sharp
-                                : isVideoFile
-                                ? Ionicons.videocam_outline
-                                : Ionicons.musical_notes_outline,
-                            size: 50,
-                            color: color.scaffoldBackgroundColor,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _selectedFile == null
-                                ? 'Tap to Select Audio'
-                                : (isVideoFile
-                                      ? 'Video Selected'
-                                      : 'Audio Selected'),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: color.scaffoldBackgroundColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          if (selectedFileName != null)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                              ),
-                              child: Text(
-                                selectedFileName,
-                                textAlign: TextAlign.center,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: color.scaffoldBackgroundColor,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              _buildTabBar(color, bgColor, primary),
+              Expanded(
+                child: _selectedTab == 0
+                    ? _buildUploadTab(color, bgColor, primary)
+                    : _buildManageTab(color, bgColor, primary),
               ),
-              SizedBox(height: 30),
-
-              // 2. Input Fields
-              CupertinoTextField(
-                controller: songNameController,
-                placeholder: 'Song Title',
-                keyboardType: TextInputType.text,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    width: 1,
-                    color: color.primaryColor.withOpacity(0.5),
-                  ),
-                  color: color.scaffoldBackgroundColor,
-                ),
-              ),
-              SizedBox(height: 10),
-              CupertinoTextField(
-                controller: artistController,
-                placeholder: 'Artist Name',
-                keyboardType: TextInputType.name,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    width: 1,
-                    color: color.primaryColor.withOpacity(0.5),
-                  ),
-                  color: color.scaffoldBackgroundColor,
-                ),
-              ),
-              SizedBox(height: 10),
-
-              // 3. Category Selection
-              ExpansionTile(
-                title: Text(
-                  category.isEmpty ? 'Select Category' : category,
-                  style: TextStyle(
-                    color: color.primaryColor,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                children: [
-                  ...categories
-                      .map(
-                        (cat) => RadioListTile<String>(
-                          value: cat,
-                          groupValue: category,
-                          onChanged: (val) {
-                            setState(() => category = val as String);
-                          },
-                          title: Text(cat),
-                          activeColor: color.primaryColor,
-                        ),
-                      )
-                      .toList(),
-                ],
-              ),
-
-              SizedBox(height: 10),
-
-              // 4. Date Picker
-              GestureDetector(
-                onTap: () async {
-                  DateTime? pickedDate = await showDatePicker(
-                    context: context,
-                    initialDate: _releasedDate ?? DateTime.now(),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime(2100),
-                    builder: (context, child) {
-                      return Theme(
-                        data: color.copyWith(
-                          colorScheme: ColorScheme.light(
-                            primary: color.primaryColor,
-                            onPrimary: color.scaffoldBackgroundColor,
-                            onSurface:
-                                color.textTheme.bodyLarge?.color ??
-                                Colors.black,
-                          ),
-                        ),
-                        child: child!,
-                      );
-                    },
-                  );
-                  if (pickedDate != null) {
-                    setState(() {
-                      _releasedDate = pickedDate;
-                    });
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      width: 1,
-                      color: color.primaryColor.withOpacity(0.5),
-                    ),
-                    color: color.scaffoldBackgroundColor,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _releasedDate != null
-                            ? 'Released: ${_releasedDate!.toLocal().toString().split(' ')[0]}'
-                            : 'Select Release Date',
-                        style: TextStyle(
-                          color: color.primaryColor,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Icon(Icons.calendar_today, color: color.primaryColor),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: 20),
-
-              // 5. Play Preview Button (Visible after successful upload)
-              if (_audioUrl != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20.0),
-                  child: Center(
-                    child: ElevatedButton.icon(
-                      onPressed: playAudio,
-                      icon: const Icon(Ionicons.play_circle_outline),
-                      label: Text('Play Uploaded Audio'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: color.splashColor,
-                        foregroundColor: color.scaffoldBackgroundColor,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-              // 6. Upload Button
-              CustomOutlinedButton(
-                onPressed: uploadSong,
-                text: 'Upload Song',
-                backgroundColor: color.primaryColor,
-                foregroundColor: color.scaffoldBackgroundColor,
-                width: double.infinity,
-              ),
-              SizedBox(height: 40),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+// --- NEUMORPHIC HELPER COMPONENT ---
+
+class NeoContainer extends StatelessWidget {
+  final Widget child;
+  final double? width;
+  final double? height;
+  final double borderRadius;
+  final EdgeInsetsGeometry? padding;
+  final Color color;
+
+  const NeoContainer({
+    Key? key,
+    required this.child,
+    this.width,
+    this.height,
+    this.borderRadius = 15.0,
+    this.padding,
+    required this.color,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    bool isDark =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark;
+    Color lightShadow = isDark ? Colors.white.withOpacity(0.05) : Colors.white;
+    Color darkShadow = isDark
+        ? Colors.black.withOpacity(0.3)
+        : Colors.blueGrey.shade100.withOpacity(0.6);
+
+    return Container(
+      width: width,
+      height: height,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(borderRadius),
+        boxShadow: [
+          BoxShadow(
+            color: darkShadow,
+            offset: Offset(6, 6),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+          BoxShadow(
+            color: lightShadow,
+            offset: Offset(-6, -6),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }

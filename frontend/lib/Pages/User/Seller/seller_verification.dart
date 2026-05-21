@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io'; // Added for safe image extraction fallback
 import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,9 @@ import 'package:camera/camera.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
+ import 'package:ttact/Pages/Auth/liveness_wrapper.dart'
+    if (dart.library.io) 'package:ttact/Pages/Auth/liveness_wrapper_mobile.dart'
+    if (dart.library.html) 'package:ttact/Pages/Auth/liveness_wrapper_web.dart';
 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
@@ -41,7 +45,11 @@ class _SellerFaceVerificationScreenState
   final Api _api = Api();
 
   bool _hasAgreedToDisclaimer = false;
-  bool _isVerifying = false;
+  
+  // Split verification states to handle liveness package flow
+  bool _isVerifyingLiveness = false;
+  bool _isVerifyingBackend = false;
+  
   String _processStatus = "Initializing...";
   bool _isCameraInitialized = false;
   late AnimationController _scannerController;
@@ -101,31 +109,57 @@ class _SellerFaceVerificationScreenState
     }
   }
 
-  Future<void> _captureAndVerify() async {
-    if (_cameraController == null ||
-        !_cameraController!.value.isInitialized ||
-        _isVerifying)
+  // --- Mobile Secure Flow ---
+  Future<void> _startLivenessCapture() async {
+    if (widget.referenceFaceUrl.isEmpty) {
+      _api.showMessage(
+        context,
+        'No reference image found.',
+        'Security Error',
+        Colors.red,
+      );
       return;
+    }
+
+    // Free the hardware camera so flutter_face_liveness can take over securely
+    await _cameraController?.dispose();
+    _cameraController = null;
 
     setState(() {
-      _isVerifying = true;
-      _processStatus = 'Scanning...';
+      _isCameraInitialized = false;
+      _isVerifyingLiveness = true;
+      _processStatus = 'Follow on-screen instructions...';
+    });
+  }
+
+  // --- Web Fallback Flow ---
+  Future<void> _captureWebAndVerify() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+
+    setState(() {
+      _isVerifyingBackend = true;
+      _processStatus = 'Scanning Image...';
     });
 
     try {
       final XFile capturedFile = await _cameraController!.takePicture();
-      if (mounted) await _cameraController?.resumePreview();
-
+      if (mounted) await _cameraController?.pausePreview();
+      
       final Uint8List capturedBytes = await capturedFile.readAsBytes();
+      await _processBackendMatch(capturedBytes);
+    } catch (e) {
+      _handleFailure(reason: "Web Camera Capture Error: $e");
+    }
+  }
 
-      setState(() {
-        _processStatus = "Verifying ${widget.fullName} against documents...";
-      });
+  // --- Shared Backend Match Logic ---
+  Future<void> _processBackendMatch(Uint8List capturedBytes) async {
+    setState(() {
+      _processStatus = "Verifying ${widget.fullName} against documents...";
+    });
 
-      final result = await _compareFaces(
-        capturedBytes,
-        widget.referenceFaceUrl,
-      );
+    try {
+      final result = await _compareFaces(capturedBytes, widget.referenceFaceUrl);
 
       if (result['matched'] == true) {
         await playSound(true);
@@ -136,7 +170,6 @@ class _SellerFaceVerificationScreenState
         );
       }
     } catch (e) {
-      _cameraController?.resumePreview();
       _handleFailure(reason: "Identification Error: $e");
     }
   }
@@ -176,12 +209,15 @@ class _SellerFaceVerificationScreenState
   void _handleFailure({String reason = "Verification Failed"}) async {
     if (!mounted) return;
     await playSound(false);
-    _cameraController?.resumePreview();
+    
     setState(() {
-      _isVerifying = false;
+      _isVerifyingLiveness = false;
+      _isVerifyingBackend = false;
       _processStatus = "Ready";
     });
+    
     _api.showMessage(context, reason, 'Denied', Colors.red);
+    _initializeCamera();
   }
 
   @override
@@ -243,7 +279,7 @@ class _SellerFaceVerificationScreenState
                     textColor,
                     theme.primaryColor,
                   )
-                else if (_isVerifying)
+                else if (_isVerifyingBackend)
                   _buildProcessingPanel(
                     neumoBaseColor,
                     textColor,
@@ -397,9 +433,11 @@ class _SellerFaceVerificationScreenState
       child: Column(
         children: [
           Text(
-            _isCameraInitialized
-                ? 'Align your face within the frame.'
-                : 'Initializing...',
+            _isVerifyingLiveness
+                ? 'Follow instructions within the frame.'
+                : (_isCameraInitialized
+                    ? 'Align your face within the inner frame.'
+                    : 'Initializing...'),
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               fontSize: 12,
@@ -407,9 +445,12 @@ class _SellerFaceVerificationScreenState
             ),
           ),
           const SizedBox(height: 40),
+          
+          // ⭐️ OVERLAY STACK: Combines the package UI with your custom design
           Stack(
             alignment: Alignment.center,
             children: [
+              // 1. The outer Neumorphic shadow ring
               Container(
                 width: 240,
                 height: 320,
@@ -427,22 +468,98 @@ class _SellerFaceVerificationScreenState
                   ],
                 ),
               ),
+              
+              // 2. The Video Feed / Liveness Package
               ClipOval(
                 child: Container(
                   width: 220,
                   height: 300,
                   color: Colors.black,
-                  child: _isCameraInitialized
-                      ? AspectRatio(
-                          aspectRatio: _cameraController!.value.aspectRatio,
-                          child: CameraPreview(_cameraController!),
+                  child: (!kIsWeb && _isVerifyingLiveness)
+                      ? getLivenessWidget(
+                          onSuccess: (result) async {
+                            setState(() {
+                              _isVerifyingLiveness = false;
+                              _isVerifyingBackend = true;
+                              _processStatus = 'Capturing secure image...';
+                            });
+                            
+                            try {
+                              Uint8List? capturedBytes;
+                              dynamic res = result;
+
+                              if (res is Uint8List) {
+                                capturedBytes = res;
+                              } else {
+                                try { capturedBytes ??= res.imageBytes; } catch (_) {}
+                                try { capturedBytes ??= res.capturedImage; } catch (_) {}
+                                try { capturedBytes ??= res.jpegBytes; } catch (_) {}
+                                try { capturedBytes ??= res.image; } catch (_) {}
+
+                                if (capturedBytes == null) {
+                                  String? path;
+                                  try { path ??= res.imagePath; } catch (_) {}
+                                  try { path ??= res.path; } catch (_) {}
+                                  
+                                  if (path != null && path.isNotEmpty) {
+                                     final file = File(path);
+                                     capturedBytes = await file.readAsBytes();
+                                  }
+                                }
+                              }
+                               
+                              if (capturedBytes == null) {
+                                print("Package didn't provide an image. Waiting for hardware release...");
+                                
+                                await Future.delayed(const Duration(milliseconds: 600));
+                                
+                                if (_cameraController == null || !_cameraController!.value.isInitialized) {
+                                   final cameras = await availableCameras();
+                                   CameraDescription targetCamera = cameras.firstWhere(
+                                     (camera) => camera.lensDirection == CameraLensDirection.front,
+                                     orElse: () => cameras.first,
+                                   );
+
+                                   _cameraController = CameraController(
+                                     targetCamera,
+                                     ResolutionPreset.medium,
+                                     enableAudio: false,
+                                   );
+                                   await _cameraController!.initialize();
+                                }
+                                
+                                await Future.delayed(const Duration(milliseconds: 200));
+                                final XFile capturedFile = await _cameraController!.takePicture();
+                                capturedBytes = await capturedFile.readAsBytes();
+                              }
+                              
+                              if (capturedBytes != null) {
+                                await _processBackendMatch(capturedBytes);
+                              } else {
+                                _handleFailure(reason: "Camera hardware failed to capture image.");
+                              }
+                            } catch (e) {
+                              print("CRITICAL ERROR: $e");
+                              _handleFailure(reason: "Secure capture failed: $e");
+                            }
+                          },
+                          onFailed: (reason) {
+                            _handleFailure(reason: "Spoofing Detected: $reason");
+                          },
                         )
-                      : Center(
-                          child: CircularProgressIndicator(color: primaryColor),
-                        ),
+                      : (_isCameraInitialized
+                          ? AspectRatio(
+                              aspectRatio: _cameraController!.value.aspectRatio,
+                              child: CameraPreview(_cameraController!),
+                            )
+                          : Center(
+                              child: CircularProgressIndicator(color: primaryColor),
+                            )),
                 ),
               ),
-              if (_isCameraInitialized)
+              
+              // 3. Your animated green scanning line placed ON TOP
+              if (_isCameraInitialized || _isVerifyingLiveness)
                 Positioned.fill(
                   child: ClipOval(
                     child: AnimatedBuilder(
@@ -459,7 +576,7 @@ class _SellerFaceVerificationScreenState
                             gradient: LinearGradient(
                               colors: [
                                 Colors.transparent,
-                                Colors.green,
+                                Colors.green.withOpacity(0.8),
                                 Colors.transparent,
                               ],
                             ),
@@ -476,27 +593,40 @@ class _SellerFaceVerificationScreenState
                     ),
                   ),
                 ),
+                
+              // 4. Inner shadow overlay to soften the hard edges of the package UI
+              Positioned.fill(
+                child: Container(
+                   width: 220,
+                   height: 300,
+                   decoration: BoxDecoration(
+                     shape: BoxShape.circle,
+                     border: Border.all(color: baseColor.withOpacity(0.3), width: 8),
+                   ),
+                )
+              )
             ],
           ),
           const SizedBox(height: 40),
-          GestureDetector(
-            onTap: _captureAndVerify,
-            child: NeumorphicContainer(
-              color: primaryColor,
-              borderRadius: 16,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Center(
-                child: Text(
-                  'Start Face Match',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+          if (!_isVerifyingLiveness)
+            GestureDetector(
+              onTap: kIsWeb ? _captureWebAndVerify : _startLivenessCapture,
+              child: NeumorphicContainer(
+                color: primaryColor,
+                borderRadius: 16,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Center(
+                  child: Text(
+                    'Start Face Match',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

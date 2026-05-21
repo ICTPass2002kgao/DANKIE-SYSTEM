@@ -2,12 +2,12 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:http/http.dart' as http; // Added for Django
-import 'package:firebase_auth/firebase_auth.dart'; // Auth UID only
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:ttact/Components/API.dart'; // Ensure API is imported
+import 'package:ttact/Components/API.dart';
 
 /// A Data Transfer Object to pass data from the UI to the PDF Generator
 class ReportPdfData {
@@ -15,8 +15,8 @@ class ReportPdfData {
   final String communityName;
   final String province;
   final String overseerName;
-  final String overseerCode; // <--- ADDED
-  final String region; // <--- ADDED
+  final String overseerCode;
+  final String region;
   final int month;
   final int year;
   final Uint8List? logoBytes;
@@ -59,8 +59,8 @@ class ReportPdfData {
     required this.communityName,
     required this.province,
     required this.overseerName,
-    required this.overseerCode, // <--- ADDED
-    required this.region, // <--- ADDED
+    required this.overseerCode,
+    required this.region,
     required this.month,
     required this.year,
     this.logoBytes,
@@ -115,6 +115,9 @@ class PdfGeneratorService {
       data.isViewingHistory,
     );
 
+    // ⭐️ Fetch Signatures and Names from Database
+    final sigData = await _fetchSignaturesFromDatabase();
+
     final String currentMonth = _getMonthName(data.month);
     final String currentYear = data.year.toString();
 
@@ -136,12 +139,24 @@ class PdfGeneratorService {
                 data.districtElder,
                 data.communityName,
                 data.province,
-                data.overseerCode, // <--- Pass Code
-                data.region, // <--- Pass Region
+                data.overseerCode,
+                data.region,
               ),
               pw.Expanded(child: _buildIncomeExpenditureTable(data)),
               pw.SizedBox(height: 10),
-              _buildSignatures(data.overseerName, data.districtElder),
+
+              // ⭐️ Inject Signatures
+              _buildSignatures(
+                data.overseerName,
+                sigData['overseerSig'],
+                data.districtElder,
+                null, // District Elder signs manually
+                sigData['treasurerName'],
+                sigData['treasurerSig'],
+                sigData['secretaryName'],
+                sigData['secretarySig'],
+              ),
+
               pw.SizedBox(height: 10),
               pw.Text(
                 "NB: Attach all receipts and Bank Deposit Slips with Neat and Clear Details",
@@ -177,7 +192,18 @@ class PdfGeneratorService {
               pw.SizedBox(height: 10),
               balanceSheetRows,
               pw.Spacer(),
-              _buildSignatures(data.overseerName, data.districtElder),
+
+              // ⭐️ Inject Signatures on Balance Sheet as well
+              _buildSignatures(
+                data.overseerName,
+                sigData['overseerSig'],
+                data.districtElder,
+                null,
+                sigData['treasurerName'],
+                sigData['treasurerSig'],
+                sigData['secretaryName'],
+                sigData['secretarySig'],
+              ),
             ],
           );
         },
@@ -188,6 +214,75 @@ class PdfGeneratorService {
   }
 
   // --- Private Helper Methods ---
+
+  // ⭐️ NEW: Fetch Signatures and Member Names from API
+  static Future<Map<String, dynamic>> _fetchSignaturesFromDatabase() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+    final token = await user?.getIdToken();
+
+    Map<String, dynamic> result = {
+      'treasurerName': '',
+      'secretaryName': '',
+      'overseerSig': null,
+      'treasurerSig': null,
+      'secretarySig': null,
+    };
+
+    if (uid == null || token == null) return result;
+
+    try {
+      final overRes = await http.get(
+        Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/overseers/?uid=$uid'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (overRes.statusCode == 200) {
+        final List d = jsonDecode(overRes.body);
+        if (d.isNotEmpty) {
+          final overId = d.first['id'];
+          final String? overSigStr = d.first['signature_base64'];
+
+          if (overSigStr != null && overSigStr.trim().isNotEmpty) {
+            try {
+              result['overseerSig'] = base64Decode(overSigStr);
+            } catch (_) {}
+          }
+
+          final comRes = await http.get(
+            Uri.parse(
+              '${Api().BACKEND_BASE_URL_DEBUG}/committee_members/?overseer=$overId',
+            ),
+            headers: {'Authorization': 'Bearer $token'},
+          );
+
+          if (comRes.statusCode == 200) {
+            final List c = jsonDecode(comRes.body);
+            for (var m in c) {
+              final String? sigStr = m['signature_base64'];
+              Uint8List? sigBytes;
+              if (sigStr != null && sigStr.trim().isNotEmpty) {
+                try {
+                  sigBytes = base64Decode(sigStr);
+                } catch (_) {}
+              }
+
+              if (m['portfolio'] == 'Treasurer') {
+                result['treasurerName'] = m['full_name'] ?? '';
+                result['treasurerSig'] = sigBytes;
+              } else if (m['portfolio'] == 'Secretary') {
+                result['secretaryName'] = m['full_name'] ?? '';
+                result['secretarySig'] = sigBytes;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print("Error fetching signatures for PDF: $e");
+    }
+    return result;
+  }
 
   static String _getMonthName(int month) {
     const m = [
@@ -254,8 +349,8 @@ class PdfGeneratorService {
     String d,
     String c,
     String p,
-    String code, // <--- Added Param
-    String region, // <--- Added Param
+    String code,
+    String region,
   ) {
     return pw.Table(
       border: pw.TableBorder.all(width: 0.5),
@@ -269,7 +364,7 @@ class PdfGeneratorService {
         pw.TableRow(
           children: [
             _cell("Overseer:", o, false),
-            _cell("Code No:", code, false), // <--- Display Code
+            _cell("Code No:", code, false),
           ],
         ),
         pw.TableRow(
@@ -293,7 +388,7 @@ class PdfGeneratorService {
         pw.TableRow(
           children: [
             _cell("Province:", p, false),
-            _cell("Region:", region, false), // <--- Display Region
+            _cell("Region:", region, false),
           ],
         ),
       ],
@@ -327,6 +422,10 @@ class PdfGeneratorService {
 
     return pw.Table(
       border: pw.TableBorder.all(width: 0.5),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(1),
+        1: const pw.FlexColumnWidth(1),
+      },
       children: [
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: PdfColors.grey300),
@@ -335,6 +434,16 @@ class PdfGeneratorService {
               padding: const pw.EdgeInsets.all(2),
               child: pw.Text(
                 "Income / Receipts",
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(2),
+              child: pw.Text(
+                "Expenditure",
                 style: pw.TextStyle(
                   fontWeight: pw.FontWeight.bold,
                   fontSize: 10,
@@ -626,34 +735,63 @@ class PdfGeneratorService {
     );
   }
 
-  static pw.Widget _buildSignatures(String o, String e) {
+  // ⭐️ UPDATED: Accepts Dynamic Names and Signature Bytes
+  static pw.Widget _buildSignatures(
+    String overseerName,
+    dynamic overseerSig,
+    String districtElderName,
+    dynamic districtElderSig,
+    String treasurerName,
+    dynamic treasurerSig,
+    String secretaryName,
+    dynamic secretarySig,
+  ) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
       children: [
-        _sig("Overseer", o),
-        _sig("District Elder", e),
-        _sig("Treasurer", ""),
-        _sig("Secretary", ""),
+        _sig("Overseer", overseerName, overseerSig),
+        _sig("District Elder", districtElderName, districtElderSig),
+        _sig("Treasurer", treasurerName, treasurerSig),
+        _sig("Secretary", secretaryName, secretarySig),
       ],
     );
   }
 
-  static pw.Widget _sig(String l, String n) {
+  // ⭐️ UPDATED: Prints the image if present, leaves blank space if null
+  static pw.Widget _sig(String title, String name, Uint8List? signature) {
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
         pw.Text(
-          l,
-          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+          title,
+          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
         ),
-        pw.SizedBox(height: 15),
-        pw.Container(width: 80, height: 1, color: PdfColors.black),
-        pw.Text("Signature", style: const pw.TextStyle(fontSize: 6)),
+        pw.SizedBox(height: 5),
+        if (signature != null)
+          pw.Container(
+            height: 35,
+            width: 80,
+            child: pw.Image(pw.MemoryImage(signature), fit: pw.BoxFit.contain),
+          )
+        else
+          pw.SizedBox(height: 35), // Blank space for manual signing
+
+        pw.Container(width: 90, height: 1, color: PdfColors.black),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          name.isNotEmpty ? name : "..............................",
+          style: const pw.TextStyle(fontSize: 8),
+        ),
+        pw.Text(
+          "Signature",
+          style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700),
+        ),
       ],
     );
   }
 
-  // --- ⭐️ FETCH BALANCE SHEET DATA FROM DJANGO ---
+  // --- FETCH BALANCE SHEET DATA FROM DJANGO ---
   static Future<pw.Widget> _fetchBalanceSheetDataForPdf(
     String districtElder,
     String communityName,
@@ -665,20 +803,31 @@ class PdfGeneratorService {
     double grandTotal = 0.0;
 
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final user = FirebaseAuth.instance.currentUser;
+      final uid = user?.uid;
+      final token = await user?.getIdToken();
 
       // Determine correct endpoint
       String endpoint = isViewingHistory ? 'contribution_history' : 'users';
 
-      // URL: /api/ENDPOINT/?overseer_uid=UID&district=D&community=C
+      String encDistrict = Uri.encodeComponent(districtElder);
+      String encCommunity = Uri.encodeComponent(communityName);
+
       String urlStr =
-          '${Api().BACKEND_BASE_URL_DEBUG}/$endpoint/?overseer_uid=$uid&district_elder_name=$districtElder&community_name=$communityName';
+          '${Api().BACKEND_BASE_URL_DEBUG}/$endpoint/?overseer_uid=$uid';
 
       if (isViewingHistory) {
-        urlStr += '&year=$year&month=$month';
+        urlStr +=
+            '&district_elder=$encDistrict&community=$encCommunity&year=$year&month=$month';
+      } else {
+        urlStr +=
+            '&district_elder_name=$encDistrict&community_name=$encCommunity';
       }
 
-      final response = await http.get(Uri.parse(urlStr));
+      final response = await http.get(
+        Uri.parse(urlStr),
+        headers: token != null ? {'Authorization': 'Bearer $token'} : {},
+      );
 
       if (response.statusCode == 200) {
         final List records = json.decode(response.body);

@@ -44,8 +44,8 @@ android {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 35
-        versionCode = 41
-        versionName = "1.0.41"
+        versionCode = 44
+        versionName = "1.0.44"
         
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
 

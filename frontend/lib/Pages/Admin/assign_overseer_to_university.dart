@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:ttact/Components/API.dart';
@@ -153,7 +154,10 @@ class _UniversityAssignmentScreenState
         iconTheme: IconThemeData(color: Colors.black),
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? 
+           (Api().isIOSPlatform
+              ? Center(child: CupertinoActivityIndicator(color: Theme.of(context).primaryColor,))
+              : Center(child: CircularProgressIndicator(color: Theme.of(context).primaryColor)))
           : SingleChildScrollView(
               padding: EdgeInsets.all(20),
               child: Column(

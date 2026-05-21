@@ -63,7 +63,7 @@ class _SellerOrdersTabState extends State<SellerOrdersTab> {
         return;
       }
 
-      final uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/orders/');
+      final uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/orders/?seller_uid=${widget.userId}');
 
       // SECURE FIX: Added Authorization headers
       final response = await http.get(

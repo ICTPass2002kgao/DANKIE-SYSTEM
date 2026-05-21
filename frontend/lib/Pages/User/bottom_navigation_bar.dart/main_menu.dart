@@ -540,16 +540,28 @@ class _MotherPageState extends State<MotherPage>
                 _buildWowAppBar(theme, neumoBaseColor),
 
                 Expanded(
-                  child: NotificationListener<UserScrollNotification>(
-                    onNotification: (notification) {
-                      if (notification.direction == ScrollDirection.reverse) {
-                        if (_isBottomNavVisible)
-                          setState(() => _isBottomNavVisible = false);
-                      } else if (notification.direction ==
-                          ScrollDirection.forward) {
-                        if (!_isBottomNavVisible)
-                          setState(() => _isBottomNavVisible = true);
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: (ScrollNotification notification) {
+                      if (notification is UserScrollNotification) {
+                        if (notification.direction == ScrollDirection.reverse) {
+                          if (_isBottomNavVisible)
+                            setState(() => _isBottomNavVisible = false);
+                        } else if (notification.direction ==
+                            ScrollDirection.forward) {
+                          if (!_isBottomNavVisible)
+                            setState(() => _isBottomNavVisible = true);
+                        }
                       }
+
+                      // Failsafe for small content or reaching the top
+                      if (notification.metrics.maxScrollExtent <= 0 ||
+                          notification.metrics.pixels <=
+                              notification.metrics.minScrollExtent) {
+                        if (!_isBottomNavVisible) {
+                          setState(() => _isBottomNavVisible = true);
+                        }
+                      }
+
                       return true;
                     },
                     child: content,
@@ -663,7 +675,9 @@ class _MotherPageState extends State<MotherPage>
       topLine = "Browsing";
       bottomLine = _getNavItems()[_currentIndex]['label'].toUpperCase();
     }
-
+    String initials = _userData['name'] != null && _userData['surname'] != null
+        ? "${_userData['name'].toString().substring(0, 1)}${_userData['surname'].toString().substring(0, 1)}"
+        : 'GC';
     return Container(
       padding: EdgeInsets.fromLTRB(20, 10, 20, 25),
       decoration: BoxDecoration(
@@ -766,7 +780,7 @@ class _MotherPageState extends State<MotherPage>
                   ),
                   child: Center(
                     child: Text(
-                      "${_userData['name'] ?? ''} ${_userData['surname'] ?? ''}",
+                      initials,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: theme.primaryColor,

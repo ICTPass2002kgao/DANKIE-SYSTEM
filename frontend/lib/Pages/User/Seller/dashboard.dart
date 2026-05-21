@@ -60,7 +60,7 @@ class _SellerDashboardTabState extends State<SellerDashboardTab> {
       final invUri = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/seller-inventory/?seller_uid=${widget.userId}',
       );
-      
+
       // SECURE FIX: Added Authorization headers
       final invResponse = await http.get(invUri, headers: headers);
       List<dynamic> products = [];
@@ -77,8 +77,10 @@ class _SellerDashboardTabState extends State<SellerDashboardTab> {
       }
 
       // --- 2. Fetch Orders (For Revenue & Order Count) ---
-      final orderUri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/orders/');
-      
+      final orderUri = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/orders/?seller_uid=${widget.userId}',
+      );
+
       // SECURE FIX: Added Authorization headers
       final orderResponse = await http.get(orderUri, headers: headers);
       List<dynamic> orders = [];

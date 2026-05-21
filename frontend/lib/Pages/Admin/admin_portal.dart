@@ -12,7 +12,7 @@ import 'package:ttact/Pages/Admin/Overseer_BalanceSheet_Global.dart';
 
 // --- IMPORT YOUR EXISTING PAGES ---
 import 'package:ttact/Pages/Admin/add_career_opportunities.dart';
-import 'package:ttact/Pages/Admin/add_committee_member.dart'; 
+import 'package:ttact/Pages/Admin/add_committee_member.dart';
 import 'package:ttact/Pages/Admin/add_songs.dart';
 import 'package:ttact/Pages/Admin/add_tactso_org.dart';
 import 'package:ttact/Pages/Admin/admin_add_overseer.dart';
@@ -64,7 +64,9 @@ class _AdminPortalState extends State<AdminPortal> {
   String portfolio = '';
   String province = '';
 
-  late List<Map<String, dynamic>> _adminNavItems;
+  // --- BADGE STATE VARIABLES ---
+  int _pendingSellersCount = 0;
+  int _unresolvedIssuesCount = 0; // Example for future expansion
 
   @override
   void initState() {
@@ -75,15 +77,17 @@ class _AdminPortalState extends State<AdminPortal> {
     portfolio = widget.portfolio ?? '';
     province = widget.province ?? '';
 
-    _initNavItems();
     Future.delayed(Duration.zero, _checkAuthorization);
   }
 
-  void _initNavItems() {
-    _adminNavItems = [
+  // --- DYNAMIC NAV ITEMS ---
+  // Using a getter method so the list automatically rebuilds when badge counts change
+  List<Map<String, dynamic>> _getNavItems() {
+    return [
       {
         'label': 'Dashboard',
         'icon': Ionicons.grid_outline,
+        'badge': 0,
         'page': ProfessionalDashboard(
           uid: widget.uid,
           fullName: fullName,
@@ -94,11 +98,13 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Products',
         'icon': Icons.shopping_bag_outlined,
+        'badge': 0,
         'page': AdminAddProduct(),
       },
       {
         'label': 'Songs',
         'icon': Ionicons.musical_notes_outline,
+        'badge': 0,
         'page': AddMusic(
           uid: widget.uid,
           fullName: fullName,
@@ -109,6 +115,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Branches',
         'icon': Icons.business_outlined,
+        'badge': 0,
         'page': AddTactsoBranch(
           uid: widget.uid,
           fullName: fullName,
@@ -119,6 +126,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Add Apostles Greetings',
         'icon': Icons.church_outlined,
+        'badge': 0,
         'page': AdminGreetingsManager(
           uid: widget.uid,
           fullName: fullName,
@@ -129,6 +137,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Overseers',
         'icon': Icons.people_outline,
+        'badge': 0,
         'page': AdminAddOverseer(
           uid: widget.uid,
           fullName: fullName,
@@ -139,6 +148,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Global Balance',
         'icon': Icons.history,
+        'badge': 0,
         'page': OverseerBalancesheetGlobal(
           uid: widget.uid,
           fullName: fullName,
@@ -149,6 +159,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Sellers',
         'icon': Icons.storefront_outlined,
+        'badge': _pendingSellersCount, // Dynamically linked to state
         'page': AdminVerifySeller(
           uid: widget.uid,
           fullName: fullName,
@@ -159,6 +170,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Careers',
         'icon': Icons.work_outline,
+        'badge': 0,
         'page': AddCareerOpportunities(
           uid: widget.uid,
           fullName: fullName,
@@ -169,6 +181,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Committees',
         'icon': Icons.person_add_alt,
+        'badge': 0,
         'page': AddCommitteeMember(
           uid: widget.uid,
           fullName: fullName,
@@ -179,6 +192,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Legal',
         'icon': Icons.file_present_outlined,
+        'badge': 0,
         'page': AdminLegalBroadcastPage(
           uid: widget.uid,
           fullName: fullName,
@@ -189,6 +203,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Staff',
         'icon': Icons.person_3_outlined,
+        'badge': 0,
         'page': StaffMembers(
           faceUrl: faceUrl,
           name: fullName,
@@ -199,6 +214,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Audit Logs',
         'icon': Icons.receipt_long_outlined,
+        'badge': 0,
         'page': TactsoBranchAudit(
           uid: widget.uid,
           fullName: fullName,
@@ -209,6 +225,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Feeds',
         'icon': Icons.rss_feed,
+        'badge': 0,
         'page': PortalAddFeed(
           uid: widget.uid,
           fullName: fullName,
@@ -219,6 +236,7 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Diary Of event',
         'icon': Icons.rss_feed,
+        'badge': 0,
         'page': AdminAddEventDiaryPage(
           uid: widget.uid,
           fullName: fullName,
@@ -229,17 +247,59 @@ class _AdminPortalState extends State<AdminPortal> {
       {
         'label': 'Annual Report',
         'icon': Icons.report_outlined,
+        'badge': 0,
         'page': AnnualReportPage(
           uid: widget.uid,
           fullName: fullName,
           portfolio: portfolio,
-          province: province, 
+          province: province,
         ),
       },
     ];
   }
 
-  // ⭐️ SECURED AUTHORIZATION CHECK ⭐️
+  // ⭐️ BADGE DATA FETCHING ⭐️
+  Future<void> _fetchBadgeCounts() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      String? token = await user.getIdToken();
+
+      // Example 1: Fetching pending sellers
+      // This queries users who have submitted docs but haven't been fully verified
+      final sellersUrl = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/users/?role=Seller',
+      );
+      final sellersResp = await http.get(
+        sellersUrl,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (sellersResp.statusCode == 200) {
+        final List<dynamic> data = json.decode(sellersResp.body);
+
+        // Count users where verification status requires attention
+        int pendingCount = data.where((user) {
+          final status = user['verification_status'] ?? '';
+          // Adjust this condition based on your exact Django model statuses
+          return status == 'Pending Live Check' || status == 'Pending';
+        }).length;
+
+        if (mounted) {
+          setState(() {
+            _pendingSellersCount = pendingCount;
+          });
+        }
+      }
+
+      // Add more badge fetching logic here if needed (e.g., new issue reports)
+    } catch (e) {
+      print("Badge Fetch Error: $e");
+    }
+  }
+
+  // ⭐️ SECURED AUTHORIZATION CHECK (UPDATED) ⭐️
+  
   Future<void> _checkAuthorization() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -247,12 +307,10 @@ class _AdminPortalState extends State<AdminPortal> {
       return;
     }
 
-    try {
-      // 1. Get Security Token
+    try { 
       String? token = await user.getIdToken();
       if (token == null) throw Exception("Token retrieval failed");
-
-      // 2. Fetch Staff Profile securely
+ 
       final uri = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/staff/?uid=${user.uid}',
       );
@@ -267,28 +325,46 @@ class _AdminPortalState extends State<AdminPortal> {
 
       if (response.statusCode == 200) {
         final List<dynamic> results = json.decode(response.body);
-        if (results.isNotEmpty) {
-          final data = results[0];
-          final String role = data['role'] ?? '';
+
+        if (results.isNotEmpty) { 
+          Map<String, dynamic>? currentStaffMember;
+
+          for (var staff in results) {
+            if (staff['full_name'] == widget.fullName) {
+              currentStaffMember = staff;
+              break;
+            }
+          }
+ 
+          currentStaffMember ??= results[0];
+
+          final String role = currentStaffMember?['role'] ?? '';
 
           if (mounted) {
-            setState(() {
-              faceUrl = data['face_url'] ?? '';
-              fullName = data['full_name'] ?? '';
-              portfolio = data['portfolio'] ?? '';
-              province = data['province'] ?? '';
-              _isAuthorized = (role == 'Admin');
+            setState(() { 
+              faceUrl = widget.faceUrl?.isNotEmpty == true
+                  ? widget.faceUrl!
+                  : (currentStaffMember?['face_url'] ?? '');
+              fullName = widget.fullName?.isNotEmpty == true
+                  ? widget.fullName!
+                  : (currentStaffMember?['full_name'] ?? '');
+              portfolio = widget.portfolio?.isNotEmpty == true
+                  ? widget.portfolio!
+                  : (currentStaffMember?['portfolio'] ?? '');
+              province = widget.province?.isNotEmpty == true
+                  ? widget.province!
+                  : (currentStaffMember?['province'] ?? '');
 
-              // Refresh nav items with retrieved data
-              _initNavItems();
+              _isAuthorized = (role == 'Admin');
             });
 
             if (!_isAuthorized) {
               Navigator.of(context).pushReplacementNamed('/main-menu');
+            } else { 
+              _fetchBadgeCounts();
             }
           }
-        } else {
-          // Record not found in Django Staff table
+        } else { 
           if (mounted) setState(() => _isAuthorized = false);
         }
       } else {
@@ -296,8 +372,7 @@ class _AdminPortalState extends State<AdminPortal> {
         if (mounted) setState(() => _isAuthorized = false);
       }
     } catch (e) {
-      print("System Auth Error: $e");
-      // Prevent indefinite loading on error
+      print("System Auth Error: $e"); 
       if (mounted) {
         setState(() => _isAuthorized = false);
         Navigator.of(context).pushReplacementNamed('/main-menu');
@@ -335,12 +410,13 @@ class _AdminPortalState extends State<AdminPortal> {
     }
 
     final isDesktop = isLargeScreen(context);
-    final currentPage = _adminNavItems[_currentIndex]['page'];
+    final navItems = _getNavItems();
+    final currentPage = navItems[_currentIndex]['page'];
 
     if (isDesktop) {
-      return _buildDesktopLayout(theme, neumoBaseColor, currentPage);
+      return _buildDesktopLayout(theme, neumoBaseColor, currentPage, navItems);
     } else {
-      return _buildMobileLayout(theme, neumoBaseColor, currentPage);
+      return _buildMobileLayout(theme, neumoBaseColor, currentPage, navItems);
     }
   }
 
@@ -351,6 +427,7 @@ class _AdminPortalState extends State<AdminPortal> {
     ThemeData theme,
     Color neumoBaseColor,
     Widget content,
+    List<Map<String, dynamic>> navItems,
   ) {
     return Scaffold(
       backgroundColor: neumoBaseColor,
@@ -366,7 +443,7 @@ class _AdminPortalState extends State<AdminPortal> {
                 Expanded(
                   child: ListView(
                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    children: _adminNavItems.asMap().entries.map((entry) {
+                    children: navItems.asMap().entries.map((entry) {
                       return _buildNavItem(
                         entry.key,
                         entry.value,
@@ -393,7 +470,7 @@ class _AdminPortalState extends State<AdminPortal> {
                   padding: EdgeInsets.symmetric(horizontal: 30),
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    _adminNavItems[_currentIndex]['label'],
+                    navItems[_currentIndex]['label'],
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w900,
@@ -436,6 +513,7 @@ class _AdminPortalState extends State<AdminPortal> {
     ThemeData theme,
     Color neumoBaseColor,
     Widget content,
+    List<Map<String, dynamic>> navItems,
   ) {
     return Scaffold(
       key: _scaffoldKey,
@@ -458,7 +536,7 @@ class _AdminPortalState extends State<AdminPortal> {
           ),
         ),
         title: Text(
-          _adminNavItems[_currentIndex]['label'],
+          navItems[_currentIndex]['label'],
           style: TextStyle(fontWeight: FontWeight.w900, fontFamily: 'Roboto'),
         ),
       ),
@@ -472,7 +550,7 @@ class _AdminPortalState extends State<AdminPortal> {
             Expanded(
               child: ListView(
                 padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                children: _adminNavItems.asMap().entries.map((entry) {
+                children: navItems.asMap().entries.map((entry) {
                   return _buildNavItem(
                     entry.key,
                     entry.value,
@@ -512,7 +590,11 @@ class _AdminPortalState extends State<AdminPortal> {
               radius: 40,
               backgroundColor: Colors.grey[200],
               backgroundImage: faceUrl.isNotEmpty
-                  ? NetworkImage(faceUrl)
+                  ? NetworkImage(
+                      faceUrl.startsWith('http') && !faceUrl.contains('.enc')
+                          ? faceUrl
+                          : '${Api().BACKEND_BASE_URL_DEBUG}/serve_image/?url=${Uri.encodeComponent(faceUrl)}',
+                    )
                   : null,
               child: faceUrl.isEmpty
                   ? Icon(Icons.person, size: 40, color: Colors.grey)
@@ -548,6 +630,7 @@ class _AdminPortalState extends State<AdminPortal> {
     bool isMobile = false,
   }) {
     bool isSelected = _currentIndex == index;
+    int badgeCount = item['badge'] ?? 0;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
@@ -555,6 +638,8 @@ class _AdminPortalState extends State<AdminPortal> {
         onTap: () {
           setState(() => _currentIndex = index);
           if (isMobile) Navigator.pop(context);
+          // Optional: Re-fetch counts when navigating
+          _fetchBadgeCounts();
         },
         child: NeumorphicContainer(
           color: isSelected ? theme.primaryColor : baseColor,
@@ -569,14 +654,44 @@ class _AdminPortalState extends State<AdminPortal> {
                 size: 20,
               ),
               SizedBox(width: 15),
-              Text(
-                item['label'],
-                style: TextStyle(
-                  color: isSelected ? Colors.white : theme.hintColor,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  fontSize: 14,
+              Expanded(
+                child: Text(
+                  item['label'],
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : theme.hintColor,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+
+              // --- 🔴 THE BADGE WIDGET ---
+              if (badgeCount > 0)
+                Container(
+                  padding: EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.redAccent.withOpacity(0.4),
+                        blurRadius: 4,
+                        offset: Offset(2, 2),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      badgeCount > 99 ? '99+' : badgeCount.toString(),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

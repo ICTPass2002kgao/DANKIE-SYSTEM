@@ -10,23 +10,34 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:ttact/Components/API.dart';
+import 'package:ttact/Components/Aduit_Logs/Overseer_Audit_Logs.dart';
+import 'package:ttact/Components/NeuDesign.dart'; // ⭐️ IMPORTED
 
 class OverseerAuditpage extends StatefulWidget {
-  const OverseerAuditpage({super.key});
+  final String? committeeMemberName;
+  final String? committeeMemberRole;
+  final String? faceUrl;
+  final bool isLargeScreen;
+
+  const OverseerAuditpage({
+    super.key,
+    this.committeeMemberName,
+    this.committeeMemberRole,
+    this.faceUrl,
+    this.isLargeScreen = true,
+  });
 
   @override
   State<OverseerAuditpage> createState() => _OverseerAuditpageState();
 }
 
 class _OverseerAuditpageState extends State<OverseerAuditpage> {
-  // --- Color Palette ---
-  final Color primaryBlue = const Color(0xFF1976D2);
+  // --- Style Constants ---
+  final Color baseColor = const Color(0xFFE0E5EC); // Neumorphic base
+  final Color primaryColor = const Color(0xFF1976D2);
   final Color successGreen = const Color(0xFF388E3C);
   final Color errorRed = const Color(0xFFD32F2F);
-  final Color neutralGrey = const Color(0xFF757575);
-  final Color lightBackground = const Color(0xFFF5F7FA);
 
-  // --- STATE ---
   List<dynamic> _auditLogs = [];
   bool _isLoading = true;
 
@@ -36,7 +47,8 @@ class _OverseerAuditpageState extends State<OverseerAuditpage> {
     _fetchAuditLogs();
   }
 
-  // --- 1. FETCH AUDIT LOGS (DJANGO) ---
+  // Inside _OverseerAuditpageState class
+
   Future<void> _fetchAuditLogs() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -46,10 +58,9 @@ class _OverseerAuditpageState extends State<OverseerAuditpage> {
 
       final String token = await user.getIdToken() ?? '';
 
-      // URL: /api/audit_logs/?uid=USER_UID
-      // Ensure your Django viewset filters by 'uid' parameter
+      // ⭐️ FIX: Added '&t=' with a current timestamp to bypass browser caching
       final url = Uri.parse(
-        '${Api().BACKEND_BASE_URL_DEBUG}/audit_logs/?uid=${user.uid}',
+        '${Api().BACKEND_BASE_URL_DEBUG}/audit_logs/?uid=${user.uid}&t=${DateTime.now().millisecondsSinceEpoch}',
       );
 
       final response = await http.get(
@@ -57,12 +68,15 @@ class _OverseerAuditpageState extends State<OverseerAuditpage> {
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache', // Explicitly tell the system no caching
         },
       );
 
       if (response.statusCode == 200) {
         final List data = json.decode(response.body);
-        // Sort by timestamp descending if not already sorted by backend
+
+        // Backend handles order_by('-timestamp'), but we sort again
+        // in frontend just to be 100% safe.
         data.sort(
           (a, b) => (b['timestamp'] ?? '').compareTo(a['timestamp'] ?? ''),
         );
@@ -83,594 +97,275 @@ class _OverseerAuditpageState extends State<OverseerAuditpage> {
     }
   }
 
-  // --- HELPER: Secure Image URL ---
   String _getSecureImageUrl(String? originalUrl) {
-    if (originalUrl == null || originalUrl.isEmpty || originalUrl == 'N/A') {
+    if (originalUrl == null || originalUrl.isEmpty || originalUrl == 'N/A')
       return "";
-    }
-    // If it's already a full URL (like Firebase Storage), return it
-    if (originalUrl.startsWith('http')) {
-      return originalUrl;
-    }
-    // If it's a relative Django path, prepend backend URL
-    return '${Api().BACKEND_BASE_URL_DEBUG}$originalUrl';
+    return originalUrl.startsWith('http')
+        ? originalUrl
+        : '${Api().BACKEND_BASE_URL_DEBUG}$originalUrl';
   }
 
-  Color _getActionColor(String action) {
-    action = action.toUpperCase();
-    if (action.contains('CREATE') ||
-        action.contains('ADD') ||
-        action.contains('UPDATE') ||
-        action.contains('APPROVE') ||
-        action.contains('ARCHIVED')) {
-      return successGreen;
-    } else if (action.contains('DELETE') ||
-        action.contains('REMOVE') ||
-        action.contains('REJECT')) {
-      return errorRed;
-    }
-    return primaryBlue;
-  }
-
-  // --- IMAGE PREVIEW DIALOG ---
-  void _showImagePreview(BuildContext context, String imageUrl, String title) {
-    if (imageUrl.isEmpty || imageUrl == 'N/A') return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(width: 10),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: InteractiveViewer(
-                child: Image.network(
-                  imageUrl,
-                  loadingBuilder: (ctx, child, progress) {
-                    if (progress == null) return child;
-                    return const CircularProgressIndicator(color: Colors.white);
-                  },
-                  errorBuilder: (ctx, error, stack) => const Icon(
-                    Icons.broken_image,
-                    color: Colors.white,
-                    size: 50,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- HELPER TO GET TARGET STRING ---
-  String _getTargetDisplay(Map<String, dynamic> d) {
-    // Django keys are snake_case
-    final targetName = d['target_member_name'];
-    final details = d['details'] ?? '';
-
-    // 1. Expense check
-    if (details.toString().toLowerCase().contains('expense') ||
-        details.toString().toLowerCase().contains('archived')) {
-      return details;
-    }
-    // 2. Member check
-    if (targetName != null && targetName != 'N/A') {
-      return targetName;
-    }
-
-    return details.isNotEmpty ? details : '-';
-  }
-
-  // --- PDF GENERATION ---
   Future<void> _generateAndDownloadPdf() async {
     final pdf = pw.Document();
     final data = _auditLogs;
-
-    // Load App Logo (Ensure this asset exists in pubspec.yaml)
     final logoImage = await rootBundle.load('assets/dankie_logo.PNG');
     final logoProvider = pw.MemoryImage(logoImage.buffer.asUint8List());
 
-    final pdfPrimaryBlue = PdfColor.fromInt(primaryBlue.value);
-    final pdfHeaderBg = PdfColor.fromInt(0xFFE3F2FD);
+    // Use your specific App Color
+    final pdfPrimaryColor = PdfColor.fromInt(primaryColor.value);
 
     List<List<dynamic>> pdfRows = [];
-
     for (var d in data) {
-      // Date Parsing
-      String dateStr = '-';
-      if (d['timestamp'] != null) {
-        try {
-          DateTime dt = DateTime.parse(d['timestamp']);
-          dateStr = DateFormat('yyyy-MM-dd HH:mm').format(dt);
-        } catch (e) {
-          dateStr = d['timestamp'].toString();
-        }
-      }
-
-      String actorName = d['actor_name'] ?? 'Unknown';
-      String actorRole = d['actor_role'] ?? '';
-      String displayActor = actorRole.isNotEmpty
-          ? "$actorName\n($actorRole)"
-          : actorName;
-      String targetInfo = _getTargetDisplay(d);
-
+      String dateStr = d['timestamp'] != null
+          ? DateFormat('MMM dd, HH:mm').format(DateTime.parse(d['timestamp']))
+          : '-';
+      // Removed university_name (Area) from this list
       pdfRows.add([
         dateStr,
-        displayActor,
-        d['university_name'] ?? '-',
+        d['actor_name'] ?? '-',
         d['action'] ?? '-',
-        targetInfo,
-        d['branch_email'] ?? '-',
+        d['details'] ?? '-',
       ]);
     }
 
     pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.all(20),
+      pw.Page(
+        pageFormat: PdfPageFormat.a4, // PORTRAIT
+        margin: const pw.EdgeInsets.all(40),
         build: (pw.Context context) {
-          return [
-            pw.Header(
-              level: 0,
-              decoration: pw.BoxDecoration(
-                border: pw.Border(
-                  bottom: pw.BorderSide(color: pdfPrimaryBlue, width: 2),
-                ),
-              ),
-              child: pw.Row(
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // Header
+              pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Row(
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Image(logoProvider, width: 40, height: 40),
-                      pw.SizedBox(width: 10),
                       pw.Text(
-                        'Overseer Audit Report',
+                        "AUDIT REPORT",
                         style: pw.TextStyle(
                           fontSize: 22,
                           fontWeight: pw.FontWeight.bold,
-                          color: pdfPrimaryBlue,
+                          color: pdfPrimaryColor,
                         ),
+                      ),
+                      pw.Text(
+                        "Generated: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}",
+                        style: const pw.TextStyle(fontSize: 10),
                       ),
                     ],
                   ),
-                  pw.Text(
-                    DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  // ⭐️ Circular Logo
+                  pw.ClipRRect(
+                    child: pw.Image(logoProvider, width: 60, height: 60),
                   ),
                 ],
               ),
-            ),
-            pw.SizedBox(height: 20),
-            pw.TableHelper.fromTextArray(
-              context: context,
-              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
-              headerDecoration: pw.BoxDecoration(color: pdfHeaderBg),
-              headerStyle: pw.TextStyle(
-                fontSize: 9,
-                fontWeight: pw.FontWeight.bold,
-                color: pdfPrimaryBlue,
+              pw.SizedBox(height: 30),
+
+              // Table
+              pw.Table(
+                border: pw.TableBorder.all(
+                  color: PdfColors.grey300,
+                  width: 0.5,
+                ),
+                columnWidths: const {
+                  0: pw.FixedColumnWidth(80), // Time
+                  1: pw.FixedColumnWidth(90), // Actor
+                  2: pw.FixedColumnWidth(80), // Action
+                  3: pw.FlexColumnWidth(1), // Details
+                },
+                children: [
+                  pw.TableRow(
+                    decoration: pw.BoxDecoration(color: pdfPrimaryColor),
+                    children: ['Time', 'Actor', 'Action', 'Details'].map((
+                      text,
+                    ) {
+                      return pw.Padding(
+                        padding: pw.EdgeInsets.all(8),
+                        child: pw.Text(
+                          text,
+                          style: pw.TextStyle(
+                            color: PdfColors.white,
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  ...data.asMap().entries.map((entry) {
+                    int idx = entry.key;
+                    return pw.TableRow(
+                      decoration: pw.BoxDecoration(
+                        color: idx % 2 == 0
+                            ? PdfColors.grey100
+                            : PdfColors.white,
+                      ),
+                      children: pdfRows[idx]
+                          .map(
+                            (cell) => pw.Padding(
+                              padding: pw.EdgeInsets.all(6),
+                              child: pw.Text(
+                                cell.toString(),
+                                style: pw.TextStyle(fontSize: 9),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    );
+                  }).toList(),
+                ],
               ),
-              cellStyle: const pw.TextStyle(fontSize: 8),
-              cellAlignment: pw.Alignment.centerLeft,
-              headers: ['Time', 'Actor', 'Area', 'Action', 'Details', 'Email'],
-              data: pdfRows,
-            ),
-          ];
+            ],
+          );
         },
       ),
     );
 
     await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name:
-          'Audit_Log_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf',
+      onLayout: (format) async => pdf.save(),
+      name: 'Audit_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
-  }
 
-  void _showFullDetails(BuildContext context, Map<String, dynamic> data) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.info_outline, color: primaryBlue),
-            const SizedBox(width: 10),
-            const Text("Full Audit Details"),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: data.entries.map((e) {
-              String valueStr = e.value.toString();
-              // Hide explicit image URLs or empty fields
-              if (e.key.toLowerCase().contains('face') ||
-                  e.key.toLowerCase().contains('url')) {
-                return const SizedBox.shrink();
-              }
-              if (valueStr == 'N/A' || valueStr.isEmpty || valueStr == 'null')
-                return const SizedBox.shrink();
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      e.key.toUpperCase().replaceAll('_', ' '),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
-                        color: neutralGrey,
-                      ),
-                    ),
-                    SelectableText(
-                      valueStr,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    Divider(color: Colors.grey.shade200),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Close"),
-          ),
-        ],
-      ),
+    OverseerAuditLogs.logAction(
+      action: "EXPORTED",
+      details: "Downloaded Audit Log PDF",
+      committeeMemberName: widget.committeeMemberName,
+      committeeMemberRole: widget.committeeMemberRole,
+      universityCommitteeFace: widget.faceUrl,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: lightBackground,
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
+      backgroundColor: baseColor,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- HEADER ---
-            Container(
-              padding: const EdgeInsets.all(20.0),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
+            // Header Card
+            NeumorphicContainer(
+              color: baseColor,
+              borderRadius: 15,
+              padding: EdgeInsets.all(20),
               child: Row(
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: CircleAvatar(
-                      radius: 28,
-                      backgroundColor: Colors.white,
-                      backgroundImage: const AssetImage(
-                        'assets/dankie_logo.PNG',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Overseer Audit Logs',
+                          "Audit Logs",
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: primaryBlue,
+                            color: primaryColor,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          'Track expenses, committee actions, and updates.',
-                          style: TextStyle(fontSize: 14, color: neutralGrey),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          "Track committee actions and system updates.",
+                          style: TextStyle(color: Colors.grey),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  ElevatedButton.icon(
-                    onPressed: _generateAndDownloadPdf,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryBlue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(
+                  GestureDetector(
+                    onTap: _generateAndDownloadPdf,
+                    child: NeumorphicContainer(
+                      color: primaryColor,
+                      borderRadius: 10,
+                      padding: EdgeInsets.symmetric(
                         horizontal: 20,
-                        vertical: 16,
+                        vertical: 12,
+                      ),
+                      child: Text(
+                        "Export PDF",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                    icon: const Icon(Icons.download_rounded, size: 20),
-                    label: const Text("Export PDF"),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 25),
 
-            // --- TABLE ---
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.grey.shade200),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: _isLoading
-                    ? Center(
-                        child: CircularProgressIndicator(color: primaryBlue),
-                      )
-                    : _auditLogs.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.history_toggle_off,
-                              size: 40,
-                              color: neutralGrey,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              "No logs found.",
-                              style: TextStyle(color: neutralGrey),
-                            ),
-                          ],
-                        ),
-                      )
-                    : SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            headingRowColor: MaterialStateProperty.all(
-                              const Color(0xFFF8F9FC),
-                            ),
-                            headingRowHeight: 50,
-                            dataRowMinHeight: 60,
-                            dataRowMaxHeight: 70,
-                            columnSpacing: 30,
-                            horizontalMargin: 24,
-                            columns: const [
-                              DataColumn(label: Text('TIME')),
-                              DataColumn(label: Text('FACE')),
-                              DataColumn(label: Text('ACTOR')),
-                              DataColumn(label: Text('OVERSEER AREA')),
-                              DataColumn(label: Text('ACTION')),
-                              DataColumn(label: Text('TARGET / DETAILS')),
-                              DataColumn(label: Text('EMAIL')),
-                              DataColumn(label: Text('DETAILS')),
-                            ],
-                            rows: _auditLogs.map((data) {
-                              // Data Mapping (Django Snake Case)
-                              String timestampStr = data['timestamp'] ?? '';
-                              String dateStr = '-';
-                              if (timestampStr.isNotEmpty) {
-                                try {
-                                  DateTime dt = DateTime.parse(timestampStr);
-                                  dateStr = DateFormat(
+            // Table Container
+            NeumorphicContainer(
+              color: baseColor,
+              borderRadius: 15,
+              padding: EdgeInsets.all(20),
+              child: _isLoading
+                  ? Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('TIME')),
+                          DataColumn(label: Text('ACTOR')),
+                          DataColumn(label: Text('AREA')),
+                          DataColumn(label: Text('ACTION')),
+                          DataColumn(label: Text('DETAILS')),
+                        ],
+                        rows: _auditLogs.map((data) {
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                Text(
+                                  DateFormat(
                                     'MMM dd, HH:mm',
-                                  ).format(dt.toLocal());
-                                } catch (e) {
-                                  dateStr = timestampStr;
-                                }
-                              }
-
-                              String actionStr = data['action'] ?? '';
-                              Color actionColor = _getActionColor(actionStr);
-
-                              String faceUrl = data['actor_face_url'] ?? 'N/A';
-                              String secureFaceUrl = _getSecureImageUrl(
-                                faceUrl,
-                              );
-
-                              String actorName =
-                                  data['actor_name'] ?? 'Unknown';
-                              String actorRole = data['actor_role'] ?? '';
-                              String overseerName =
-                                  data['university_name'] ?? 'N/A';
-                              String targetDisplay = _getTargetDisplay(data);
-                              String email = data['branch_email'] ?? 'System';
-
-                              return DataRow(
-                                cells: [
-                                  // 1. Time
-                                  DataCell(
-                                    Text(
-                                      dateStr,
-                                      style: TextStyle(
-                                        color: Colors.grey.shade700,
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 13,
-                                      ),
+                                  ).format(DateTime.parse(data['timestamp'])),
+                                ),
+                              ),
+                              DataCell(Text(data['actor_name'] ?? '-')),
+                              DataCell(Text(data['university_name'] ?? '-')),
+                              DataCell(
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _getActionColor(
+                                      data['action'],
+                                    ).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    data['action'] ?? '',
+                                    style: TextStyle(
+                                      color: _getActionColor(data['action']),
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-
-                                  // 2. Face (Clickable)
-                                  DataCell(
-                                    InkWell(
-                                      onTap: () => _showImagePreview(
-                                        context,
-                                        secureFaceUrl,
-                                        "Actor Face",
-                                      ),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: primaryBlue.withOpacity(0.3),
-                                          ),
-                                        ),
-                                        child: CircleAvatar(
-                                          radius: 18,
-                                          backgroundColor: Colors.grey.shade100,
-                                          backgroundImage:
-                                              (secureFaceUrl.isNotEmpty)
-                                              ? NetworkImage(secureFaceUrl)
-                                              : null,
-                                          child: (secureFaceUrl.isEmpty)
-                                              ? Icon(
-                                                  Icons.person,
-                                                  size: 16,
-                                                  color: Colors.grey,
-                                                )
-                                              : null,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  // 3. Actor
-                                  DataCell(
-                                    Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          actorName,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        if (actorRole.isNotEmpty)
-                                          Text(
-                                            actorRole,
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              color: neutralGrey,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // 4. Area
-                                  DataCell(
-                                    Text(
-                                      overseerName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-
-                                  // 5. Action (Badged)
-                                  DataCell(
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: actionColor.withOpacity(0.08),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: actionColor.withOpacity(0.3),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        actionStr,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 11,
-                                          color: actionColor,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                  // 6. Target
-                                  DataCell(Text(targetDisplay)),
-
-                                  // 7. Email
-                                  DataCell(Text(email)),
-
-                                  // 8. Details Icon
-                                  DataCell(
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.visibility_outlined,
-                                        color: primaryBlue,
-                                      ),
-                                      onPressed: () =>
-                                          _showFullDetails(context, data),
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                        ),
+                                ),
+                              ),
+                              DataCell(Text(data['details'] ?? '-')),
+                            ],
+                          );
+                        }).toList(),
                       ),
-              ),
+                    ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Color _getActionColor(dynamic action) {
+    final String act = (action ?? '').toString().toUpperCase();
+    if (act.contains('CREATE') ||
+        act.contains('UPDATE') ||
+        act.contains('ARCHIVED'))
+      return successGreen;
+    if (act.contains('DELETE') || act.contains('REJECT')) return errorRed;
+    return primaryColor;
   }
 }

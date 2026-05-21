@@ -32,7 +32,6 @@ class ReportsTab extends StatefulWidget {
 }
 
 class _ReportsTabState extends State<ReportsTab> {
-  // --- Selection State ---
   String? _selectedDistrictElder;
   String? _selectedCommunityName;
   String _selectedProvince = '';
@@ -40,18 +39,15 @@ class _ReportsTabState extends State<ReportsTab> {
   String _overseerRegion = '';
   Map<String, dynamic>? _overseerData;
 
-  // --- Time Travel State ---
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
   bool _isViewingHistory = false;
 
-  // --- Financial Data State ---
   double _week1Sum = 0.0;
   double _week2Sum = 0.0;
   double _week3Sum = 0.0;
   double _week4Sum = 0.0;
 
-  // --- Date State ---
   DateTime? _dateWeek1;
   DateTime? _dateWeek2;
   DateTime? _dateWeek3;
@@ -65,7 +61,6 @@ class _ReportsTabState extends State<ReportsTab> {
   DateTime? _dateCouncil;
   DateTime? _dateEquipment;
 
-  // --- Input Controllers ---
   final TextEditingController _monthEndController = TextEditingController();
   final TextEditingController _othersController = TextEditingController();
   final TextEditingController _rentController = TextEditingController();
@@ -75,18 +70,24 @@ class _ReportsTabState extends State<ReportsTab> {
   final TextEditingController _councilController = TextEditingController();
   final TextEditingController _equipmentController = TextEditingController();
 
-  // --- Calculated Totals ---
   double _totalIncome = 0.0;
   double _totalExpenditure = 0.0;
   double _creditBalance = 0.0;
 
   final String baseUrl = Api().BACKEND_BASE_URL_DEBUG;
 
-  // --- NEUMORPHISM STYLE CONSTANTS ---
   final Color _baseColor = const Color(0xFFE0E5EC);
   final Color _shadowLight = Colors.white;
   final Color _shadowDark = const Color(0xFFA3B1C6);
   final Color _textColor = const Color(0xFF4A5568);
+
+  // ⭐️ THE BULLETPROOF DECIMAL PARSER
+  double safeParse(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    String s = val.toString().trim().replaceAll(',', '.');
+    return double.tryParse(s) ?? 0.0;
+  }
 
   BoxDecoration _neuDecoration({double radius = 16, bool isPressed = false}) {
     return BoxDecoration(
@@ -110,7 +111,6 @@ class _ReportsTabState extends State<ReportsTab> {
   }
 
   BoxDecoration _neuInnerDecoration({double radius = 8}) {
-    // Simulated inner shadow/inset look for TextFields
     return BoxDecoration(
       color: const Color(0xFFD1D9E6),
       borderRadius: BorderRadius.circular(radius),
@@ -149,7 +149,6 @@ class _ReportsTabState extends State<ReportsTab> {
     super.dispose();
   }
 
-  // --- 1. Fetch Basic Info (Django) ---
   Future<void> _fetchOverseerDetails() async {
     final user = FirebaseAuth.instance.currentUser;
     final uid = user?.uid;
@@ -177,7 +176,6 @@ class _ReportsTabState extends State<ReportsTab> {
     }
   }
 
-  // --- 2. Master Fetch Logic (Django) ---
   Future<void> _fetchData() async {
     if (_selectedDistrictElder == null || _selectedCommunityName == null) {
       _resetFinancialsLocally();
@@ -200,9 +198,20 @@ class _ReportsTabState extends State<ReportsTab> {
       bool isArchived = false;
       if (response.statusCode == 200) {
         final List reports = jsonDecode(response.body);
-        isArchived = reports.isNotEmpty;
+
+        final matching = reports
+            .where(
+              (r) =>
+                  r['id'] == docId ||
+                  (r['community_name'] == _selectedCommunityName &&
+                      r['year'].toString() == _selectedYear.toString() &&
+                      r['month'].toString() == _selectedMonth.toString()),
+            )
+            .toList();
+
+        isArchived = matching.isNotEmpty;
         if (isArchived) {
-          _populateReportSummary(reports.first);
+          _populateReportSummary(matching.first);
         }
       }
 
@@ -259,10 +268,10 @@ class _ReportsTabState extends State<ReportsTab> {
         double w1 = 0, w2 = 0, w3 = 0, w4 = 0;
 
         for (var d in users) {
-          w1 += double.tryParse(d['week1'].toString()) ?? 0.0;
-          w2 += double.tryParse(d['week2'].toString()) ?? 0.0;
-          w3 += double.tryParse(d['week3'].toString()) ?? 0.0;
-          w4 += double.tryParse(d['week4'].toString()) ?? 0.0;
+          w1 += safeParse(d['week1']);
+          w2 += safeParse(d['week2']);
+          w3 += safeParse(d['week3']);
+          w4 += safeParse(d['week4']);
         }
 
         setState(() {
@@ -297,10 +306,10 @@ class _ReportsTabState extends State<ReportsTab> {
         double w1 = 0, w2 = 0, w3 = 0, w4 = 0;
 
         for (var d in history) {
-          w1 += double.tryParse(d['week1'].toString()) ?? 0.0;
-          w2 += double.tryParse(d['week2'].toString()) ?? 0.0;
-          w3 += double.tryParse(d['week3'].toString()) ?? 0.0;
-          w4 += double.tryParse(d['week4'].toString()) ?? 0.0;
+          w1 += safeParse(d['week1']);
+          w2 += safeParse(d['week2']);
+          w3 += safeParse(d['week3']);
+          w4 += safeParse(d['week4']);
         }
 
         setState(() {
@@ -385,20 +394,18 @@ class _ReportsTabState extends State<ReportsTab> {
       return;
     }
 
-    double parse(TextEditingController c) =>
-        double.tryParse(c.text.replaceAll(',', '')) ?? 0.0;
-
-    double incomeExtras = parse(_monthEndController) + parse(_othersController);
+    double incomeExtras =
+        safeParse(_monthEndController.text) + safeParse(_othersController.text);
     double calculatedIncome =
         _week1Sum + _week2Sum + _week3Sum + _week4Sum + incomeExtras;
 
     double expenses =
-        parse(_rentController) +
-        parse(_wineController) +
-        parse(_powerController) +
-        parse(_sundriesController) +
-        parse(_councilController) +
-        parse(_equipmentController);
+        safeParse(_rentController.text) +
+        safeParse(_wineController.text) +
+        safeParse(_powerController.text) +
+        safeParse(_sundriesController.text) +
+        safeParse(_councilController.text) +
+        safeParse(_equipmentController.text);
 
     setState(() {
       _totalIncome = calculatedIncome;
@@ -418,22 +425,19 @@ class _ReportsTabState extends State<ReportsTab> {
       }
     }
 
-    double parse(TextEditingController c) =>
-        double.tryParse(c.text.replaceAll(',', '')) ?? 0.0;
-
     check("Week 1 Offering", _week1Sum, _dateWeek1);
     check("Week 2 Offering", _week2Sum, _dateWeek2);
     check("Week 3 Offering", _week3Sum, _dateWeek3);
     check("Week 4 Offering", _week4Sum, _dateWeek4);
-    check("Month End", parse(_monthEndController), _dateMonthEnd);
-    check("Others", parse(_othersController), _dateOthers);
+    check("Month End", safeParse(_monthEndController.text), _dateMonthEnd);
+    check("Others", safeParse(_othersController.text), _dateOthers);
 
-    check("Rent", parse(_rentController), _dateRent);
-    check("Wine & Wafers", parse(_wineController), _dateWine);
-    check("Power & Lights", parse(_powerController), _datePower);
-    check("Sundries", parse(_sundriesController), _dateSundries);
-    check("Central Council", parse(_councilController), _dateCouncil);
-    check("Equipment", parse(_equipmentController), _dateEquipment);
+    check("Rent", safeParse(_rentController.text), _dateRent);
+    check("Wine & Wafers", safeParse(_wineController.text), _dateWine);
+    check("Power & Lights", safeParse(_powerController.text), _datePower);
+    check("Sundries", safeParse(_sundriesController.text), _dateSundries);
+    check("Central Council", safeParse(_councilController.text), _dateCouncil);
+    check("Equipment", safeParse(_equipmentController.text), _dateEquipment);
 
     if (errors.isNotEmpty) {
       showDialog(
@@ -486,6 +490,149 @@ class _ReportsTabState extends State<ReportsTab> {
     return true;
   }
 
+  // ⭐️ NEW SIGNATURE VERIFICATION LOGIC
+  Future<bool> _verifySignaturesComplete() async {
+    Api().showLoading(context);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final uid = user?.uid;
+      final String? token = await user?.getIdToken();
+
+      final overRes = await http.get(
+        Uri.parse('$baseUrl/overseers/?uid=$uid'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      bool hasOverseerSig = false;
+      String? overseerId;
+
+      if (overRes.statusCode == 200) {
+        final List data = jsonDecode(overRes.body);
+        if (data.isNotEmpty) {
+          overseerId = data.first['id'];
+          final sig = data.first['signature_base64'];
+          hasOverseerSig = sig != null && sig.toString().trim().isNotEmpty;
+        }
+      }
+
+      bool hasTreasurerSig = false;
+      bool hasSecretarySig = false;
+
+      if (overseerId != null) {
+        final comRes = await http.get(
+          Uri.parse(
+            '$baseUrl/overseer_committee_members/?overseer=$overseerId',
+          ),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        if (comRes.statusCode == 200) {
+          final List comData = jsonDecode(comRes.body);
+          for (var member in comData) {
+            final sig = member['signature_base64'];
+            if (member['portfolio'] == 'Treasurer') {
+              hasTreasurerSig = sig != null && sig.toString().trim().isNotEmpty;
+            } else if (member['portfolio'] == 'Secretary') {
+              hasSecretarySig = sig != null && sig.toString().trim().isNotEmpty;
+            }
+          }
+        }
+      }
+
+      Navigator.pop(context); // Close loading
+
+      if (!hasOverseerSig || !hasTreasurerSig || !hasSecretarySig) {
+        List<String> missing = [];
+        if (!hasOverseerSig) missing.add("Overseer");
+        if (!hasTreasurerSig) missing.add("Treasurer");
+        if (!hasSecretarySig) missing.add("Secretary");
+
+        _showMissingSignaturesDialog(missing);
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      Navigator.pop(context);
+      print("Error verifying signatures: $e");
+      Api().showMessage(
+        context,
+        "Error verifying signatures.",
+        "Error",
+        Colors.red,
+      );
+      return false;
+    }
+  }
+
+  void _showMissingSignaturesDialog(List<String> missingRoles) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: _baseColor,
+        title: const Text(
+          "Missing Signatures",
+          style: TextStyle(
+            color: Colors.redAccent,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "You cannot archive the monthly report until the following members have signed off via the Signatures Tab:",
+              style: TextStyle(color: _textColor, height: 1.4),
+            ),
+            const SizedBox(height: 15),
+            ...missingRoles.map(
+              (role) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      role,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Container(
+            decoration: _neuDecoration(radius: 8),
+            child: TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  "Understood",
+                  style: TextStyle(
+                    color: Colors.blueAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   ReportPdfData _buildCurrentPdfData() {
     String overseerName = "Overseer";
     if (_overseerData != null) {
@@ -495,9 +642,6 @@ class _ReportsTabState extends State<ReportsTab> {
           '';
       if (n.isNotEmpty) overseerName = n;
     }
-
-    double parse(TextEditingController c) =>
-        double.tryParse(c.text.replaceAll(',', '')) ?? 0.0;
 
     return ReportPdfData(
       districtElder: _selectedDistrictElder!,
@@ -514,15 +658,15 @@ class _ReportsTabState extends State<ReportsTab> {
       week2Sum: _week2Sum,
       week3Sum: _week3Sum,
       week4Sum: _week4Sum,
-      monthEnd: parse(_monthEndController),
-      others: parse(_othersController),
+      monthEnd: safeParse(_monthEndController.text),
+      others: safeParse(_othersController.text),
       totalIncome: _totalIncome,
-      rent: parse(_rentController),
-      wine: parse(_wineController),
-      power: parse(_powerController),
-      sundries: parse(_sundriesController),
-      council: parse(_councilController),
-      equipment: parse(_equipmentController),
+      rent: safeParse(_rentController.text),
+      wine: safeParse(_wineController.text),
+      power: safeParse(_powerController.text),
+      sundries: safeParse(_sundriesController.text),
+      council: safeParse(_councilController.text),
+      equipment: safeParse(_equipmentController.text),
       totalExpenditure: _totalExpenditure,
       creditBalance: _creditBalance,
       dateWeek1: _dateWeek1,
@@ -587,6 +731,10 @@ class _ReportsTabState extends State<ReportsTab> {
 
     if (!_validateFinancials()) return;
 
+    // ⭐️ TRIGGER SIGNATURE CHECK BEFORE ALLOWING ARCHIVE
+    bool signaturesComplete = await _verifySignaturesComplete();
+    if (!signaturesComplete) return;
+
     bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -598,9 +746,10 @@ class _ReportsTabState extends State<ReportsTab> {
         ),
         content: Text(
           "You are about to close the month of ${_getMonthName(_selectedMonth)} $_selectedYear for $_selectedCommunityName.\n\n"
-          "1. This will ARCHIVE all data to history.\n"
-          "2. It will RESET live member contributions to 0.00.\n"
-          "3. You can print the PDF afterwards.",
+          "1. All required signatures have been verified.\n"
+          "2. This will ARCHIVE all data to history.\n"
+          "3. It will RESET live member contributions to 0.00.\n"
+          "4. You can print the PDF afterwards.",
           style: TextStyle(color: _textColor, height: 1.5),
         ),
         actions: [
@@ -637,8 +786,8 @@ class _ReportsTabState extends State<ReportsTab> {
       final uid = user?.uid;
       final String? token = await user?.getIdToken();
 
-      double parse(TextEditingController c) =>
-          double.tryParse(c.text.replaceAll(',', '')) ?? 0.0;
+      final docId =
+          "${_selectedCommunityName}_${_selectedYear}_$_selectedMonth";
 
       final payload = {
         'overseer_uid': uid,
@@ -648,14 +797,15 @@ class _ReportsTabState extends State<ReportsTab> {
         'month': _selectedMonth,
         'province': _selectedProvince,
         'report_data': {
-          'month_end': parse(_monthEndController),
-          'others': parse(_othersController),
-          'rent': parse(_rentController),
-          'wine': parse(_wineController),
-          'power': parse(_powerController),
-          'sundries': parse(_sundriesController),
-          'council': parse(_councilController),
-          'equipment': parse(_equipmentController),
+          'id': docId,
+          'month_end': safeParse(_monthEndController.text),
+          'others': safeParse(_othersController.text),
+          'rent': safeParse(_rentController.text),
+          'wine': safeParse(_wineController.text),
+          'power': safeParse(_powerController.text),
+          'sundries': safeParse(_sundriesController.text),
+          'council': safeParse(_councilController.text),
+          'equipment': safeParse(_equipmentController.text),
           'date_week1': _dateWeek1?.toIso8601String(),
           'date_week2': _dateWeek2?.toIso8601String(),
           'date_week3': _dateWeek3?.toIso8601String(),
@@ -676,12 +826,13 @@ class _ReportsTabState extends State<ReportsTab> {
           'month': _selectedMonth,
           'year': _selectedYear,
           'province': _selectedProvince,
-          'expense_central': parse(_councilController),
-          'expense_rent': parse(_rentController),
-          'expense_other':
-              parse(_powerController) +
-              parse(_sundriesController) +
-              parse(_equipmentController),
+          'expense_central': safeParse(_councilController.text),
+          'expense_rent': safeParse(_rentController.text),
+          'expense_wine': safeParse(_wineController.text),
+          'expense_power': safeParse(_powerController.text),
+          'expense_sundries': safeParse(_sundriesController.text),
+          'expense_equipment': safeParse(_equipmentController.text),
+          'expense_other': 0.0,
           'expense_mine': 0.0,
           'total_income': _totalIncome,
           'total_expenses': _totalExpenditure,
@@ -897,7 +1048,7 @@ class _ReportsTabState extends State<ReportsTab> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      "Clicking this will Save to History and Reset Members amounts.",
+                      "Clicking this will Check Signatures, Save to History, and Reset Members amounts.",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,

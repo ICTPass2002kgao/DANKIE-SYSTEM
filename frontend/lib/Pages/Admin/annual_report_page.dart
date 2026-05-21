@@ -627,18 +627,6 @@ class _AnnualReportPageState extends State<AnnualReportPage> {
 
     return Scaffold(
       backgroundColor: neumoBaseColor,
-      appBar: AppBar(
-        title: Text(
-          "Annual Report",
-          style: TextStyle(
-            color: theme.primaryColor,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: neumoBaseColor,
-        elevation: 0,
-        iconTheme: IconThemeData(color: theme.primaryColor),
-      ),
 
       floatingActionButton: isLoading || errorMessage.isNotEmpty
           ? null

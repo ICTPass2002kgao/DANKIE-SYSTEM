@@ -1,5 +1,3 @@
-// ignore_for_file: prefer_const_constructors, use_build_context_synchronously
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
@@ -26,6 +24,16 @@ class TactsoBranchDetails extends StatelessWidget {
     required this.universityDetails,
     required this.campusListForUniversity,
   }) : super(key: key);
+
+  // --- HELPER METHODS FOR NESTED DJANGO FIELDS ---
+  String _extractName(dynamic field, String fallback) {
+    if (field == null) return fallback;
+    if (field is Map) {
+      return field['full_name'] ?? field['name'] ?? fallback;
+    }
+    if (field is String && field.isNotEmpty) return field;
+    return fallback;
+  }
 
   // --- NEUMORPHIC BUTTON BUILDER ---
   Widget _buildNeuButton({
@@ -59,6 +67,50 @@ class TactsoBranchDetails extends StatelessWidget {
     );
   }
 
+  // --- HELPER TO BUILD LEADERSHIP ROWS ---
+  Widget _buildLeadershipRow(
+    ThemeData theme,
+    IconData icon,
+    String title,
+    String value,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: theme.primaryColor.withOpacity(0.7)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: theme.hintColor,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: theme.textTheme.bodyMedium?.color,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -76,67 +128,54 @@ class TactsoBranchDetails extends StatelessWidget {
         universityDetails['is_application_open'] ??
         false;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: neumoBaseColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(
+            isIOSPlatform ? CupertinoIcons.back : Icons.arrow_back,
+            color: theme.primaryColor,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
-      child: SingleChildScrollView(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(25, 15, 25, 40),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Drag Handle
-            Center(
-              child: Container(
-                width: 50,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: theme.hintColor.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 30),
-
             // --- 1. NEUMORPHIC IMAGE FRAME ---
             Center(
               child: NeumorphicContainer(
                 color: neumoBaseColor,
-                isPressed: false, // Pop out frame
+                isPressed: false,
                 borderRadius: 20,
                 padding: EdgeInsets.all(6),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(15),
-                  child: (universityDetails['image_urls'] == null)
-                      ? Container(
-                          height: 150,
-                          width: double.infinity,
-                          color: theme.scaffoldBackgroundColor,
-                          child: Icon(
-                            Icons.location_city,
-                            size: 60,
-                            color: theme.hintColor.withOpacity(0.3),
-                          ),
-                        )
-                      : Image.network(
-                          universityDetails['image_urls'],
-                          width: double.infinity,
-                          height: 200,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              height: 150,
-                              width: double.infinity,
-                              color: theme.scaffoldBackgroundColor,
-                              child: Icon(
-                                Icons.broken_image,
-                                size: 50,
-                                color: theme.hintColor,
-                              ),
-                            );
-                          },
-                        ),
+                  child: Container(
+                    color:
+                        Colors.white, // Forces a clean background for the logo
+                    width: double.infinity,
+                    height: 200,
+                    padding: EdgeInsets.all(
+                      10,
+                    ), // Gives the logo breathing room
+                    child: Image.network(
+                      universityDetails['image_urls'] ??
+                          universityDetails['image_url'],
+                      fit: BoxFit
+                          .contain, // Stops the image from cropping/stretching
+                      errorBuilder: (context, error, stackTrace) {
+                        return Icon(
+                          Icons.broken_image,
+                          size: 50,
+                          color: theme.hintColor,
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -168,7 +207,6 @@ class TactsoBranchDetails extends StatelessWidget {
                   },
                   child: NeumorphicContainer(
                     color: neumoBaseColor,
-
                     isPressed: false,
                     padding: EdgeInsets.all(12),
                     child: Icon(
@@ -251,15 +289,71 @@ class TactsoBranchDetails extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(height: 25),
 
-            // --- 4. STATUS INDICATOR ---
+            // --- 4. LEADERSHIP & DETAILS SECTION ---
+            Text(
+              "Administration Details",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: theme.primaryColor,
+                decoration: TextDecoration.none,
+              ),
+            ),
+            const SizedBox(height: 10),
+            NeumorphicContainer(
+              color: neumoBaseColor,
+              isPressed: true,
+              borderRadius: 15,
+              padding: EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  _buildLeadershipRow(
+                    theme,
+                    Icons.admin_panel_settings,
+                    "Overseer",
+                    _extractName(
+                      universityDetails['overseer_name'] ??
+                          universityDetails['overseer'],
+                      'Not Assigned',
+                    ),
+                  ),
+                  _buildLeadershipRow(
+                    theme,
+                    Icons.map,
+                    "District Elder",
+                    _extractName(
+                      universityDetails['district_name'] ??
+                          universityDetails['assigned_district'],
+                      'Not Assigned',
+                    ),
+                  ),
+                  _buildLeadershipRow(
+                    theme,
+                    Icons.person,
+                    "Education Officer",
+                    universityDetails['education_officer_name'] ??
+                        'Not Assigned',
+                  ),
+                  _buildLeadershipRow(
+                    theme,
+                    Icons.email,
+                    "Branch Contact",
+                    universityDetails['email'] ??
+                        universityDetails['education_officer_email'] ??
+                        'No Email Provided',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            // --- 5. STATUS INDICATOR ---
             Row(
               children: [
                 NeumorphicContainer(
                   color: neumoBaseColor,
-
                   isPressed: true, // Sunken LED
                   padding: EdgeInsets.all(6),
                   child: Icon(
@@ -282,10 +376,9 @@ class TactsoBranchDetails extends StatelessWidget {
             ),
             const SizedBox(height: 30),
 
-            // --- 5. ACTION BUTTONS ---
-
-            // APPLY BUTTON
-            if (isAppOpen)
+            // --- 6. ACTION BUTTONS (STRICTLY DISABLED IF CLOSED) ---
+            if (isAppOpen) ...[
+              // APPLY BUTTON
               _buildNeuButton(
                 context: context,
                 onPressed: () async {
@@ -307,68 +400,82 @@ class TactsoBranchDetails extends StatelessWidget {
                 baseColor: neumoBaseColor,
                 textColor: Colors.white,
                 isPrimary: true, // Colored Button
-              )
-            else
+              ),
+              const SizedBox(height: 15),
+              // ASK FOR HELP BUTTON
+              _buildNeuButton(
+                context: context,
+                onPressed: () {
+                  List<Map<String, dynamic>> actualCampusList = [];
+                  if (campusListForUniversity is List) {
+                    for (var item in campusListForUniversity) {
+                      if (item is Map<String, dynamic>)
+                        actualCampusList.add(item);
+                    }
+                  }
+
+                  if (hasMultipleCampuses && actualCampusList.isNotEmpty) {
+                    if (isIOSPlatform) {
+                      _showiOSCampusSelection(context, theme, actualCampusList);
+                    } else {
+                      _showAndroidCampusSelection(
+                        context,
+                        theme,
+                        neumoBaseColor,
+                        actualCampusList,
+                      );
+                    }
+                  } else {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => UniversityApplicationScreen(
+                          universityData: universityDetails,
+                          selectedCampus: actualCampusList.isNotEmpty
+                              ? actualCampusList.first
+                              : null,
+                        ),
+                      ),
+                    );
+                  }
+                },
+                text: 'Ask for Help!',
+                baseColor: neumoBaseColor,
+                textColor: theme.primaryColor,
+                isPrimary: false,
+              ),
+            ] else ...[
+              // COMPLETELY DISABLED STATE FOR ALL BUTTONS
               NeumorphicContainer(
                 color: neumoBaseColor,
                 isPressed: true, // Sunken Disabled Button
                 borderRadius: 15,
-                padding: EdgeInsets.symmetric(vertical: 18),
+                padding: EdgeInsets.symmetric(vertical: 24),
                 child: Center(
-                  child: Text(
-                    'Applications Closed',
-                    style: TextStyle(
-                      color: theme.hintColor,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.block,
+                        color: theme.hintColor.withOpacity(0.5),
+                        size: 30,
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Applications are currently closed.\nPlease check back later.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: theme.hintColor,
+                          fontWeight: FontWeight.bold,
+                          height: 1.5,
+                          fontSize: 14,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-
-            const SizedBox(height: 15),
-
-            // ASK FOR HELP BUTTON
-            _buildNeuButton(
-              context: context,
-              onPressed: () {
-                List<Map<String, dynamic>> actualCampusList = [];
-                if (campusListForUniversity is List) {
-                  for (var item in campusListForUniversity) {
-                    if (item is Map<String, dynamic>)
-                      actualCampusList.add(item);
-                  }
-                }
-
-                if (hasMultipleCampuses && actualCampusList.isNotEmpty) {
-                  if (isIOSPlatform) {
-                    _showiOSCampusSelection(context, theme, actualCampusList);
-                  } else {
-                    _showAndroidCampusSelection(
-                      context,
-                      theme,
-                      neumoBaseColor,
-                      actualCampusList,
-                    );
-                  }
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => UniversityApplicationScreen(
-                        universityData: universityDetails,
-                        selectedCampus: actualCampusList.isNotEmpty
-                            ? actualCampusList.first
-                            : null,
-                      ),
-                    ),
-                  );
-                }
-              },
-              text: 'Ask for Help!',
-              baseColor: neumoBaseColor,
-              textColor: theme.primaryColor,
-              isPrimary: false,
-            ),
+            ],
           ],
         ),
       ),

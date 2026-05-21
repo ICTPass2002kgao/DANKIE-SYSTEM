@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:io'; // Added for safe image extraction fallback
 import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -12,6 +13,10 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
+
+import 'liveness_wrapper.dart'
+    if (dart.library.io) 'liveness_wrapper_mobile.dart'
+    if (dart.library.html) 'liveness_wrapper_web.dart';
 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
@@ -25,11 +30,9 @@ class FaceVerificationScreen extends StatefulWidget {
   final String password;
   final String entityUid;
   final String role;
-  final String branchName; // Added to identify the organization
+  final String branchName;
   final CameraDescription camera;
 
-  // ⭐️ UPDATED: Accepts a LIST of Identity Maps
-  // Format: [{'name': '...', 'portfolio': '...', 'faceUrl': '...'}]
   final List<Map<String, String>> identities;
 
   const FaceVerificationScreen({
@@ -54,7 +57,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   late AudioPlayer _audioPlayer;
   final Api _api = Api();
 
-  bool _isVerifying = false;
+  bool _isVerifyingLiveness = false;
+  bool _isVerifyingBackend = false;
+
   String _processStatus = "Initializing...";
   bool _isCameraInitialized = false;
   late AnimationController _scannerController;
@@ -99,25 +104,47 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
         enableAudio: false,
       );
       await _cameraController!.initialize();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isCameraInitialized = true;
           _processStatus = "Ready";
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isCameraInitialized = false;
           _processStatus = "Camera Error";
         });
+      }
     }
   }
 
-  // --- ⭐️ UPDATED LOGIC: Checking identities one by one ---
-  Future<void> _captureAndVerify() async {
-    if (_cameraController == null ||
-        !_cameraController!.value.isInitialized ||
-        _isVerifying)
+  // --- Mobile Secure Flow ---
+  Future<void> _startLivenessCapture() async {
+    if (widget.identities.isEmpty) {
+      _api.showMessage(
+        context,
+        'No authorized members found.',
+        'Security Error',
+        Colors.red,
+      );
+      return;
+    }
+
+    await _cameraController?.dispose();
+    _cameraController = null;
+
+    setState(() {
+      _isCameraInitialized = false;
+      _isVerifyingLiveness = true;
+      _processStatus = 'Follow on-screen instructions...';
+    });
+  }
+
+  // --- Web Fallback Flow ---
+  Future<void> _captureWebAndVerify() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized)
       return;
 
     if (widget.identities.isEmpty) {
@@ -131,18 +158,30 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     }
 
     setState(() {
-      _isVerifying = true;
-      _processStatus = 'Scanning...';
+      _isVerifyingBackend = true;
+      _processStatus = 'Scanning Image...';
     });
 
     try {
       final XFile capturedFile = await _cameraController!.takePicture();
-      if (mounted) await _cameraController?.resumePreview();
-
-      Map<String, String>? matchedIdentity;
+      if (mounted) await _cameraController?.pausePreview();
       final Uint8List capturedBytes = await capturedFile.readAsBytes();
 
-      // Loop through all committee members/staff assigned to this account
+      await _processBackendMatch(capturedBytes);
+    } catch (e) {
+      _handleFailure(reason: "Web Camera Capture Error");
+    }
+  }
+
+  // --- Shared Backend Match Logic ---
+  Future<void> _processBackendMatch(Uint8List capturedBytes) async {
+    setState(() {
+      _processStatus = 'Scanning Identity...';
+    });
+
+    try {
+      Map<String, String>? matchedIdentity;
+
       for (var identity in widget.identities) {
         if (!mounted) break;
         String refUrl = identity['faceUrl'] ?? '';
@@ -156,7 +195,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
 
         if (result['matched'] == true) {
           matchedIdentity = identity;
-          break; // Stop loop immediately once we find the person
+          break;
         }
       }
 
@@ -166,7 +205,6 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
         _handleFailure(reason: "Face not recognized for ${widget.branchName}");
       }
     } catch (e) {
-      _cameraController?.resumePreview();
       _handleFailure(reason: "Identification Error");
     }
   }
@@ -207,16 +245,16 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     setState(() => _processStatus = "Welcome, ${identity['name']}");
     try {
       await playSound(true);
-      if (mounted)
+      if (mounted) {
         _api.showMessage(
           context,
           'Identity Verified ✅',
           'Access Granted',
           Colors.green,
         );
+      }
 
       Widget nextScreen;
-      // Extract specific person details
       String name = identity['name']!;
       String role = identity['portfolio']!;
       String img = identity['faceUrl']!;
@@ -254,15 +292,17 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   void _handleFailure({String reason = "Access Denied"}) async {
     if (!mounted) return;
     await playSound(false);
-    _cameraController?.resumePreview();
+
     setState(() {
-      _isVerifying = false;
+      _isVerifyingLiveness = false;
+      _isVerifyingBackend = false;
       _processStatus = "Ready";
     });
 
-    // Kick out of temporary firebase session for security
     await FirebaseAuth.instance.signOut();
     _api.showMessage(context, reason, 'Denied', Colors.red);
+
+    _initializeCamera();
   }
 
   @override
@@ -273,7 +313,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     super.dispose();
   }
 
-  // --- ⭐️ NEUMORPHIC UI (UNCHANGED VISUALS) ---
+  // --- ⭐️ NEUMORPHIC UI ---
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +361,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
               children: [
                 _buildDetailsPanel(neumoBaseColor, textColor, hintColor),
                 const SizedBox(height: 40),
-                if (_isVerifying)
+                if (_isVerifyingBackend)
                   _buildProcessingPanel(
                     neumoBaseColor,
                     textColor,
@@ -416,9 +456,11 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
           _sectionTitle('Live Scan', primaryColor, textColor),
           const SizedBox(height: 10),
           Text(
-            _isCameraInitialized
-                ? 'Align your face within the frame.'
-                : 'Initializing...',
+            _isVerifyingLiveness
+                ? 'Follow instructions within the frame.'
+                : (_isCameraInitialized
+                      ? 'Align your face within the frame.'
+                      : 'Initializing...'),
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               fontSize: 12,
@@ -451,17 +493,127 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
                   width: 220,
                   height: 300,
                   color: Colors.black,
-                  child: _isCameraInitialized
-                      ? AspectRatio(
-                          aspectRatio: _cameraController!.value.aspectRatio,
-                          child: CameraPreview(_cameraController!),
+                  child: (!kIsWeb && _isVerifyingLiveness)
+                      ? getLivenessWidget(
+                          onSuccess: (result) async {
+                            setState(() {
+                              _isVerifyingLiveness = false;
+                              _isVerifyingBackend = true;
+                              _processStatus = 'Capturing secure image...';
+                            });
+
+                            try {
+                              Uint8List? capturedBytes;
+                              dynamic res = result;
+
+                              if (res is Uint8List) {
+                                capturedBytes = res;
+                              } else {
+                                try {
+                                  capturedBytes ??= res.imageBytes;
+                                } catch (_) {}
+                                try {
+                                  capturedBytes ??= res.capturedImage;
+                                } catch (_) {}
+                                try {
+                                  capturedBytes ??= res.jpegBytes;
+                                } catch (_) {}
+                                try {
+                                  capturedBytes ??= res.image;
+                                } catch (_) {}
+
+                                if (capturedBytes == null) {
+                                  String? path;
+                                  try {
+                                    path ??= res.imagePath;
+                                  } catch (_) {}
+                                  try {
+                                    path ??= res.path;
+                                  } catch (_) {}
+
+                                  if (path != null && path.isNotEmpty) {
+                                    final file = File(path);
+                                    capturedBytes = await file.readAsBytes();
+                                  }
+                                }
+                              }
+
+                              // ⭐️ THE FIX: The Hardware Un-Lock Delay
+                              if (capturedBytes == null) {
+                                print(
+                                  "Package didn't provide an image. Waiting for hardware release...",
+                                );
+
+                                // Give iOS 600ms to completely release the camera feed before we try to take it back
+                                await Future.delayed(
+                                  const Duration(milliseconds: 600),
+                                );
+
+                                if (_cameraController == null ||
+                                    !_cameraController!.value.isInitialized) {
+                                  final cameras = await availableCameras();
+                                  CameraDescription targetCamera = cameras
+                                      .firstWhere(
+                                        (camera) =>
+                                            camera.lensDirection ==
+                                            CameraLensDirection.front,
+                                        orElse: () => cameras.first,
+                                      );
+
+                                  _cameraController = CameraController(
+                                    targetCamera,
+                                    ResolutionPreset.medium,
+                                    enableAudio: false,
+                                  );
+                                  await _cameraController!.initialize();
+                                }
+
+                                // Give the newly initialized camera 200ms to adjust exposure to the room lighting
+                                await Future.delayed(
+                                  const Duration(milliseconds: 200),
+                                );
+
+                                final XFile capturedFile =
+                                    await _cameraController!.takePicture();
+                                capturedBytes = await capturedFile
+                                    .readAsBytes();
+                              }
+
+                              if (capturedBytes != null) {
+                                await _processBackendMatch(capturedBytes);
+                              } else {
+                                _handleFailure(
+                                  reason:
+                                      "Camera hardware failed to capture image.",
+                                );
+                              }
+                            } catch (e) {
+                              print("CRITICAL ERROR: $e");
+                              _handleFailure(
+                                reason: "Secure capture failed: $e",
+                              );
+                            }
+                          },
+                          onFailed: (reason) {
+                            _handleFailure(
+                              reason: "Spoofing Detected: $reason",
+                            );
+                          },
                         )
-                      : Center(
-                          child: CircularProgressIndicator(color: primaryColor),
-                        ),
+                      : (_isCameraInitialized
+                            ? AspectRatio(
+                                aspectRatio:
+                                    _cameraController!.value.aspectRatio,
+                                child: CameraPreview(_cameraController!),
+                              )
+                            : Center(
+                                child: CircularProgressIndicator(
+                                  color: primaryColor,
+                                ),
+                              )),
                 ),
               ),
-              if (_isCameraInitialized)
+              if (_isCameraInitialized && !_isVerifyingLiveness)
                 Positioned.fill(
                   child: ClipOval(
                     child: AnimatedBuilder(
@@ -498,24 +650,25 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
             ],
           ),
           const SizedBox(height: 40),
-          GestureDetector(
-            onTap: _captureAndVerify,
-            child: NeumorphicContainer(
-              color: primaryColor,
-              borderRadius: 16,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              child: Center(
-                child: Text(
-                  'Start Face Match',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+          if (!_isVerifyingLiveness)
+            GestureDetector(
+              onTap: kIsWeb ? _captureWebAndVerify : _startLivenessCapture,
+              child: NeumorphicContainer(
+                color: primaryColor,
+                borderRadius: 16,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: Center(
+                  child: Text(
+                    'Start Face Match',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

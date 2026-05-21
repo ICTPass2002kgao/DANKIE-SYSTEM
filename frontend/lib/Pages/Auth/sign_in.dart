@@ -207,20 +207,19 @@ class _Login_PageState extends State<Login_Page>
         return;
       }
 
-      // CHECK ADMIN STAFF
-      var staffProfile = await _fetchProfileFromDjango(
-        'staff',
-        uid,
-        queryParam: 'uid',
-      );
-      if (staffProfile != null) {
-        potentialIdentities = [
-          {
-            'name': staffProfile['full_name'] ?? 'Admin',
-            'portfolio': staffProfile['portfolio'] ?? 'Management',
-            'faceUrl': staffProfile['face_url'] ?? '',
-          },
-        ];
+      // CHECK ADMIN STAFF (UPDATED TO FETCH ALL STAFF MATCHING THE LOGIN)
+      var staffList = await _fetchListFromDjango('staff', 'uid=$uid');
+      if (staffList.isNotEmpty) {
+        potentialIdentities = staffList
+            .map<Map<String, String>>(
+              (m) => {
+                'name': m['full_name'] ?? 'Admin',
+                'portfolio': m['portfolio'] ?? 'Management',
+                'faceUrl': m['face_url'] ?? '',
+              },
+            )
+            .toList();
+
         _launchVerification(
           uid,
           'Admin',

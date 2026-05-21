@@ -55,10 +55,13 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
 
   // These roles map to the 'portfolio' field in your Django model
   final List<String> _committeeRoles = [
+    'Chairperson',
+    'Deputy Chairperson',
     'Secretary',
     'Deputy Secretary',
     'Treasurer',
-    'Chairperson',
+    'Community Elder',
+    'Overseer',
     'District Elder',
     'Additional Member',
   ];
@@ -219,6 +222,36 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
       var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 201) {
+        // --- SEND EMAIL NOTIFICATION ---
+        if (_committeeEmailController.text.trim().isNotEmpty) {
+          try {
+            await Api().sendEmail(
+              _committeeEmailController.text.trim(),
+              'Welcome to the Committee',
+              '''
+Hello ${_committeeNameController.text.trim()},
+
+Welcome to the team! You have successfully been added as a Committee Member.
+
+Your Role Details:
+Portfolio: $_selectedRole
+
+Thank you for your dedication to serving the community. We look forward to working with you.
+
+Best regards,
+The Leadership Team
+''',
+              context,
+            );
+            print("✅ [DEBUG] Email sent successfully.");
+          } catch (emailError) {
+            print(
+              "⚠️ [DEBUG] Email failed to send, but user was created. Error: $emailError",
+            );
+          }
+        }
+        // --- END EMAIL NOTIFICATION ---
+
         OverseerAuditLogs.logAction(
           action: "CREATED",
           details:

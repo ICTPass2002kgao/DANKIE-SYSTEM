@@ -7,15 +7,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
+import 'package:ionicons/ionicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 import 'package:ttact/Pages/Overseer/dashboard_tab.dart';
+import 'package:ttact/Pages/Overseer/music_contract.dart';
 import 'package:ttact/Pages/Overseer/overseer_audit_page.dart';
 import 'package:ttact/Pages/Overseer/Subscription_Info.dart';
 import 'package:ttact/Pages/Overseer/add_committee_member.dart';
 import 'package:ttact/Pages/Overseer/overseer_digital_register.dart';
+import 'package:ttact/Pages/Overseer/signatures.dart';
 
 import 'add_member_tab.dart';
 import 'all_members_tab.dart';
@@ -41,6 +44,13 @@ class OverseerPage extends StatefulWidget {
   State<OverseerPage> createState() => _OverseerPageState();
 }
 
+class _TabDefinition {
+  final String title;
+  final IconData icon;
+  final Widget widget;
+  _TabDefinition(this.title, this.icon, this.widget);
+}
+
 class _OverseerPageState extends State<OverseerPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
@@ -56,20 +66,165 @@ class _OverseerPageState extends State<OverseerPage>
 
   String committeeMemberName = '';
   String committeeMemberRole = '';
+  bool has_agreed_to_privacy = false;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 9, vsync: this);
+    _loadLogoBytes();
+    _initializeProfileData();
+  }
 
+  @override
+  void dispose() {
+    if (!_isLoadingProfile) {
+      _tabController.dispose();
+    }
+    super.dispose();
+  }
+
+  bool get _isChairperson => committeeMemberRole.toLowerCase() == 'chairperson';
+
+  bool get _isSignatory {
+    final r = committeeMemberRole.toLowerCase().trim();
+    return r == 'overseer' ||
+        r == 'main overseer' ||
+        r == 'district elder' ||
+        r == 'treasurer' ||
+        r == 'secretary';
+  }
+
+  void _initTabController() {
+    int tabCount = 7; // Base tabs
+    if (_isChairperson) tabCount++; // Songs Agreement
+    if (_isSignatory) tabCount++; // Signatures
+    tabCount += 2; // Audit, Billing
+
+    _tabController = TabController(length: tabCount, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
         setState(() => _selectedIndex = _tabController.index);
       }
     });
+  }
 
-    _loadLogoBytes();
-    _initializeProfileData();
+  List<_TabDefinition> _getTabs(bool isLargeScreen, String? secureFaceUrl) {
+    final tabs = <_TabDefinition>[
+      _TabDefinition(
+        "Dashboard",
+        Icons.dashboard,
+        DashboardTab(
+          isLargeScreen: isLargeScreen,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+        ),
+      ),
+      _TabDefinition(
+        "Add Member",
+        Icons.person_add,
+        AddMemberTab(
+          isLargeScreen: isLargeScreen,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+        ),
+      ),
+      _TabDefinition(
+        "All Members",
+        Icons.people,
+        AllMembersTab(
+          isLargeScreen: isLargeScreen,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+        ),
+      ),
+      _TabDefinition(
+        "Digital Register",
+        Icons.receipt_long,
+        OverseerDigitalRegisterTab(
+          isLargeScreen: isLargeScreen,
+          loggerName: committeeMemberName,
+          loggerRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+          neumoColor: _neumorphicBaseColor,
+        ),
+      ),
+      _TabDefinition(
+        "Add Committee",
+        Icons.groups,
+        AddCommitteeMemberTab(
+          isLargeScreen: isLargeScreen,
+          currentUserName: committeeMemberName,
+          currentUserPortfolio: committeeMemberRole,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+        ),
+      ),
+      _TabDefinition(
+        "Add Officer",
+        Icons.admin_panel_settings,
+        AddOfficerTab(
+          isLargeScreen: isLargeScreen,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+        ),
+      ),
+      _TabDefinition(
+        "Reports",
+        Icons.receipt_long,
+        ReportsTab(
+          isLargeScreen: isLargeScreen,
+          logoBytes: _logoBytes,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+        ),
+      ),
+    ];
+
+    if (_isChairperson) {
+      tabs.add(
+        _TabDefinition(
+          "Songs Agreement",
+          Icons.library_music,
+          MusicContract(
+            committeeMemberName: committeeMemberName,
+            committeeMemberRole: committeeMemberRole,
+            faceUrl: secureFaceUrl,
+          ),
+        ),
+      );
+    }
+
+    if (_isSignatory) {
+      tabs.add(
+        _TabDefinition(
+          "Signatures",
+          Icons.draw,
+          Signatures(
+            isLargeScreen: isLargeScreen,
+            committeeMemberName: committeeMemberName,
+            committeeMemberRole: committeeMemberRole,
+            faceUrl: secureFaceUrl,
+          ),
+        ),
+      );
+    }
+
+    tabs.add(_TabDefinition("Audit Logs", Icons.security, OverseerAuditpage()));
+    tabs.add(
+      _TabDefinition(
+        "Billing",
+        Icons.subscriptions_outlined,
+        SubscriptionInfo(),
+      ),
+    );
+
+    return tabs;
   }
 
   String _getSecureImageUrl(String originalUrl) {
@@ -77,9 +232,6 @@ class _OverseerPageState extends State<OverseerPage>
     return '${Api().BACKEND_BASE_URL_DEBUG}/serve_image/?url=${Uri.encodeComponent(originalUrl)}';
   }
 
-  bool has_agreed_to_privacy = false;
-
-  // --- ⭐️ PREMIUM NEUMORPHIC TERMS AGREEMENT DIALOG ---
   Future<bool> _showNeumorphicTermsDialog({required bool isCommittee}) async {
     return await showDialog<bool>(
           context: context,
@@ -212,7 +364,6 @@ class _OverseerPageState extends State<OverseerPage>
         false;
   }
 
-  // Check for Main Overseer
   Future<void> check_terms_of_use(dynamic overseerId) async {
     final agreed = await _showNeumorphicTermsDialog(isCommittee: false);
     if (agreed) {
@@ -249,7 +400,6 @@ class _OverseerPageState extends State<OverseerPage>
     }
   }
 
-  // ⭐️ LOGIC: Check TS&Cs specifically for the Committee Member
   Future<void> _checkCommitteeTerms(dynamic memberId) async {
     final agreed = await _showNeumorphicTermsDialog(isCommittee: true);
     if (agreed) {
@@ -282,6 +432,84 @@ class _OverseerPageState extends State<OverseerPage>
     } else {
       await _handleLogout();
     }
+  }
+
+  void _showMissingSignatureAlert() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _neumorphicBaseColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+            SizedBox(width: 10),
+            Text(
+              "Signature Required",
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "We noticed you haven't set up your digital signature yet.\n\nPlease navigate to the Signatures tab to enter it now so you can authorize official documents and reports.\nIn simple terms a balancesheet needs you signature as a ${committeeMemberRole} to be valid and official.",
+          style: TextStyle(
+            color: Colors.grey.shade800,
+            height: 1.5,
+            fontSize: 15,
+          ),
+        ),
+        actions: [
+          Container(
+            decoration: BoxDecoration(
+              color: _neumorphicBaseColor,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade400,
+                  offset: Offset(4, 4),
+                  blurRadius: 10,
+                ),
+                BoxShadow(
+                  color: Colors.white,
+                  offset: Offset(-4, -4),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+            child: TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                final tabs = _getTabs(
+                  MediaQuery.of(context).size.width >= _desktopBreakpoint,
+                  faceUrl != null ? _getSecureImageUrl(faceUrl!) : null,
+                );
+                int sigIndex = tabs.indexWhere((t) => t.title == "Signatures");
+                if (sigIndex != -1) {
+                  setState(() {
+                    _selectedIndex = sigIndex;
+                    _tabController.animateTo(sigIndex);
+                  });
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  "Go to Signatures",
+                  style: TextStyle(
+                    color: Colors.blue.shade800,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _initializeProfileData() async {
@@ -344,7 +572,6 @@ class _OverseerPageState extends State<OverseerPage>
             isCommitteeMember = true;
             final memberData = commResults[0];
 
-            // ⭐️ Check if this specific committee member agreed to TS&Cs
             bool acceptedTsAndCs = memberData['accepted_ts_and_cs'] ?? false;
             if (!acceptedTsAndCs) {
               await _checkCommitteeTerms(memberData['id']);
@@ -361,21 +588,34 @@ class _OverseerPageState extends State<OverseerPage>
             await prefs.setString('session_role', role);
 
             if (mounted) {
+              committeeMemberName = name;
+              committeeMemberRole = role;
+              _initTabController();
+
               setState(() {
                 _displayName = name;
                 _displayRole = role;
                 faceUrl = faceUrlToCheck;
-                committeeMemberName = name;
-                committeeMemberRole = role;
                 _isLoadingProfile = false;
               });
+
+              // ⭐️ 1. Check if logged-in Committee Member needs to sign
+              bool needsSignature = false;
+              if (_isSignatory) {
+                final sig = memberData['signature_base64'];
+                if (sig == null || sig.toString().trim().isEmpty) {
+                  needsSignature = true;
+                }
+              }
+              if (needsSignature && mounted) {
+                _showMissingSignatureAlert();
+              }
             }
           }
         }
       }
 
       if (!isCommitteeMember) {
-        // Only run the main overseer privacy check if they are the main overseer
         if (!has_agreed_to_privacy) await check_terms_of_use(overseerId);
 
         await prefs.remove('session_faceUrl');
@@ -391,14 +631,48 @@ class _OverseerPageState extends State<OverseerPage>
             overseerData['secretary_face_url'];
 
         if (mounted) {
+          committeeMemberName = mainName;
+          committeeMemberRole = mainRole;
+          _initTabController();
+
           setState(() {
             _displayName = mainName;
             _displayRole = mainRole;
             faceUrl = mainFaceUrl;
-            committeeMemberName = mainName;
-            committeeMemberRole = mainRole;
             _isLoadingProfile = false;
           });
+
+          // ⭐️ 2. Check if logged-in Main Overseer needs to sign
+          bool needsSignature = false;
+          if (_isSignatory) {
+            final comRes = await http.get(
+              Uri.parse(
+                '${Api().BACKEND_BASE_URL_DEBUG}/committee_members/?overseer=$overseerId',
+              ),
+              headers: {'Authorization': 'Bearer $token'},
+            );
+            if (comRes.statusCode == 200) {
+              final List comData = jsonDecode(comRes.body);
+              bool foundSig = false;
+              for (var m in comData) {
+                if (m['portfolio'] == 'Overseer' ||
+                    m['portfolio'] == 'Main Overseer') {
+                  final sig = m['signature_base64'];
+                  if (sig != null && sig.toString().trim().isNotEmpty) {
+                    foundSig = true;
+                  }
+                  break;
+                }
+              }
+              needsSignature = !foundSig;
+            } else {
+              needsSignature = true;
+            }
+          }
+
+          if (needsSignature && mounted) {
+            _showMissingSignatureAlert();
+          }
         }
       }
     } catch (e) {
@@ -481,6 +755,8 @@ class _OverseerPageState extends State<OverseerPage>
     String? secureFaceUrl = faceUrl != null
         ? _getSecureImageUrl(faceUrl!)
         : null;
+    final tabs = _getTabs(false, secureFaceUrl);
+
     return Column(
       children: [
         Padding(
@@ -527,17 +803,9 @@ class _OverseerPageState extends State<OverseerPage>
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            children: [
-              _buildMobileTabItem(0, "Dashboard"),
-              _buildMobileTabItem(1, "Add Member"),
-              _buildMobileTabItem(2, "All Members"),
-              _buildMobileTabItem(3, "Digital Register"),
-              _buildMobileTabItem(4, "Add Committee"),
-              _buildMobileTabItem(5, "Add Officer"),
-              _buildMobileTabItem(6, "Reports"),
-              _buildMobileTabItem(7, "Audit"),
-              _buildMobileTabItem(8, "Billing"),
-            ],
+            children: tabs.asMap().entries.map((entry) {
+              return _buildMobileTabItem(entry.key, entry.value.title);
+            }).toList(),
           ),
         ),
         Expanded(
@@ -545,55 +813,7 @@ class _OverseerPageState extends State<OverseerPage>
             color: _neumorphicBaseColor,
             child: TabBarView(
               controller: _tabController,
-              children: [
-                DashboardTab(
-                  isLargeScreen: false,
-                  committeeMemberName: committeeMemberName,
-                  committeeMemberRole: committeeMemberRole,
-                  faceUrl: secureFaceUrl,
-                ),
-                AddMemberTab(
-                  isLargeScreen: false,
-                  committeeMemberName: committeeMemberName,
-                  committeeMemberRole: committeeMemberRole,
-                  faceUrl: secureFaceUrl,
-                ),
-                AllMembersTab(
-                  isLargeScreen: false,
-                  committeeMemberName: committeeMemberName,
-                  committeeMemberRole: committeeMemberRole,
-                  faceUrl: secureFaceUrl,
-                ),
-                OverseerDigitalRegisterTab(
-                  neumoColor: _neumorphicBaseColor,
-                  loggerName: committeeMemberName,
-                  loggerRole: committeeMemberRole,
-                  isLargeScreen: false,
-                ),
-                AddCommitteeMemberTab(
-                  isLargeScreen: false,
-                  currentUserName: committeeMemberName,
-                  currentUserPortfolio: committeeMemberRole,
-                  committeeMemberName: committeeMemberName,
-                  committeeMemberRole: committeeMemberRole,
-                  faceUrl: secureFaceUrl,
-                ),
-                AddOfficerTab(
-                  isLargeScreen: false,
-                  committeeMemberName: committeeMemberName,
-                  committeeMemberRole: committeeMemberRole,
-                  faceUrl: secureFaceUrl,
-                ),
-                ReportsTab(
-                  isLargeScreen: false,
-                  logoBytes: _logoBytes,
-                  committeeMemberName: committeeMemberName,
-                  committeeMemberRole: committeeMemberRole,
-                  faceUrl: secureFaceUrl,
-                ),
-                OverseerAuditpage(),
-                SubscriptionInfo(),
-              ],
+              children: tabs.map((t) => t.widget).toList(),
             ),
           ),
         ),
@@ -637,67 +857,12 @@ class _OverseerPageState extends State<OverseerPage>
     String? secureFaceUrl = faceUrl != null
         ? _getSecureImageUrl(faceUrl!)
         : null;
-    switch (_selectedIndex) {
-      case 0:
-        return DashboardTab(
-          isLargeScreen: isLargeScreen,
-          committeeMemberName: committeeMemberName,
-          committeeMemberRole: committeeMemberRole,
-          faceUrl: secureFaceUrl,
-        );
-      case 1:
-        return AddMemberTab(
-          isLargeScreen: isLargeScreen,
-          committeeMemberName: committeeMemberName,
-          committeeMemberRole: committeeMemberRole,
-          faceUrl: secureFaceUrl,
-        );
-      case 2:
-        return AllMembersTab(
-          isLargeScreen: isLargeScreen,
-          committeeMemberName: committeeMemberName,
-          committeeMemberRole: committeeMemberRole,
-          faceUrl: secureFaceUrl,
-        );
-      case 3:
-        return OverseerDigitalRegisterTab(
-          isLargeScreen: isLargeScreen,
-          loggerName: committeeMemberName,
-          loggerRole: committeeMemberRole,
-          faceUrl: secureFaceUrl,
-          neumoColor: _neumorphicBaseColor,
-        );
-      case 4:
-        return AddCommitteeMemberTab(
-          isLargeScreen: isLargeScreen,
-          currentUserName: committeeMemberName,
-          currentUserPortfolio: committeeMemberRole,
-          committeeMemberName: committeeMemberName,
-          committeeMemberRole: committeeMemberRole,
-          faceUrl: secureFaceUrl,
-        );
-      case 5:
-        return AddOfficerTab(
-          isLargeScreen: isLargeScreen,
-          committeeMemberName: committeeMemberName,
-          committeeMemberRole: committeeMemberRole,
-          faceUrl: secureFaceUrl,
-        );
-      case 6:
-        return ReportsTab(
-          isLargeScreen: isLargeScreen,
-          logoBytes: _logoBytes,
-          committeeMemberName: committeeMemberName,
-          committeeMemberRole: committeeMemberRole,
-          faceUrl: secureFaceUrl,
-        );
-      case 7:
-        return OverseerAuditpage();
-      case 8:
-        return SubscriptionInfo();
-      default:
-        return const Center(child: Text("Tab not found"));
+    final tabs = _getTabs(isLargeScreen, secureFaceUrl);
+
+    if (_selectedIndex >= 0 && _selectedIndex < tabs.length) {
+      return tabs[_selectedIndex].widget;
     }
+    return const Center(child: Text("Tab not found"));
   }
 
   Widget _buildSidebar(BuildContext context) {
@@ -705,6 +870,7 @@ class _OverseerPageState extends State<OverseerPage>
     String? secureFaceUrl = faceUrl != null
         ? _getSecureImageUrl(faceUrl!)
         : null;
+    final tabs = _getTabs(true, secureFaceUrl);
 
     return Container(
       width: 280,
@@ -786,45 +952,37 @@ class _OverseerPageState extends State<OverseerPage>
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 10),
               children: [
-                _buildSidebarItem(0, Icons.dashboard, "Dashboard"),
-                _buildSidebarItem(1, Icons.person_add, "Add Member"),
-                _buildSidebarItem(2, Icons.people, "All Members"),
-                _buildSidebarItem(3, Icons.receipt_long, "Digital Register"),
-                _buildSidebarItem(4, Icons.groups, "Add Committee"),
-                _buildSidebarItem(5, Icons.admin_panel_settings, "Add Officer"),
-                _buildSidebarItem(6, Icons.receipt_long, "Reports"),
-                _buildSidebarItem(7, Icons.receipt_long, "Audit Logs"),
-                _buildSidebarItem(
-                  8,
-                  Icons.subscriptions_outlined,
-                  "Billing & Subscription",
-                ),
+                ...tabs.asMap().entries.map((entry) {
+                  return _buildSidebarItem(
+                    entry.key,
+                    entry.value.icon,
+                    entry.value.title,
+                  );
+                }),
                 const Divider(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  child: NeumorphicContainer(
-                    isPressed: false,
-                    padding: EdgeInsets.zero,
-                    child: ListTile(
-                      leading: const Icon(Icons.logout, color: Colors.red),
-                      title: const Text(
-                        "Logout",
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      onTap: _handleLogout,
-                    ),
-                  ),
-                ),
+                _buildLogoutSidebarItem(),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLogoutSidebarItem() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: NeumorphicContainer(
+        isPressed: false,
+        padding: EdgeInsets.zero,
+        child: ListTile(
+          leading: const Icon(Icons.logout, color: Colors.red),
+          title: const Text(
+            "Logout",
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+          ),
+          onTap: _handleLogout,
+        ),
       ),
     );
   }

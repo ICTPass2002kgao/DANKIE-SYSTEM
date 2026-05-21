@@ -33,14 +33,14 @@ class Api {
         defaultTargetPlatform == TargetPlatform.fuchsia;
   }
 
-  // String BACKEND_BASE_URL_DEBUG = "https://dankie.up.railway.app/api";
+  String BACKEND_BASE_URL_DEBUG = "https://dankie.up.railway.app/api";
   // ---String BACKEND_BASE_URL_DEBUG =  CONFIGURATION ---
   // If you are on Android Emulator use 'http://10.0.2.2:8000/api'
   // If you are on Real Device use your PC IP 'http://192.168.x.x:8000/api'
 
-  String BACKEND_BASE_URL_DEBUG = kIsWeb
-      ? 'http://127.0.0.1:8000/api'
-      : 'http://127.0.0.1:8000/api';
+  // String BACKEND_BASE_URL_DEBUG = kIsWeb
+  //     ? 'http://127.0.0.1:8000/api'
+  //     : 'http://127.0.0.1:8000/api';
 
   String BACKEND_NODE_JS = 'https://api-7gbt42tr6q-uc.a.run.app';
   final _auth = FirebaseAuth.instance;
@@ -394,7 +394,10 @@ class Api {
       context: context,
       type: ToastificationType.warning,
       autoCloseDuration: const Duration(seconds: 5),
-      title: Text(title, style: TextStyle(color: Colors.white)),
+      title: Text(
+        title,
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      ),
       description: RichText(
         text: TextSpan(
           text: message,
@@ -406,8 +409,20 @@ class Api {
       icon: const Icon(Icons.check),
       showIcon: true,
       primaryColor: color.scaffoldBackgroundColor,
-      backgroundColor: box_color,
-      borderRadius: BorderRadius.circular(30),
+      backgroundColor: box_color ?? color.scaffoldBackgroundColor,
+      borderRadius: BorderRadius.circular(20),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.15),
+          offset: const Offset(10, 10),
+          blurRadius: 20,
+        ),
+        BoxShadow(
+          color: Colors.white.withOpacity(0.9),
+          offset: const Offset(-10, -10),
+          blurRadius: 20,
+        ),
+      ],
       showProgressBar: true,
       progressBarTheme: ProgressIndicatorThemeData(
         color: color.scaffoldBackgroundColor,
@@ -418,7 +433,7 @@ class Api {
           return OutlinedButton.icon(
             onPressed: onClose,
             icon: const Icon(Icons.close, size: 20, color: Colors.white),
-            label: const Text('Close'),
+            label: const Text('Close', style: TextStyle(color: Colors.white)),
           );
         },
       ),
@@ -434,58 +449,157 @@ class Api {
     String btnConfirm,
     Function() onPressed,
   ) {
+    final theme = Theme.of(context);
+    final bgColor = theme.scaffoldBackgroundColor;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        title: Center(
-          child: Text(
-            title,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(25),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                offset: const Offset(10, 10),
+                blurRadius: 20,
+              ),
+              BoxShadow(
+                color: Colors.white.withOpacity(0.9),
+                offset: const Offset(-10, -10),
+                blurRadius: 20,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 22,
+                  color: theme.primaryColor,
+                  letterSpacing: 1.2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: theme.textTheme.bodyMedium?.color ?? Colors.black87,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  CustomOutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    text: btnCancel,
+                    backgroundColor: bgColor,
+                    foregroundColor: theme.primaryColor,
+                    width: 120,
+                  ),
+                  CustomOutlinedButton(
+                    onPressed: onPressed,
+                    text: btnConfirm,
+                    backgroundColor: theme.primaryColor,
+                    foregroundColor: Colors.white,
+                    width: 120,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        content: Text(message),
-        actions: [
-          CustomOutlinedButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            text: btnCancel,
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            foregroundColor: Theme.of(context).primaryColor,
-            width: 120,
-          ),
-          CustomOutlinedButton(
-            onPressed: onPressed,
-            text: btnConfirm,
-            backgroundColor: Theme.of(context).primaryColor,
-            foregroundColor: Theme.of(context).scaffoldBackgroundColor,
-            width: 120,
-          ),
-        ],
       ),
     );
   }
 
   void showLoading(BuildContext context) {
     final color = Theme.of(context);
+    final bgColor = color.scaffoldBackgroundColor;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          Center(child: CircularProgressIndicator(color: color.primaryColor)),
+      builder: (context) => Center(
+        child: Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                offset: const Offset(8, 8),
+                blurRadius: 15,
+              ),
+              BoxShadow(
+                color: Colors.white.withOpacity(0.9),
+                offset: const Offset(-8, -8),
+                blurRadius: 15,
+              ),
+            ],
+          ),
+          child: Center(
+            child: CircularProgressIndicator(
+              color: color.primaryColor,
+              strokeWidth: 3,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   void showIosLoading(BuildContext context) {
     final color = Theme.of(context);
+    final bgColor = color.scaffoldBackgroundColor;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) =>
-          Center(child: CupertinoActivityIndicator(color: color.primaryColor)),
+      builder: (context) => Center(
+        child: Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            color: bgColor,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                offset: const Offset(8, 8),
+                blurRadius: 15,
+              ),
+              BoxShadow(
+                color: Colors.white.withOpacity(0.9),
+                offset: const Offset(-8, -8),
+                blurRadius: 15,
+              ),
+            ],
+          ),
+          child: Center(
+            child: CupertinoActivityIndicator(
+              color: color.primaryColor,
+              radius: 16,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

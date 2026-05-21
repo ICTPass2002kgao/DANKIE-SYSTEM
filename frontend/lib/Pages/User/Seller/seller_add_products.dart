@@ -67,11 +67,25 @@ class _SellerAddProductTabState extends State<SellerAddProductTab> {
   // ⭐️ NEW: Legal Consent Tracker
   bool _agreedToPopiaAndContract = false;
 
+  // Future for the product list to allow refreshing
+  Future<List<dynamic>>? _productsFuture;
+
   @override
   void initState() {
     super.initState();
     // Pre-fill location with user's stored address on initialization
     locationController.text = widget.userData['address'] ?? '';
+
+    if (widget.isVerified) {
+      _productsFuture = fetchGlobalProducts();
+    }
+  }
+
+  Future<void> _handleRefresh() async {
+    setState(() {
+      _productsFuture = fetchGlobalProducts();
+    });
+    await _productsFuture;
   }
 
   Future<List<dynamic>> fetchGlobalProducts() async {
@@ -731,7 +745,7 @@ class _SellerAddProductTabState extends State<SellerAddProductTab> {
     }
 
     return FutureBuilder<List<dynamic>>(
-      future: fetchGlobalProducts(),
+      future: _productsFuture,
       builder: (ctx, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting)
           return const Center(child: CircularProgressIndicator());
@@ -739,35 +753,51 @@ class _SellerAddProductTabState extends State<SellerAddProductTab> {
           return Center(
             child: Text("Error loading catalog: ${snapshot.error}"),
           );
+
         final products = snapshot.data ?? [];
-        if (products.isEmpty)
-          return const Center(child: Text("Global Catalog is empty."));
+        if (products.isEmpty) {
+          return RefreshIndicator(
+            onRefresh: _handleRefresh,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                SizedBox(height: MediaQuery.of(context).size.height * 0.4),
+                const Center(child: Text("Global Catalog is empty.")),
+              ],
+            ),
+          );
+        }
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isDesktop = constraints.maxWidth > 800;
-            final crossAxisCount = isDesktop ? 3 : 1;
+        return RefreshIndicator(
+          onRefresh: _handleRefresh,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth > 800;
+              final crossAxisCount = isDesktop ? 3 : 1;
 
-            if (isDesktop) {
-              return GridView.builder(
-                padding: const EdgeInsets.all(20),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  childAspectRatio: 3.5,
-                  mainAxisSpacing: 15,
-                  crossAxisSpacing: 15,
-                ),
-                itemCount: products.length,
-                itemBuilder: (c, i) => _buildAddCard(products[i], i),
-              );
-            } else {
-              return ListView.builder(
-                padding: const EdgeInsets.all(20),
-                itemCount: products.length,
-                itemBuilder: (c, i) => _buildAddCard(products[i], i),
-              );
-            }
-          },
+              if (isDesktop) {
+                return GridView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(20),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    childAspectRatio: 3.5,
+                    mainAxisSpacing: 15,
+                    crossAxisSpacing: 15,
+                  ),
+                  itemCount: products.length,
+                  itemBuilder: (c, i) => _buildAddCard(products[i], i),
+                );
+              } else {
+                return ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(20),
+                  itemCount: products.length,
+                  itemBuilder: (c, i) => _buildAddCard(products[i], i),
+                );
+              }
+            },
+          ),
         );
       },
     );

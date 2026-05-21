@@ -51,15 +51,12 @@
     <string>We need microphone access to record video (optional, but often required by the camera plugin even for photos).</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Dankie needs access to your photo library to let you upload profile pictures and share photos within your community.</string>
-    
-    <!-- NEW: Audio and Bluetooth Safety Entitlements -->
     <key>NSAppleMusicUsageDescription</key>
     <string>Dankie needs access to Apple Music to play audio streams seamlessly.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Dankie needs Bluetooth access to manage audio playback via wireless devices.</string>
     <key>NSBluetoothPeripheralUsageDescription</key>
     <string>Dankie needs Bluetooth access to manage audio playback via wireless devices.</string>
-    
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     <key>UIBackgroundModes</key>
@@ -67,25 +64,9 @@
         <string>audio</string>
         <string>fetch</string>
     </array>
-    <key>UILaunchScreens</key>
-    <dict>
-        <key>UILaunchScreenDefinitions</key>
-        <array>
-            <dict>
-                <key>UILaunchScreenIdentifier</key>
-                <string></string>
-                <key>UIImageName</key>
-                <string></string>
-            </dict>
-        </array>
-        <key>UIURLToLaunchScreenAssociations</key>
-        <dict/>
-        <key>UIDefaultLaunchScreen</key>
-        <string></string>
-    </dict>
     <key>UILaunchStoryboardName</key>
     <string>LaunchScreen</string>
-    <key>UIMainStoryboardFile~ipad</key>
+    <key>UIMainStoryboardFile</key>
     <string>Main</string>
     <key>UISupportedInterfaceOrientations</key>
     <array>

@@ -91,7 +91,7 @@ class _MyProfileState extends State<MyProfile> {
 
       final url = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/users/?uid=${user.uid}',
-      ); 
+      );
       final response = await http.get(
         url,
         headers: {
@@ -103,7 +103,7 @@ class _MyProfileState extends State<MyProfile> {
       if (response.statusCode == 200) {
         final List results = json.decode(response.body);
         if (results.isNotEmpty) {
-          final userData = results[0] as Map<String, dynamic>; 
+          final userData = results[0] as Map<String, dynamic>;
           _userUid = userData['id'].toString();
           return userData;
         }
@@ -114,7 +114,7 @@ class _MyProfileState extends State<MyProfile> {
       print("Error fetching profile: $e");
     }
     return null;
-  } 
+  }
 
   Future<void> _updateUserData(Map<String, dynamic> dataToUpdate) async {
     if (_userUid == null) return;
@@ -124,7 +124,7 @@ class _MyProfileState extends State<MyProfile> {
 
     Api().showLoading(context);
 
-    try { 
+    try {
       String? token = await user.getIdToken();
       if (token == null) throw Exception("Session expired");
 
@@ -132,7 +132,7 @@ class _MyProfileState extends State<MyProfile> {
         'PATCH',
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/${user.uid}/'),
       );
- 
+
       request.headers['Authorization'] = 'Bearer $token';
 
       dataToUpdate.forEach((key, value) {
@@ -159,7 +159,7 @@ class _MyProfileState extends State<MyProfile> {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (!mounted) return;
-      Navigator.pop(context); 
+      Navigator.pop(context);
       if (response.statusCode == 200 || response.statusCode == 201) {
         Api().showMessage(
           context,
@@ -182,6 +182,85 @@ class _MyProfileState extends State<MyProfile> {
     } catch (e) {
       if (mounted) Navigator.pop(context);
       Api().showMessage(context, 'Error: $e', 'Error', Colors.red);
+    }
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete Account'),
+        content: Text(
+          'Are you sure you want to completely delete your account? This action cannot be undone and will permanently remove all your data.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Delete',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    Api().showLoading(context);
+
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+
+      String? token = await user.getIdToken();
+      if (token != null) {
+        final url = Uri.parse(
+          '${Api().BACKEND_BASE_URL_DEBUG}/users/${user.uid}/',
+        );
+
+        await http.delete(
+          url,
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Content-Type': 'application/json',
+          },
+        );
+      }
+
+      await user.delete();
+
+      if (mounted) {
+        Navigator.pop(context);
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (e.code == 'requires-recent-login') {
+        Api().showMessage(
+          context,
+          'For security reasons, please log out and log in again before deleting your account.',
+          'Recent Login Required',
+          Colors.red,
+        );
+      } else {
+        Api().showMessage(context, 'Error: ${e.message}', 'Error', Colors.red);
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      Api().showMessage(
+        context,
+        'Error deleting account: $e',
+        'Error',
+        Colors.red,
+      );
     }
   }
 
@@ -432,6 +511,30 @@ class _MyProfileState extends State<MyProfile> {
 
                         SizedBox(height: 30),
                         tryBuildAd(),
+
+                        SizedBox(height: 40),
+                        OutlinedButton(
+                          onPressed: _deleteAccount,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            side: BorderSide(color: Colors.red, width: 2),
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 40,
+                              vertical: 15,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                          child: Text(
+                            "DELETE ACCOUNT",
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: 20),
                       ],
                     ),
                   );

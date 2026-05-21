@@ -12,10 +12,9 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ⭐️ IMPORTED FIREBASE AUTH
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ttact/Components/API.dart';
 
-// ⭐️ IMPORT YOUR DESIGN COMPONENT
 import '../../Components/NeuDesign.dart';
 
 // --- Platform Utilities ---
@@ -30,10 +29,15 @@ class DistrictElderModel {
   final String name;
   final String subLoc;
   final double income;
+
   final double expenseRent;
   final double expenseWine;
+  final double expensePower;
+  final double expenseSundries;
   final double expenseCentral;
+  final double expenseEquipment;
   final double expenseOther;
+
   final double bankedOverride;
   final String remarks;
 
@@ -43,14 +47,23 @@ class DistrictElderModel {
     this.income = 0.0,
     this.expenseRent = 0.0,
     this.expenseWine = 0.0,
+    this.expensePower = 0.0,
+    this.expenseSundries = 0.0,
     this.expenseCentral = 0.0,
+    this.expenseEquipment = 0.0,
     this.expenseOther = 0.0,
     this.bankedOverride = 0.0,
     this.remarks = '',
   });
 
   double get totalExpenses =>
-      expenseRent + expenseWine + expenseCentral + expenseOther;
+      expenseRent +
+      expenseWine +
+      expensePower +
+      expenseSundries +
+      expenseCentral +
+      expenseEquipment +
+      expenseOther;
 
   double get totalBanked =>
       bankedOverride != 0.0 ? bankedOverride : (income - totalExpenses);
@@ -71,9 +84,15 @@ class OverseerEntry {
     required this.elders,
   });
 
-  double get totalIncome => elders.fold(0, (sum, item) => sum + item.income);
-  double get totalBanked =>
-      elders.fold(0, (sum, item) => sum + item.totalBanked);
+  // ⭐️ FIX: Exclude the "D/E Total" sub-rows from the sum to prevent exactly doubling the amounts on the dashboard
+  double get totalIncome => elders
+      .where((e) => e.subLoc != "D/E Total")
+      .fold(0, (sum, item) => sum + item.income);
+
+  // ⭐️ FIX: Exclude the "D/E Total" sub-rows here as well
+  double get totalBanked => elders
+      .where((e) => e.subLoc != "D/E Total")
+      .fold(0, (sum, item) => sum + item.totalBanked);
 }
 
 // --- Main Widget ---
@@ -152,7 +171,10 @@ class _OverseerBalancesheetGlobalState
     _loadLogoBytes();
   }
 
-  // --- ⭐️ NEUMORPHIC TEXT FIELD HELPER ---
+  int monthStringToInt(String m) {
+    return _months.indexOf(m);
+  }
+
   Widget _buildNeumorphicTextField({
     required TextEditingController controller,
     required String placeholder,
@@ -164,7 +186,7 @@ class _OverseerBalancesheetGlobalState
   }) {
     final theme = Theme.of(context);
     return NeumorphicContainer(
-      isPressed: true, // Pressed in specifically for input fields
+      isPressed: true,
       color: baseColor,
       borderRadius: 12,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -189,55 +211,48 @@ class _OverseerBalancesheetGlobalState
     );
   }
 
-  // --- 1. DATA FETCHING (SAFE PARSE VERSION) ---
   Future<void> _fetchDataOptimized() async {
     setState(() => _isLoading = true);
     try {
-      // ⭐️ ADDED: Fetch Firebase Token and construct headers
       String? token = await FirebaseAuth.instance.currentUser?.getIdToken();
       Map<String, String> headers = {};
       if (token != null) {
         headers['Authorization'] = 'Bearer $token';
       }
 
-      // Build Query Parameters
       String queryParams = "";
       if (_selectedProvince != 'All')
         queryParams += "&province=$_selectedProvince";
-      if (_selectedMonth != 'All') queryParams += "&month=$_selectedMonth";
-      if (_selectedYear != 'All') queryParams += "&year=$_selectedYear";
 
-      // Parallel Fetching
       final results = await Future.wait([
         http.get(
           Uri.parse(
             '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?limit=3000$queryParams',
           ),
-          headers: headers, // ⭐️ ADDED HEADERS
-        ), // Index 0
+          headers: headers,
+        ),
         http.get(
           Uri.parse(
             '${Api().BACKEND_BASE_URL_DEBUG}/districts/?limit=3000$queryParams',
           ),
-          headers: headers, // ⭐️ ADDED HEADERS
-        ), // Index 1
+          headers: headers,
+        ),
         http.get(
           Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/?limit=10000'),
-          headers: headers, // ⭐️ ADDED HEADERS
-        ), // Index 2
+          headers: headers,
+        ),
         http.get(
           Uri.parse(
             '${Api().BACKEND_BASE_URL_DEBUG}/overseer_expenses_reports/?limit=5000$queryParams',
           ),
-          headers: headers, // ⭐️ ADDED HEADERS
-        ), // Index 3
+          headers: headers,
+        ),
       ]);
 
       if (results[0].statusCode != 200) {
         throw Exception("Failed to fetch Overseers");
       }
 
-      // Decode Data
       final List overseerDocs = json.decode(results[0].body);
       final List districtDocs = results[1].statusCode == 200
           ? json.decode(results[1].body)
@@ -249,18 +264,15 @@ class _OverseerBalancesheetGlobalState
           ? json.decode(results[3].body)
           : [];
 
-      // --- ⭐️ HELPER: Safe Parse (Fixes the crash) ---
       double safeParse(dynamic val) {
         if (val == null) return 0.0;
         if (val is num) return val.toDouble();
         if (val is String) {
-          // If it's a string like "2400", parse it safely
           return double.tryParse(val) ?? 0.0;
         }
         return 0.0;
       }
 
-      // A. Organize Districts
       Map<String, List<dynamic>> districtsByOverseer = {};
       for (var dist in districtDocs) {
         final oUid = dist['overseer_uid'] ?? dist['overseerUid'];
@@ -271,7 +283,6 @@ class _OverseerBalancesheetGlobalState
         }
       }
 
-      // B. Organize Users
       Map<String, List<dynamic>> usersByOverseer = {};
       for (var userData in userDocs) {
         final uid = userData['overseer_uid'] ?? userData['overseerUid'];
@@ -282,14 +293,30 @@ class _OverseerBalancesheetGlobalState
         }
       }
 
-      // C. Organize Expenses
+      Map<String, dynamic> uniqueExpDocs = {};
+      for (var data in expenseDocs) {
+        String oUid = data['overseer_uid'] ?? data['overseerUid'] ?? '';
+        String dName =
+            data['district_elder_name'] ??
+            data['districtElderName'] ??
+            'Direct';
+        String cName =
+            data['community_name'] ?? data['communityName'] ?? 'Main';
+        String year = (data['year'] ?? '').toString();
+        String month = (data['month'] ?? '').toString();
+        String uniqueKey = "${oUid}_${dName}_${cName}_${year}_${month}";
+        uniqueExpDocs[uniqueKey] = data;
+      }
+
       Map<String, Map<String, Map<String, Map<String, double>>>> expensesMap =
           {};
+      int selectedMonthInt = monthStringToInt(_selectedMonth);
 
-      for (var data in expenseDocs) {
+      for (var data in uniqueExpDocs.values) {
         if (_selectedMonth != 'All') {
-          final rMonth = (data['month'] ?? '').toString().trim();
-          if (rMonth.toLowerCase() != _selectedMonth.toLowerCase()) continue;
+          final rMonth =
+              int.tryParse((data['month'] ?? '').toString().trim()) ?? 0;
+          if (rMonth != selectedMonthInt) continue;
         }
         if (_selectedYear != 'All') {
           final rYear = (data['year'] ?? '').toString().trim();
@@ -314,7 +341,10 @@ class _OverseerBalancesheetGlobalState
             'income': 0.0,
             'rent': 0.0,
             'wine': 0.0,
+            'power': 0.0,
+            'sundries': 0.0,
             'central': 0.0,
+            'equipment': 0.0,
             'other': 0.0,
             'banked': 0.0,
           };
@@ -322,7 +352,6 @@ class _OverseerBalancesheetGlobalState
 
         var current = expensesMap[oUid]![dName]![cName]!;
 
-        // ⭐️ APPLY safeParse HERE
         current['income'] =
             current['income']! +
             safeParse(data['total_income'] ?? data['totalIncome']);
@@ -332,6 +361,12 @@ class _OverseerBalancesheetGlobalState
         current['wine'] =
             current['wine']! +
             safeParse(data['expense_wine'] ?? data['expenseWine']);
+        current['power'] =
+            current['power']! + safeParse(data['expense_power'] ?? 0.0);
+        current['sundries'] =
+            current['sundries']! + safeParse(data['expense_sundries'] ?? 0.0);
+        current['equipment'] =
+            current['equipment']! + safeParse(data['expense_equipment'] ?? 0.0);
         current['central'] =
             current['central']! +
             safeParse(data['expense_central'] ?? data['expenseCentral']);
@@ -345,7 +380,6 @@ class _OverseerBalancesheetGlobalState
 
       List<OverseerEntry> tempOverseers = [];
 
-      // D. Process Each Overseer
       for (var data in overseerDocs) {
         final String uid = data['uid'] ?? '';
         final String name =
@@ -361,7 +395,6 @@ class _OverseerBalancesheetGlobalState
 
         Map<String, Map<String, double>> aggregatedIncome = {};
 
-        // 1. Initialize Districts
         for (var dist in myDistricts) {
           String dName = (dist['district_elder_name'] ?? '').trim();
           if (dName.isEmpty) continue;
@@ -377,38 +410,37 @@ class _OverseerBalancesheetGlobalState
           }
         }
 
-        // 2. Add User Income (Live)
-        for (var userData in myUsers) {
-          String dName =
-              (userData['district_elder_name'] ??
-                      userData['districtElderName'] ??
-                      '')
-                  .trim();
-          if (dName.isEmpty) dName = "Direct";
+        if (_selectedMonth == 'All') {
+          for (var userData in myUsers) {
+            String dName =
+                (userData['district_elder_name'] ??
+                        userData['districtElderName'] ??
+                        '')
+                    .trim();
+            if (dName.isEmpty) dName = "Direct";
 
-          String cName =
-              (userData['community_name'] ??
-                      userData['communityName'] ??
-                      'Main')
-                  .trim();
+            String cName =
+                (userData['community_name'] ??
+                        userData['communityName'] ??
+                        'Main')
+                    .trim();
 
-          // ⭐️ CRITICAL FIX: safeParse all inputs
-          final double w1 = safeParse(userData['week1']);
-          final double w2 = safeParse(userData['week2']);
-          final double w3 = safeParse(userData['week3']);
-          final double w4 = safeParse(userData['week4']);
-          final double total = w1 + w2 + w3 + w4;
+            final double w1 = safeParse(userData['week1']);
+            final double w2 = safeParse(userData['week2']);
+            final double w3 = safeParse(userData['week3']);
+            final double w4 = safeParse(userData['week4']);
+            final double total = w1 + w2 + w3 + w4;
 
-          if (!aggregatedIncome.containsKey(dName))
-            aggregatedIncome[dName] = {};
-          if (!aggregatedIncome[dName]!.containsKey(cName)) {
-            aggregatedIncome[dName]![cName] = 0.0;
+            if (!aggregatedIncome.containsKey(dName))
+              aggregatedIncome[dName] = {};
+            if (!aggregatedIncome[dName]!.containsKey(cName)) {
+              aggregatedIncome[dName]![cName] = 0.0;
+            }
+            aggregatedIncome[dName]![cName] =
+                aggregatedIncome[dName]![cName]! + total;
           }
-          aggregatedIncome[dName]![cName] =
-              aggregatedIncome[dName]![cName]! + total;
         }
 
-        // 3. Add Expense Data
         if (expensesMap.containsKey(uid)) {
           expensesMap[uid]!.forEach((dName, comms) {
             if (!aggregatedIncome.containsKey(dName))
@@ -421,7 +453,6 @@ class _OverseerBalancesheetGlobalState
           });
         }
 
-        // 4. Build Models
         List<DistrictElderModel> elderEntries = [];
         aggregatedIncome.forEach((elderName, communities) {
           bool isFirst = true;
@@ -436,7 +467,13 @@ class _OverseerBalancesheetGlobalState
           }
 
           communities.forEach((communityName, liveIncome) {
-            double exRent = 0, exWine = 0, exCentral = 0, exOther = 0;
+            double exRent = 0,
+                exWine = 0,
+                exPower = 0,
+                exSundries = 0,
+                exCentral = 0,
+                exEquipment = 0,
+                exOther = 0;
             double archivedIncome = 0, archivedBanked = 0;
 
             if (expensesMap.containsKey(uid) &&
@@ -445,7 +482,10 @@ class _OverseerBalancesheetGlobalState
               var exData = expensesMap[uid]![elderName]![communityName]!;
               exRent = exData['rent']!;
               exWine = exData['wine']!;
+              exPower = exData['power']!;
+              exSundries = exData['sundries']!;
               exCentral = exData['central']!;
+              exEquipment = exData['equipment']!;
               exOther = exData['other']!;
               archivedIncome = exData['income']!;
               archivedBanked = exData['banked']!;
@@ -459,7 +499,10 @@ class _OverseerBalancesheetGlobalState
               income: combinedIncome,
               expenseRent: exRent,
               expenseWine: exWine,
+              expensePower: exPower,
+              expenseSundries: exSundries,
               expenseCentral: exCentral,
+              expenseEquipment: exEquipment,
               expenseOther: exOther,
               bankedOverride: archivedBanked > 0 ? archivedBanked : 0.0,
             );
@@ -552,7 +595,6 @@ class _OverseerBalancesheetGlobalState
     }
   }
 
-  // --- 2. GENERATE PDF (Unchanged logic) ---
   Future<void> _generatePdfReport() async {
     try {
       isIOSPlatform
@@ -593,19 +635,21 @@ class _OverseerBalancesheetGlobalState
           String f(double v) => v == 0 ? "-" : currencyFormat.format(v);
           tableData.add([
             isFirst ? o.overseerName : "",
-            isFirst ? o.code : "",
             isFirst ? o.region : "",
             e.name,
             e.subLoc,
             f(e.income),
             f(e.expenseRent),
             f(e.expenseWine),
+            f(e.expensePower),
+            f(e.expenseSundries),
             f(e.expenseCentral),
-            f(e.expenseOther),
+            f(e.expenseEquipment),
+            f(e.totalExpenses),
             f(e.totalBanked),
           ]);
         }
-        tableData.add(["", "", "", "", "", "", "", "", "", "", ""]);
+        tableData.add(["", "", "", "", "", "", "", "", "", "", "", "", ""]);
       }
 
       pw.Widget buildPdfPieChart(String title, List<PieData> data) {
@@ -905,46 +949,43 @@ class _OverseerBalancesheetGlobalState
               border: pw.TableBorder.all(width: 0.5, color: PdfColors.grey400),
               headers: [
                 'Overseer',
-                'Code',
                 'Region',
                 'District',
                 'Community',
                 'Income',
                 'Rent',
                 'Wine',
+                'Power',
+                'Sundries',
                 'Central',
-                'Other',
+                'Equip',
+                'Exp Total',
                 'Banked',
               ],
               data: tableData,
               headerStyle: pw.TextStyle(
                 font: boldFont,
-                fontSize: 7,
+                fontSize: 6.5,
                 color: PdfColors.white,
               ),
               headerDecoration: const pw.BoxDecoration(
                 color: PdfColors.blue900,
               ),
-              cellStyle: pw.TextStyle(font: font, fontSize: 7),
+              cellStyle: pw.TextStyle(font: font, fontSize: 6.5),
               cellAlignments: {
                 0: pw.Alignment.centerLeft,
                 1: pw.Alignment.centerLeft,
                 2: pw.Alignment.centerLeft,
                 3: pw.Alignment.centerLeft,
-                4: pw.Alignment.centerLeft,
+                4: pw.Alignment.centerRight,
                 5: pw.Alignment.centerRight,
                 6: pw.Alignment.centerRight,
                 7: pw.Alignment.centerRight,
                 8: pw.Alignment.centerRight,
                 9: pw.Alignment.centerRight,
                 10: pw.Alignment.centerRight,
-              },
-              columnWidths: {
-                0: const pw.FlexColumnWidth(2.5),
-                1: const pw.FlexColumnWidth(1.0),
-                2: const pw.FlexColumnWidth(1.5),
-                3: const pw.FlexColumnWidth(2.0),
-                4: const pw.FlexColumnWidth(2.0),
+                11: pw.Alignment.centerRight,
+                12: pw.Alignment.centerRight,
               },
             ),
           ],
@@ -960,7 +1001,6 @@ class _OverseerBalancesheetGlobalState
     }
   }
 
-  // --- 3. HELPER CALCULATIONS ---
   Map<String, Map<String, double>> _getRegionStats() {
     Map<String, Map<String, double>> stats = {};
     for (var o in _filteredOverseers) {
@@ -1004,25 +1044,21 @@ class _OverseerBalancesheetGlobalState
     return active.take(count).toList();
   }
 
-  // --- 4. UI WIDGETS ---
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isMobile = MediaQuery.of(context).size.width < 900;
 
-    // ⭐️ Calculate Neumorphic Base Color (same as Login Page)
     final Color neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.08),
       theme.scaffoldBackgroundColor,
     );
 
     return Scaffold(
-      backgroundColor: neumoBaseColor, // ⭐️ Apply base color
+      backgroundColor: neumoBaseColor,
       body: Column(
         children: [
           _buildControls(isMobile, neumoBaseColor),
-          // Removed standard divider, Neumorphism uses spacing/shadows
           SizedBox(height: 5),
           Expanded(
             child: _isLoading
@@ -1067,7 +1103,6 @@ class _OverseerBalancesheetGlobalState
                                 ),
                               ),
                               const SizedBox(height: 15),
-                              // ⭐️ Wrap Table in Neumorphic
                               NeumorphicContainer(
                                 color: neumoBaseColor,
                                 borderRadius: 15,
@@ -1088,10 +1123,9 @@ class _OverseerBalancesheetGlobalState
   }
 
   Widget _buildControls(bool isMobile, Color baseColor) {
-    // ⭐️ Wrap controls in Neumorphic
     return NeumorphicContainer(
       color: baseColor,
-      borderRadius: 0, // Top bar usually square or minimal radius at bottom
+      borderRadius: 0,
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -1172,8 +1206,6 @@ class _OverseerBalancesheetGlobalState
             ],
           ),
           const SizedBox(height: 15),
-
-          // ⭐️ Neumorphic Search Bar
           _buildNeumorphicTextField(
             context: context,
             baseColor: baseColor,
@@ -1195,7 +1227,6 @@ class _OverseerBalancesheetGlobalState
               _filterData();
             },
           ),
-
           if (isMobile) ...[
             const SizedBox(height: 15),
             GestureDetector(
@@ -1228,7 +1259,6 @@ class _OverseerBalancesheetGlobalState
     );
   }
 
-  // ⭐️ Helper for Neumorphic Dropdown
   Widget _buildNeumorphicDropdown<T>({
     required Color baseColor,
     required String label,
@@ -1247,7 +1277,7 @@ class _OverseerBalancesheetGlobalState
           ),
         ),
         NeumorphicContainer(
-          isPressed: false, // Or true if you want the "inset" look
+          isPressed: false,
           color: baseColor,
           borderRadius: 8,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
@@ -1255,7 +1285,7 @@ class _OverseerBalancesheetGlobalState
             child: DropdownButton<T>(
               value: value,
               isDense: true,
-              dropdownColor: baseColor, // Match dropdown bg
+              dropdownColor: baseColor,
               style: TextStyle(
                 color: Theme.of(context).textTheme.bodyMedium?.color,
                 fontWeight: FontWeight.w500,
@@ -1287,7 +1317,6 @@ class _OverseerBalancesheetGlobalState
       (sum, o) => sum + o.totalBanked,
     );
 
-    // ⭐️ Wrap dashboard in Neumorphic
     return NeumorphicContainer(
       color: baseColor,
       borderRadius: 15,
@@ -1330,7 +1359,6 @@ class _OverseerBalancesheetGlobalState
           Container(
             width: isMobile ? double.infinity : 600,
             child: Table(
-              // Removing standard border for cleaner neumo look, or keeping minimal
               border: TableBorder.all(color: Colors.grey.withOpacity(0.2)),
               columnWidths: const {0: FlexColumnWidth(2)},
               children: [
@@ -1408,7 +1436,6 @@ class _OverseerBalancesheetGlobalState
               if (tops.isEmpty || tops.every((t) => t.totalIncome == 0))
                 return const SizedBox();
 
-              // ⭐️ Inner cards also Neumorphic
               return NeumorphicContainer(
                 color: baseColor,
                 borderRadius: 12,
@@ -1484,7 +1511,6 @@ class _OverseerBalancesheetGlobalState
       children: [
         Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 5),
-        // Simple container for these sub-tables inside the main neumo card
         Container(
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.withOpacity(0.2)),
@@ -1551,7 +1577,6 @@ class _OverseerBalancesheetGlobalState
             .toList(),
       );
     } else {
-      // ⭐️ Wrap entire chart row
       return NeumorphicContainer(
         color: baseColor,
         borderRadius: 15,
@@ -1622,25 +1647,26 @@ class _OverseerBalancesheetGlobalState
       child: Table(
         border: TableBorder.all(color: Colors.grey.shade300, width: 0.5),
         columnWidths: const {
-          0: FixedColumnWidth(70), // Overseer
-          1: FixedColumnWidth(30), // Code
-          2: FixedColumnWidth(60), // Region
-          3: FixedColumnWidth(140), // District
-          4: FixedColumnWidth(130), // Details
-          5: FixedColumnWidth(120), // Income
-          6: FixedColumnWidth(80), // Rent
-          7: FixedColumnWidth(80), // Wine
-          8: FixedColumnWidth(80), // Central
-          9: FixedColumnWidth(60), // Seat
-          10: FixedColumnWidth(80), // Other
-          11: FixedColumnWidth(90), // Exp Total
-          12: FixedColumnWidth(90), // Banked
-          13: FixedColumnWidth(100), // Remarks
+          0: FixedColumnWidth(70),
+          1: FixedColumnWidth(30),
+          2: FixedColumnWidth(60),
+          3: FixedColumnWidth(140),
+          4: FixedColumnWidth(130),
+          5: FixedColumnWidth(100),
+          6: FixedColumnWidth(70),
+          7: FixedColumnWidth(70),
+          8: FixedColumnWidth(70),
+          9: FixedColumnWidth(70),
+          10: FixedColumnWidth(70),
+          11: FixedColumnWidth(70),
+          12: FixedColumnWidth(60),
+          13: FixedColumnWidth(90),
+          14: FixedColumnWidth(90),
+          15: FixedColumnWidth(100),
         },
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           TableRow(
-            // Use primary color with opacity instead of hardcoded hex if possible
             decoration: BoxDecoration(color: Theme.of(context).primaryColor),
             children:
                 [
@@ -1648,25 +1674,27 @@ class _OverseerBalancesheetGlobalState
                       'CODE',
                       'REGION',
                       'DISTRICT',
-                      'DETAILS',
+                      'COMMUNITY',
                       'INCOME',
                       'RENT',
                       'WINE',
+                      'POWER',
+                      'SUNDRIES',
                       'CENTRAL',
-                      'SEAT',
+                      'EQUIP',
                       'OTHER',
-                      'EXP',
+                      'EXP TOTAL',
                       'BANKED',
                       'REMARKS',
                     ]
                     .map(
                       (t) => Padding(
-                        padding: const EdgeInsets.all(10.0),
+                        padding: const EdgeInsets.all(8.0),
                         child: Text(
                           t,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 10,
+                            fontSize: 9,
                             color: Colors.white,
                           ),
                           textAlign: TextAlign.center,
@@ -1687,7 +1715,7 @@ class _OverseerBalancesheetGlobalState
                 decoration: BoxDecoration(
                   color: isTotal
                       ? Theme.of(context).primaryColor.withOpacity(0.05)
-                      : Colors.transparent, // Transparent to show Neumo Base
+                      : Colors.transparent,
                 ),
                 children: [
                   _DataCell(isFirst ? o.overseerName : "", isBold: true),
@@ -1702,11 +1730,19 @@ class _OverseerBalancesheetGlobalState
                   ),
                   _DataCell(valOrDash(e.expenseRent), align: TextAlign.right),
                   _DataCell(valOrDash(e.expenseWine), align: TextAlign.right),
+                  _DataCell(valOrDash(e.expensePower), align: TextAlign.right),
+                  _DataCell(
+                    valOrDash(e.expenseSundries),
+                    align: TextAlign.right,
+                  ),
                   _DataCell(
                     valOrDash(e.expenseCentral),
                     align: TextAlign.right,
                   ),
-                  _DataCell("-", align: TextAlign.right),
+                  _DataCell(
+                    valOrDash(e.expenseEquipment),
+                    align: TextAlign.right,
+                  ),
                   _DataCell(valOrDash(e.expenseOther), align: TextAlign.right),
                   _DataCell(
                     valOrDash(e.totalExpenses),
@@ -1789,7 +1825,7 @@ class _DataCell extends StatelessWidget {
         text,
         style: TextStyle(
           fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-          fontSize: 11,
+          fontSize: 10,
         ),
         textAlign: align,
       ),

@@ -475,7 +475,7 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
   void _handlePaymentSuccess(String orderId) {
     if (!mounted) return;
     CartHelper.clearCart();
-    Navigator.popUntil(context, (route) => route.isFirst);
+    Navigator.pushReplacementNamed(context, '/orders');
 
     Api().showMessage(
       context,

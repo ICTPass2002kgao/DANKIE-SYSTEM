@@ -1,65 +1,91 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+// ignore_for_file: avoid_print
+
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ttact/Components/API.dart';
 
 class OverseerAuditLogs {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
   static Future<void> logAction({
-    required String action,           // e.g., "ADD_COMMITTEE", "DELETE_COMMITTEE", "UPDATE_STATUS"
-    required String details,          // Description: "Added John Doe as Treasurer"
-    String? referenceId,              // ID of the doc being changed
+    required String action,
+    required String details,
+    String? referenceId,
+
+    // --- CONTEXT: THE ACTOR ---
+    required String? committeeMemberName,
+    required String? committeeMemberRole,
+    required String? universityCommitteeFace,
+
+    // --- CONTEXT: THE AREA/UNIVERSITY ---
+    String? universityName, // Maps to 'overseerName' or 'university_name'
+    String? universityLogo, // Maps to 'university_logo'
+
+    // --- CONTEXT: THE TARGET ---
+    String? studentName,
+    String? targetMemberName,
+    String? targetMemberRole,
     
-    // --- CONTEXT: THE UNIVERSITY ---
-      String? overseerName, 
-
-    // --- CONTEXT: THE ACTOR (Who is currently logged in) ---
-    required String? committeeMemberName, // The person who clicked the button
-    required String? committeeMemberRole, // Their Portfolio (e.g., Chairperson) 
-
-    // --- CONTEXT: THE TARGET (Who is being affected) ---
-    String? memberName,              // If touching an Application
-    String? targetMemberName,         // If Adding/Deleting a Committee Member
-    String? targetMemberRole,         // The role of the person being added/deleted
-    String? universityCommitteeFace, // Their Face URL
+    // --- CONTEXT: EXPENSES (Merged into details if model doesn't support them explicitly) ---
     String? expenseName,
     String? expenseAmount,
   }) async {
     final user = _auth.currentUser;
+    if (user == null) return;
+
+    // ⭐️ Merge expense details into the main details field if they exist
+    String finalDetails = details;
+    if (expenseName != null) finalDetails += " | Expense: $expenseName";
+    if (expenseAmount != null) finalDetails += " | Amount: R$expenseAmount";
+
+    final Map<String, dynamic> payload = {
+      'timestamp': DateTime.now().toIso8601String(),
+      'device_time': DateTime.now().toIso8601String(),
+
+      // ACCOUNT INFO
+      'uid': user.uid,
+      'branch_email': user.email ?? 'Unknown',
+
+      // ACTION
+      'action': action,
+      'details': finalDetails,
+
+      // THE ACTOR
+      'actor_name': committeeMemberName ?? 'Unknown',
+      'actor_role': committeeMemberRole ?? 'Unknown',
+      'actor_face_url': universityCommitteeFace ?? '',
+
+      // ORGANIZATION
+      'university_name': universityName ?? 'N/A',
+      'university_logo': universityLogo ?? '',
+
+      // THE TARGET
+      'student_name': studentName ?? 'N/A',
+      'target_member_name': targetMemberName ?? '',
+      'target_member_role': targetMemberRole ?? '',
+    };
 
     try {
-      await _firestore.collection('audit_logs').doc(user?.uid).collection('logs').add({
-        // TIMING
-        'timestamp': FieldValue.serverTimestamp(),
-        'deviceTime': DateTime.now().toIso8601String(),
+      final String? token = await user.getIdToken();
+      final uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/audit_logs/');
 
-        // ACCOUNT INFO (The Branch Account)
-        'uid': user?.uid ?? 'System/Guest',
-        'overseerEmail': user?.email ?? 'Unknown',
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token', // ⭐️ Mandatory: Secure your logs
+        },
+        body: json.encode(payload),
+      );
 
-        // ACTION
-        'action': action,
-        'details': details,
-        'referenceId': referenceId ?? 'N/A',
-
-        // THE ACTOR (The specific human verified via Face ID)
-        'actorName': committeeMemberName ?? 'Unknown Member',
-        'actorRole': committeeMemberRole ?? 'Unknown Portfolio',
-        'actorFaceUrl': universityCommitteeFace ?? 'N/A',
-        'expenseName': expenseName ?? 'N/A',
-        'expenseAmount': expenseAmount ?? 'N/A',
-
-        // ORGANIZATION
-        'overseerName': overseerName ?? 'N/A', 
-
-        // THE TARGET (Specifics of what was changed)
-        'memberName': memberName ?? 'N/A',       // For Student Apps
-        'targetMemberName': targetMemberName ?? 'N/A', // For Committee Mgmt
-        'targetMemberRole': targetMemberRole ?? 'N/A', // For Committee Mgmt
-      });
-      print("Audit Logged: $action - $details");
+      if (response.statusCode == 201) {
+        print("✅ Audit Logged to Django: $action");
+      } else {
+        print("❌ Failed to log audit: ${response.statusCode} - ${response.body}");
+      }
     } catch (e) {
-      print("Failed to write audit log: $e");
+      print("❌ Exception logging audit: $e");
     }
   }
 }
