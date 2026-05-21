@@ -243,6 +243,7 @@ class OverseerCommitteeMember(models.Model):
     email = models.EmailField(blank=True, verbose_name="Email") 
     accepted_ts_and_cs = models.BooleanField(default=False)
     portfolio = models.CharField(max_length=255, verbose_name="Portfolio")
+    signature_base64 = models.TextField(blank=True, null=True, verbose_name="Signature Data")
     face_url = models.TextField(blank=True, verbose_name="Face URL")
     added_at = models.TextField(blank=True, verbose_name="Added At")
 
