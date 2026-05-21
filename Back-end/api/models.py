@@ -305,10 +305,17 @@ class OverseerExpenseReport(models.Model):
     district_elder_name = models.CharField(max_length=255, verbose_name="District Elder Name")
     community_name = models.CharField(max_length=255, verbose_name="Community Name")
     province = models.CharField(max_length=255, verbose_name="Province")
+    
+    # ⭐️ Added the missing fields
     expense_central = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Central")
     expense_other = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Other")
     expense_rent = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Rent")
     expense_mine = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Mine")
+    expense_wine = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Wine")
+    expense_power = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Power")
+    expense_sundries = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Sundries")
+    expense_equipment = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Expense Equipment")
+    
     total_banked = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Total Banked")
     total_expenses = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Total Expenses")
     total_income = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, verbose_name="Total Income")
