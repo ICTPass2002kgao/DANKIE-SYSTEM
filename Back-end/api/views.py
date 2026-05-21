@@ -1285,21 +1285,26 @@ class UserUniversityApplicationViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = UserUniversityApplication.objects.all()
     serializer_class = UserUniversityApplicationSerializer
  
+# In your views.py
+
 class AuditLogViewSet(viewsets.ModelViewSet): 
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
-    queryset = AuditLog.objects.all()
+    queryset = AuditLog.objects.all().order_by('-timestamp') # Default ordering
     serializer_class = AuditLogSerializer
-    filter_backends = [filters.OrderingFilter, filters.SearchFilter]
-    ordering_fields = ['timestamp', 'action']
-    ordering = ['-timestamp']
     
     def get_queryset(self):
-        queryset = super().get_queryset()
-        timestamp = self.request.query_params.get('timestamp')
-        if timestamp: queryset = queryset.filter(timestamp=timestamp)
+        # Start with all logs, ordered by newest first
+        queryset = AuditLog.objects.all().order_by('-timestamp')
+        
+        # ⭐️ FIX: Explicitly get the UID from the request parameters
+        uid = self.request.query_params.get('uid')
+        
+        # ⭐️ FIX: Apply the filter
+        if uid:
+            queryset = queryset.filter(uid=uid)
+            
         return queryset
-    
 class ContributionHistoryViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
