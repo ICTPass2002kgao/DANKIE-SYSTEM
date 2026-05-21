@@ -572,6 +572,7 @@ class EventDiary(models.Model):
     day = models.CharField(max_length=255, verbose_name="Day (e.g., 18 or 11 - 12)")
     month = models.CharField(max_length=255, blank=True, verbose_name="Month (e.g., Apr)")
     year = models.IntegerField(verbose_name="Year")
+    poster_url = models.TextField(blank=True, verbose_name="Poster URL")    
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
