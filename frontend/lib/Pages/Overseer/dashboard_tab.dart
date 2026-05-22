@@ -552,22 +552,12 @@ class _DashboardTabState extends State<DashboardTab>
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return 0;
     try {
-      final profileUrl = Uri.parse(
-        '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?email=${FirebaseAuth.instance.currentUser?.email}',
+      final distUrl = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/districts/?overseer_uid=$uid',
       );
-      final profileResp = await http.get(profileUrl);
-      if (profileResp.statusCode == 200) {
-        final List data = json.decode(profileResp.body);
-        if (data.isNotEmpty) {
-          final overseerId = data[0]['id'];
-          final distUrl = Uri.parse(
-            '${Api().BACKEND_BASE_URL_DEBUG}/districts/?overseer=$overseerId',
-          );
-          final distResp = await http.get(distUrl);
-          if (distResp.statusCode == 200) {
-            return (json.decode(distResp.body) as List).length;
-          }
-        }
+      final distResp = await http.get(distUrl);
+      if (distResp.statusCode == 200) {
+        return (json.decode(distResp.body) as List).length;
       }
     } catch (e) {
       print(e);
@@ -579,22 +569,12 @@ class _DashboardTabState extends State<DashboardTab>
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return 0;
     try {
-      final profileUrl = Uri.parse(
-        '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?email=${FirebaseAuth.instance.currentUser?.email}',
+      final commUrl = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/communities/?district__overseer_uid=$uid',
       );
-      final profileResp = await http.get(profileUrl);
-      if (profileResp.statusCode == 200) {
-        final List data = json.decode(profileResp.body);
-        if (data.isNotEmpty) {
-          final overseerId = data[0]['id'];
-          final commUrl = Uri.parse(
-            '${Api().BACKEND_BASE_URL_DEBUG}/communities/?district__overseer=$overseerId',
-          );
-          final commResp = await http.get(commUrl);
-          if (commResp.statusCode == 200) {
-            return (json.decode(commResp.body) as List).length;
-          }
-        }
+      final commResp = await http.get(commUrl);
+      if (commResp.statusCode == 200) {
+        return (json.decode(commResp.body) as List).length;
       }
     } catch (e) {
       print(e);

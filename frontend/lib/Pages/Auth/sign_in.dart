@@ -140,7 +140,7 @@ class _Login_PageState extends State<Login_Page>
       var user = userCredential.user;
       if (user == null) throw Exception("Auth failed");
       var uid = user.uid;
-      var email = user.email ?? txtEmail.text.trim();
+      var email = user.email ?? txtEmail.text.trim().toLowerCase();
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('authToken', uid);
@@ -164,6 +164,7 @@ class _Login_PageState extends State<Login_Page>
                 'name': m['full_name'] ?? 'Unknown Member',
                 'portfolio': m['portfolio'] ?? 'Committee',
                 'faceUrl': m['face_url'] ?? '',
+                'email': m['email'] ?? email,
               },
             )
             .toList();
@@ -194,6 +195,7 @@ class _Login_PageState extends State<Login_Page>
                 'name': m['full_name'] ?? 'Unknown Member',
                 'portfolio': m['portfolio'] ?? 'Branch Staff',
                 'faceUrl': m['face_url'] ?? '',
+                'email': m['email'] ?? email,
               },
             )
             .toList();
@@ -207,7 +209,7 @@ class _Login_PageState extends State<Login_Page>
         return;
       }
 
-      // CHECK ADMIN STAFF (UPDATED TO FETCH ALL STAFF MATCHING THE LOGIN)
+      // CHECK ADMIN STAFF
       var staffList = await _fetchListFromDjango('staff', 'uid=$uid');
       if (staffList.isNotEmpty) {
         potentialIdentities = staffList
@@ -216,6 +218,7 @@ class _Login_PageState extends State<Login_Page>
                 'name': m['full_name'] ?? 'Admin',
                 'portfolio': m['portfolio'] ?? 'Management',
                 'faceUrl': m['face_url'] ?? '',
+                'email':m['personal_email'] ?? email,
               },
             )
             .toList();
@@ -241,7 +244,7 @@ class _Login_PageState extends State<Login_Page>
         return;
       }
 
-      throw Exception("No associated profile found.");
+      throw Exception("No associated profile found in database.");
     } catch (e) {
       if (context.mounted) Navigator.pop(context);
       Api().showMessage(context, e.toString(), 'Login Error', Colors.red);

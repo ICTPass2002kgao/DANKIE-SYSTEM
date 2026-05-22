@@ -194,7 +194,7 @@ class _AdminVerifySellerState extends State<AdminVerifySeller> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context);  
+      Navigator.pop(context);
       await Printing.layoutPdf(
         onLayout: (PdfPageFormat format) async => pdf.save(),
         name: 'Dankie_Seller_Contract_${user['name']}.pdf',
@@ -572,8 +572,6 @@ class _AdminVerifySellerState extends State<AdminVerifySeller> {
       );
       return;
     }
-
-   
   }
 
   void _showSellerDetailsSheet(
@@ -954,9 +952,7 @@ class _AdminVerifySellerState extends State<AdminVerifySeller> {
                   backgroundImage: (data['profile_url'] != null)
                       ? NetworkImage(_getSecureImageUrl(data['profile_url']))
                       : null,
-                  child: (data['profile_url'] == null)
-                      ? Icon(Icons.person)
-                      : null,
+                  child: Icon(Icons.person),
                 ),
                 SizedBox(width: 15),
                 Expanded(
@@ -1002,10 +998,17 @@ class _AdminVerifySellerState extends State<AdminVerifySeller> {
       future: _fetchAllSellers(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting)
-          return 
-           (Api().isIOSPlatform
-              ? Center(child: CupertinoActivityIndicator(color: Theme.of(context).primaryColor,))
-              : Center(child: CircularProgressIndicator(color: Theme.of(context).primaryColor)));
+          return (Api().isIOSPlatform
+              ? Center(
+                  child: CupertinoActivityIndicator(
+                    color: Theme.of(context).primaryColor,
+                  ),
+                )
+              : Center(
+                  child: CircularProgressIndicator(
+                    color: Theme.of(context).primaryColor,
+                  ),
+                ));
         if (snapshot.hasError)
           return Center(child: Text('Error: ${snapshot.error}'));
         final sellers = snapshot.data ?? [];
@@ -1029,4 +1032,3 @@ class _AdminVerifySellerState extends State<AdminVerifySeller> {
 // ============================================================================
 // ⭐️ PREMIUM DOCUMENT PREVIEW SCREEN (PDF & IMAGE SUPPORT)
 // ============================================================================
- 

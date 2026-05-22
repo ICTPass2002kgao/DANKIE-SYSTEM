@@ -13,7 +13,8 @@
     }
   ],
   "hosting": {
-    "public": "build/web",  
+    "target": "dankie-website",
+    "public": "public",  
     "ignore": [
       "firebase.json",
       "**/.*",

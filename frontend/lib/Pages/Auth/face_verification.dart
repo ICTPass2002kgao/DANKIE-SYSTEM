@@ -180,6 +180,62 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     });
 
     try {
+      // --- 🟢 APPLE APP STORE REVIEW EXCEPTION ---
+      // Transparent bypass mechanism on physical match algorithm for test accounts.
+      List<String> testAccounts = [
+        'test.admin@dankie.co.za',
+        'test.overseer@dankie.co.za',
+        'test.tactso@dankie.co.za',
+      ];
+
+      String typedEmail = widget.email.trim().toLowerCase();
+      bool isTestAccount = testAccounts.contains(typedEmail);
+      Map<String, String>? testIdentity;
+
+      // Find the specific identity corresponding to the test account
+      for (var identity in widget.identities) {
+        String? identityEmail = identity['email']?.trim().toLowerCase();
+
+        if (identityEmail != null && testAccounts.contains(identityEmail)) {
+          isTestAccount = true;
+          testIdentity = identity;
+          break;
+        }
+
+        if (isTestAccount && identityEmail == typedEmail) {
+          testIdentity = identity;
+          break;
+        }
+      }
+
+      // If it IS a test account, skip the API and let them in immediately!
+      if (isTestAccount) {
+        print(
+          "Apple Test account confirmed. Bypassing strict face matching layers.",
+        );
+
+        // Fallback to first if email mapping wasn't found, otherwise use the specific test identity
+        Map<String, String>? identityToUse = testIdentity;
+        if (identityToUse == null && widget.identities.isNotEmpty) {
+          identityToUse = widget.identities.first;
+        }
+
+        if (identityToUse != null) {
+          setState(() {
+            _processStatus = "Test Account Verified...";
+          });
+          await Future.delayed(
+            const Duration(milliseconds: 800),
+          ); // Simulate processing time
+          await _finalizeLogin(
+            identityToUse,
+          ); // Log them in using the REAL database data
+          return; // 🛑 EXIT HERE: Do not run InsightFace
+        }
+      }
+      // --- END OF EXCEPTION ---
+
+      // --- NORMAL USER FLOW (STRICT FACE MATCHING) ---
       Map<String, String>? matchedIdentity;
 
       for (var identity in widget.identities) {
@@ -265,6 +321,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
           portfolio: role,
           province: 'HQ',
           faceUrl: img,
+          uid: widget.entityUid,
         );
       } else if (widget.role == 'Overseer') {
         nextScreen = OverseerPage(
@@ -544,7 +601,6 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
                                   "Package didn't provide an image. Waiting for hardware release...",
                                 );
 
-                                // Give iOS 600ms to completely release the camera feed before we try to take it back
                                 await Future.delayed(
                                   const Duration(milliseconds: 600),
                                 );
@@ -568,7 +624,6 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
                                   await _cameraController!.initialize();
                                 }
 
-                                // Give the newly initialized camera 200ms to adjust exposure to the room lighting
                                 await Future.delayed(
                                   const Duration(milliseconds: 200),
                                 );
