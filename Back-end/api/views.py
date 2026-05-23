@@ -90,7 +90,6 @@ except Exception as e:
 
 if not firebase_admin._apps:
     firebase_config = os.environ.get('FIREBASE_SERVICE_ACCOUNT_JSON')
-
     if firebase_config:
         try: 
             if os.path.exists(str(firebase_config)): 
@@ -98,14 +97,11 @@ if not firebase_admin._apps:
             else: 
                 cred_dict = json.loads(firebase_config)
                 cred = credentials.Certificate(cred_dict)
-
             bucket_name = getattr(settings, 'FIREBASE_STORAGE_BUCKET', 'tact-3c612.appspot.com')
-            
             firebase_admin.initialize_app(cred, {
                 'storageBucket': bucket_name
             })
             logger.info(f"✅ Firebase initialized: {bucket_name}")
-            
         except Exception as e:
             logger.error(f"❌ Firebase Init Error: {e}")
     else:
@@ -126,12 +122,10 @@ class FirebaseAuthentication(BaseAuthentication):
         auth_header = request.META.get('HTTP_AUTHORIZATION')
         if not auth_header:
             return None
-        
         try:
             token = auth_header.split(' ')[1]
             decoded_token = firebase_auth.verify_id_token(token)
             uid = decoded_token.get('uid')
-            
             user = FirebaseUser(uid, decoded_token)
             return (user, token)
         except Exception as e:
@@ -189,7 +183,6 @@ def perform_verification(live_path, ref_path, is_encrypted_ref):
             urllib.request.urlretrieve(ref_path, legacy_temp)
             real_ref_path = legacy_temp
             temp_files_to_clean.append(legacy_temp)
-
         def get_embedding(path):
             img = cv2.imread(path)
             if img is None: return None
@@ -197,11 +190,9 @@ def perform_verification(live_path, ref_path, is_encrypted_ref):
             if not faces: return None
             faces = sorted(faces, key=lambda x: (x.bbox[2]-x.bbox[0]) * (x.bbox[3]-x.bbox[1]), reverse=True)
             return faces[0].embedding
-
         emb_live = get_embedding(live_path)
         emb_ref = get_embedding(real_ref_path)
         if emb_live is None or emb_ref is None: return {'matched': False, 'error': 'Face not detected'}
-        
         sim = cosine_similarity(emb_live.reshape(1, -1), emb_ref.reshape(1, -1))[0][0]
         return {'matched': sim > 0.50, 'score': float(sim)}
     except Exception as e:
@@ -210,7 +201,6 @@ def perform_verification(live_path, ref_path, is_encrypted_ref):
         for p in temp_files_to_clean:
             if os.path.exists(p): os.remove(p)
 
-
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
 @permission_classes([IsFirebaseAuthenticated])
@@ -218,7 +208,6 @@ def recognize_face(request):
     live_file = request.FILES.get('live_image')
     ref_url = request.data.get('reference_url')
     if not live_file or not ref_url: return Response({'error': 'Missing data'}, status=400)
-
     temp_live = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg").name
     try:
         with open(temp_live, 'wb+') as f:
@@ -230,7 +219,6 @@ def recognize_face(request):
     finally:
         if os.path.exists(temp_live): os.remove(temp_live)
 
-
 @shared_task
 def process_bulk_email_task(include_terms, include_policy):
     try:
@@ -238,10 +226,8 @@ def process_bulk_email_task(include_terms, include_policy):
         docs = db.collection('users').stream()
         connection = get_connection()
         connection.open()
-        
         terms_link = "https://dankie-website.web.app/terms_and_conditions.html"
         policy_link = "https://dankie-website.web.app/privacy_policy.html"
-        
         for doc in docs:
             u = doc.to_dict()
             email = u.get('email')
@@ -264,61 +250,51 @@ def send_legal_broadcast(request):
     inc_terms = request.data.get('include_terms', False)
     inc_policy = request.data.get('include_policy', False)
     if not inc_terms and not inc_policy: return Response({'error': 'Select document type.'}, status=400)
-    
     process_bulk_email_task.delay(inc_terms, inc_policy)
     return Response({'message': 'Broadcast started via background worker.'})
 
 class ServeDecryptedImageView(APIView):
     authentication_classes = []
     permission_classes = []
-
     def get(self, request):
         encrypted_url = request.query_params.get('url')
         if not encrypted_url: 
             return HttpResponse("Missing URL", status=400)
-            
         try:
             response = requests.get(encrypted_url)
             if response.status_code != 200: 
-                return HttpResponse("Failed to fetch image", status=404) 
-            decrypted_data = cipher_suite.decrypt(response.content) 
-            content_type = "application/octet-stream"  
-            
+                return HttpResponse("Failed to fetch image", status=404)
+            decrypted_data = cipher_suite.decrypt(response.content)
+            content_type = "application/octet-stream"
             if decrypted_data.startswith(b'%PDF'):
                 content_type = "application/pdf"
             elif decrypted_data.startswith(b'\xff\xd8\xff'):
                 content_type = "image/jpeg"
             elif decrypted_data.startswith(b'\x89PNG\r\n\x1a\n'):
-                content_type = "image/png" 
+                content_type = "image/png"
             http_response = HttpResponse(decrypted_data, content_type=content_type)
             http_response['Content-Disposition'] = 'inline'
-            
             return http_response
-            
         except Exception as e:
             logger.error(f"Error serving decrypted file: {e}")
             return HttpResponse(f"Error: {e}", status=500)
-        
+
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
 @permission_classes([IsFirebaseAuthenticated])
 def initialize_subscription(request):
     logger.info("----- DEBUG: SUBSCRIPTION REQUEST START -----")
     logger.info(f"Incoming Data: {request.data}") 
-
     try:
         email = request.data.get('email')
         uid = request.data.get('uid')
         plan_code = request.data.get('plan_code')
         member_count = request.data.get('member_count', 0)
-
         if not all([email, uid, plan_code]):
             logger.error(f"❌ Validation Failed. Missing fields. Email: {email}, UID: {uid}, Plan: {plan_code}")
             return Response({'error': 'Missing required subscription details.'}, status=400)
-
         reference = f"SUB_{uid}_{int(datetime.datetime.now().timestamp())}"
         paystack_url = f"{settings.PAYSTACK_API_BASE}/transaction/initialize"
-        
         body = {
             "email": email,
             "amount": "0",
@@ -328,49 +304,27 @@ def initialize_subscription(request):
             "callback_url": "https://standard.paystack.co/close",
             "metadata": {
                 "custom_fields": [
-                    {
-                        "display_name": "Subscription_Type",
-                        "variable_name": "subscription_type", 
-                        "value": "monthly_overseer_tier"
-                    },
-                    {
-                        "display_name": "overseer_uid", 
-                        "variable_name": "overseer_uid", 
-                        "value": uid
-                    },
-                    {
-                        "display_name": "Plan_Code", 
-                        "variable_name": "plan_code", 
-                        "value": plan_code
-                    },
-                    {
-                        "display_name": "Member_Count", 
-                        "variable_name": "member_count", 
-                        "value": str(member_count)
-                    },
+                    {"display_name": "Subscription_Type", "variable_name": "subscription_type", "value": "monthly_overseer_tier"},
+                    {"display_name": "overseer_uid", "variable_name": "overseer_uid", "value": uid},
+                    {"display_name": "Plan_Code", "variable_name": "plan_code", "value": plan_code},
+                    {"display_name": "Member_Count", "variable_name": "member_count", "value": str(member_count)},
                 ]
             }
         }
-        
         headers = {
             "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
             "Content-Type": "application/json",
         }
-
         logger.info(f"🚀 Sending to Paystack: {paystack_url}")
-        
         resp = requests.post(paystack_url, json=body, headers=headers)
         data = resp.json()
-
         logger.info(f"📩 Paystack Response: {data}") 
-
         if not data.get('status'):
             error_msg = data.get('message', 'Paystack initialization failed.')
             logger.error(f"❌ Paystack Error: {error_msg}")
             return Response({'error': error_msg}, status=400)
-
         logger.info("✅ Success! URL generated.")
-        return Response({'authorization_url': data['data']['authorization_url']}) 
+        return Response({'authorization_url': data['data']['authorization_url']})
     except Exception as e:
         logger.error(f"🔥 EXCEPTION: {str(e)}")
         return Response({'error': str(e)}, status=500)  
@@ -379,31 +333,26 @@ def initialize_subscription(request):
 def paystack_webhook(request):
     if request.method != 'POST':
         return HttpResponse("Method not allowed", status=405)
-
     secret = settings.PAYSTACK_SECRET_KEY
     if not secret:
         logger.error("🚨 WEBHOOK ERROR: PAYSTACK_SECRET_KEY is missing from settings configuration.")
         return HttpResponse("Server Error", status=500)
-
     signature = request.headers.get('x-paystack-signature')
     if not signature:
         logger.warning("🚨 WEBHOOK WARNING: Received request completely lacking 'x-paystack-signature' header.")
         return HttpResponse("No signature", status=401)
-
     try:
         hash_calc = hmac.new(
             secret.encode('utf-8'), 
             request.body, 
             digestmod=hashlib.sha512
         ).hexdigest()
-
         if hash_calc != signature:
             logger.warning("🚨 WEBHOOK WARNING: Security signature validation calculation failed. Header mismatch.")
             return HttpResponse("Unauthorized", status=401)
     except Exception as e:
         logger.error(f"🚨 WEBHOOK EXCEPTION: Signature Verification parsing anomaly: {e}")
         return HttpResponse("Server Error", status=500)
-
     try:
         event = json.loads(request.body)
         logger.info(f"ℹ️ WEBHOOK DATA: Received webhook payload successfully decoded. Event type: {event.get('event')}")
@@ -413,11 +362,9 @@ def paystack_webhook(request):
 
     event_type = event.get('event')
     data = event.get('data', {})
-    
     metadata = data.get('metadata', {})
     if not isinstance(metadata, dict):
         metadata = {}
-        
     metadata_fields = metadata.get('custom_fields', [])
     
     def get_meta(variable_name):
@@ -427,18 +374,14 @@ def paystack_webhook(request):
     if event_type == 'charge.success' and data.get('status') == 'success':
         subscription_type = get_meta('subscription_type')
         contribution_type = get_meta('contribution_type')
-
         if contribution_type == 'event_contribution':
             event_id = get_meta('event_id')
             overseer_id = get_meta('overseer_id')
-            
             paid_cents = int(data.get('amount', 0))
             paid_zar = Decimal(str(paid_cents)) / Decimal('100')
-
             if not event_id or not overseer_id:
                 logger.error("🚨 WEBHOOK ERROR: Event Contribution triggered, but missing required metadata parameters.")
                 return HttpResponse('Missing metadata.', status=400)
-
             try:
                 updated_count = EventContribution.objects.filter(
                     event__id=event_id,
@@ -448,34 +391,26 @@ def paystack_webhook(request):
                     amount=paid_zar,
                     remarks="Successfully Paid via Paystack"
                 )
-                
                 if updated_count > 0:
                     logger.info(f"✅ Event Contribution Verified: Overseer {overseer_id} paid R{paid_zar} for Event {event_id}")
                 else:
                     logger.warning(f"⚠️ Event Contribution matched no pending record for Event {event_id}, Overseer {overseer_id}")
-                    
                 return HttpResponse('Event contribution verified.', status=200)
-                
             except Exception as e:
                 logger.error(f"❌ Error updating event contribution: {e}")
                 return HttpResponse('Internal server error.', status=500)
-
         elif subscription_type == 'monthly_overseer_tier':
             overseer_uid = get_meta('overseer_uid')
             member_count_val = get_meta('member_count')
-
             if not overseer_uid:
                 logger.info("Event received, but missing 'overseer_uid'.")
                 return HttpResponse('Event received, but not a valid subscription charge.', status=200)
-
             auth_code = data.get('authorization', {}).get('authorization_code')
             paystack_email = data.get('customer', {}).get('email')
             charged_amount_cents = data.get('amount')
-
             if not auth_code or not paystack_email:
                 logger.error(f"Missing vital data in subscription charge for UID: {overseer_uid}")
                 return HttpResponse('Missing critical data in payload.', status=200)
-
             try:
                 next_charge_date = datetime.datetime.now() + datetime.timedelta(days=30)
                 current_member_count = int(member_count_val) if member_count_val else 0 
@@ -493,21 +428,16 @@ def paystack_webhook(request):
                 )
                 logger.info(f"✅ Overseer {overseer_uid} successfully subscribed/authorized.")
                 return HttpResponse('Subscription webhook processed.', status=200)
-
             except Exception as e:
                 logger.error(f"❌ Error processing subscription charge for {overseer_uid}: {e}")
                 return HttpResponse('Internal server error during DB update.', status=500)
- 
         else:
             order_ref = data.get('reference')
             try: 
                 order = Order.objects.get(id=order_ref)
-                 
                 expected_cents = int(order.total_amount * Decimal('100'))
                 paid_cents = int(data.get('amount', 0))
-
                 logger.info(f"ℹ️ WEBHOOK MATH CHECK: Order reference '{order_ref}'. Expected Cents: {expected_cents}, Paystack Paid Cents: {paid_cents}")
-
                 if expected_cents == paid_cents:
                     order.is_paid = True
                     order.status = 'paid'
@@ -519,24 +449,20 @@ def paystack_webhook(request):
                 else:
                     logger.error(f"⚠️ Amount mismatch for Order {order_ref}: Expected {expected_cents}, got {paid_cents}")
                     return HttpResponse('Amount mismatch', status=400)
-
             except Order.DoesNotExist:
                 logger.warning(f"⚠️ Order reference '{order_ref}' not found in local database models during process execution sequence.")
                 return HttpResponse('Order not found', status=400)
             except Exception as e:
                 logger.error(f"❌ Error updating order status: {e}")
                 return HttpResponse('Internal server error.', status=500)
-
     elif event_type == 'charge.failure':
         overseer_uid = get_meta('overseer_uid')
         contribution_type = get_meta('contribution_type')
-        
         if contribution_type == 'event_contribution':
             event_id = get_meta('event_id')
             overseer_id = get_meta('overseer_id')
             logger.warning(f"⚠️ Payment failed for Event Contribution. Event: {event_id}, Overseer: {overseer_id}")
             return HttpResponse('Event contribution failure logged.', status=200)
-
         elif overseer_uid:
             try:
                 Overseer.objects.filter(uid=overseer_uid).update(
@@ -546,33 +472,26 @@ def paystack_webhook(request):
                 logger.info(f"⚠️ Initial charge failed for overseer {overseer_uid}.")
             except Exception as e:
                 logger.error(f"❌ Error handling failure for {overseer_uid}: {e}")
-         
         return HttpResponse('Webhook received.', status=200)
- 
     return HttpResponse('Webhook received.', status=200)
 
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
 @permission_classes([IsFirebaseAuthenticated])
 def create_seller_subaccount(request):
-    
     logger.info(f"Subaccount Request Data: {request.data}") 
     uid = request.data.get('uid') 
     business_name = request.data.get('business_name')
     bank_code = request.data.get('bank_code')
     account_number = request.data.get('account_number')
     contact_email = request.data.get('contact_email')
-
     if not all([uid, business_name, bank_code, account_number, contact_email]):
          return Response({'error': 'Missing required fields (uid, business_name, etc.)'}, status=400)
-
     try: 
         user = Users.objects.get(uid=uid)
     except Users.DoesNotExist:
         return Response({'error': f"User with uid {uid} not found"}, status=404)
- 
     platform_fee = 9.0 
-    
     payload = {
         "business_name": business_name,
         "settlement_bank": bank_code,
@@ -580,36 +499,28 @@ def create_seller_subaccount(request):
         "percentage_charge": platform_fee, 
         "primary_contact_email": contact_email,
     }
-    
     headers = {
         "Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}",
         "Content-Type": "application/json"
     }
-
     try:
         resp = requests.post(f"{settings.PAYSTACK_API_BASE}/subaccount", json=payload, headers=headers)
         data = resp.json()
-        
         logger.info(f"Paystack Response: {data}")
-
         if resp.status_code == 200 or resp.status_code == 201:
             if data.get('status') is True:
                 sub_code = data['data']['subaccount_code']
-                
                 user.seller_paystack_account = sub_code 
                 user.save()
-                
                 return Response({'success': True, 'subaccount_code': sub_code})
             else:
                 return Response({'error': data.get('message')}, status=400)
         else:
             return Response({'error': data.get('message', 'Paystack validation failed')}, status=400)
-
     except Exception as e:
         logger.error(f"Server Error: {str(e)}")
         return Response({'error': str(e)}, status=500)
 
-# FIX: Modified calculation logic strictly within this view to look up the Order row and accurately append Delivery Fees
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
 @permission_classes([IsFirebaseAuthenticated])
@@ -618,23 +529,19 @@ def create_payment_link(request):
         email = request.data.get('email')
         products = request.data.get('products', [])
         order_ref = request.data.get('orderReference')
-        
         contribution_type = request.data.get('contribution_type')
         event_id = request.data.get('event_id')
         overseer_id = request.data.get('overseer_id')
 
         if not email or not products or not order_ref:
             return Response({'error': 'Invalid request body'}, status=400)
-
         total_amount = 0
         subaccounts = []
-        
         for product in products:
             price = Decimal(str(product.get('price', 0)))
             qty = Decimal(str(product.get('quantity', 1)))
             amount_cents = int(price * qty * Decimal('100'))
             total_amount += amount_cents
- 
             if product.get('subaccount'): 
                 ADMIN_SHARE_PERCENT = getattr(settings, 'ADMIN_SHARE_PERCENT', 9)
                 seller_share = int(amount_cents * Decimal(str(1 - ADMIN_SHARE_PERCENT / 100.0)))
@@ -642,8 +549,6 @@ def create_payment_link(request):
                     "subaccount": product['subaccount'],
                     "share": seller_share
                 })
-
-        # Check order row data directly to map precision variations (like delivery_charge addition)
         try:
             db_order = Order.objects.get(id=order_ref)
             expected_db_cents = int(db_order.total_amount * Decimal('100'))
@@ -652,7 +557,6 @@ def create_payment_link(request):
                 total_amount = expected_db_cents
         except Order.DoesNotExist:
             pass
-
         body = {
             "email": email,
             "amount": total_amount,
@@ -660,7 +564,6 @@ def create_payment_link(request):
             "channels": ['card', 'bank', 'ussd', 'qr', 'mobile_money'],
             "reference": order_ref, 
         }
-
         if contribution_type == 'event_contribution' and event_id and overseer_id:
             body['metadata'] = {
                 "custom_fields": [
@@ -669,22 +572,17 @@ def create_payment_link(request):
                     {"display_name": "Overseer ID", "variable_name": "overseer_id", "value": overseer_id},
                 ]
             }
-
         if subaccounts:
             body['split'] = {
                 "type": "flat",
                 "subaccounts": subaccounts
             }
-
         headers = {"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"}
         resp = requests.post(f"{settings.PAYSTACK_API_BASE}/transaction/initialize", json=body, headers=headers)
         data = resp.json()
-
         if not data.get('status'):
             return Response({'error': data.get('message')}, status=400)
-
         return Response({'paymentLink': data['data']['authorization_url']})
-
     except Exception as e: 
         logger.error(f"Payment Link Error: {e}")
         return Response({'error': 'Server error'}, status=500)
@@ -729,23 +627,18 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
                     districts_data = raw_districts
             except Exception as e:
                 return Response({"error": f"Invalid districts JSON format: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
- 
         data['districts'] = [] 
         sec_file = request.FILES.get('secretary_face_image')
         if sec_file:
             data['secretary_face_url'] = encrypt_and_upload_to_firebase(sec_file, 'secure_faces')
-        
         chair_file = request.FILES.get('chairperson_face_image')
         if chair_file:
             data['chairperson_face_url'] = encrypt_and_upload_to_firebase(chair_file, 'secure_faces') 
-            
         serializer = self.get_serializer(data=data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
         self.perform_create(serializer)
         overseer = serializer.instance
- 
         if data.get('secretary_name') and data.get('secretary_face_url'):
             OverseerCommitteeMember.objects.create(
                 overseer=overseer, full_name=data['secretary_name'], portfolio='Secretary', face_url=data['secretary_face_url']
@@ -754,7 +647,6 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
             OverseerCommitteeMember.objects.create(
                 overseer=overseer, full_name=data['chairperson_name'], portfolio='Chairperson', face_url=data['chairperson_face_url']
             )
-
         for d_data in districts_data:
             district = District.objects.create(
                 overseer=overseer,
@@ -765,7 +657,6 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
                     district=district,
                     community_name=c_data.get('community_name', 'Unknown')
                 )
-
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
@@ -773,7 +664,6 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
     permission_classes = [IsFirebaseAuthenticated]
     queryset = AdminStaffMember.objects.all() 
     serializer_class = AdminStaffMemberSerializer
-    
     def get_queryset(self):
         queryset = AdminStaffMember.objects.all()
         face_url = self.request.query_params.get('face_url')
@@ -783,11 +673,9 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         uid = self.request.query_params.get('uid')
         if uid: queryset = queryset.filter(uid__iexact=uid)
         return queryset
-
     def create(self, request, *args, **kwargs):
         data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
         face_file = request.FILES.get('face_image')
-        
         if face_file:
             secure_url = encrypt_and_upload_to_firebase(face_file, 'secure_faces')
             if secure_url: 
@@ -796,13 +684,11 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
                 return Response({"error": "Failed to encrypt and upload face."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else:
             return Response({"error": "Face image is required for biometric access."}, status=status.HTTP_400_BAD_REQUEST)
-
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
     @action(detail=False, methods=['get'])
     def find_by_face(self,request):
         url = request.query_params.get('url')
@@ -815,17 +701,14 @@ class UsersViewSet(viewsets.ModelViewSet):
     queryset = Users.objects.all()
     serializer_class = UsersSerializer
     lookup_field = 'uid'
-
     def get_permissions(self):
         if self.request.method == 'GET':
             return [AllowAny()]
         return [IsFirebaseAuthenticated()]
-
     def get_authenticators(self):
         if self.request.method == 'GET':
             return []
         return [FirebaseAuthentication()]
-
     def get_queryset(self):
         queryset = Users.objects.all()
         uid = self.request.query_params.get('uid')
@@ -841,7 +724,6 @@ class UsersViewSet(viewsets.ModelViewSet):
         district_elder_name = self.request.query_params.get('district_elder_name')
         if district_elder_name: queryset = queryset.filter(district_elder_name__iexact=district_elder_name.strip())
         return queryset
-
     def create(self, request, *args, **kwargs):
         uid = request.data.get('uid')
         if not uid: return Response({"error": "UID is required"}, status=400)
@@ -851,7 +733,6 @@ class UsersViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
     def update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         attendance_status = request.data.get('attendance_status')
@@ -864,47 +745,34 @@ class UsersViewSet(viewsets.ModelViewSet):
                 defaults={'community_name': instance.community_name, 'is_visitor': False, 'is_present': is_present}
             )
         return super().update(request, *args, **kwargs)
-
     @action(detail=True, methods=['post'])
     def submit_verification(self, request, uid=None):
         user = self.get_object()
-        
         signature_file = request.FILES.get('signature')
         id_file = request.FILES.get('id_document')
         face_file = request.FILES.get('face_image')
-        
         if not all([signature_file, id_file, face_file]):
             return Response({"error": "Missing signature, id_document, or face_image files."}, status=status.HTTP_400_BAD_REQUEST)
-        
         try:
             sig_url = encrypt_and_upload_to_firebase(signature_file, 'secure_signatures')
             id_url = encrypt_and_upload_to_firebase(id_file, 'secure_ids')
             face_url = encrypt_and_upload_to_firebase(face_file, 'secure_faces')
-            
             if not all([sig_url, id_url, face_url]):
                 return Response({"error": "Failed to encrypt and securely store files."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                
             user.contract_signature_url = sig_url
             user.id_document_url = id_url
             user.face_image_url = face_url
             user.verification_status = "Pending Live Check"
             user.save()
-            
-            return Response({
-                "message": "Files encrypted and securely stored.",
-                "face_image_url": face_url 
-            }, status=status.HTTP_200_OK)
-            
+            return Response({"message": "Files encrypted and securely stored.", "face_image_url": face_url}, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class VisitorViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
     queryset = Visitor.objects.all()
     serializer_class = VisitorSerializer
-
     def get_queryset(self):
         queryset = Visitor.objects.all()
         community = self.request.query_params.get('community_name')
@@ -912,7 +780,6 @@ class VisitorViewSet(viewsets.ModelViewSet):
         overseer_uid = self.request.query_params.get('overseer_uid')
         if overseer_uid: queryset = queryset.filter(overseer_uid=overseer_uid)
         return queryset
-
     def update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         attendance_status = request.data.get('attendance_status')
@@ -933,29 +800,22 @@ def monthly_attendance_report(request):
     community = request.query_params.get('community_name')
     month = int(request.query_params.get('month'))
     year = int(request.query_params.get('year'))
-
     if not community or not month or not year:
         return Response({'error': 'Missing parameters'}, status=400)
-
     _, num_days = monthrange(year, month)
-
     logs = AttendanceLog.objects.filter(
         community_name__iexact=community.strip(),
         date__year=year,
         date__month=month
     )
-    
     log_dict = {}
     for log in logs:
         if log.member_uid not in log_dict:
             log_dict[log.member_uid] = {}
         log_dict[log.member_uid][log.date.day] = log.is_present
-
     users = Users.objects.filter(community_name__iexact=community.strip())
     visitors = Visitor.objects.filter(community_name__iexact=community.strip())
-
     report_data = []
-
     def process_member(member, is_visitor):
         uid_key = str(member.id) if is_visitor else member.uid
         attendance = log_dict.get(uid_key, {})
@@ -964,38 +824,31 @@ def monthly_attendance_report(request):
         percentage = (total_present / num_days) * 100 if num_days > 0 else 0
         visitor_cat = getattr(member, 'visitor_category', 'Registered') if is_visitor else 'Registered'
         visitor_role = getattr(member, 'visitor_role', '') if is_visitor else ''
-
         report_data.append({
             'ui_id': uid_key, 'name': member.name, 'surname': member.surname,
             'gender': member.gender, 'is_visitor': is_visitor, 'visitor_category': visitor_cat,
             'visitor_role': visitor_role, 'attendance': attendance, 'total_present': total_present,
             'total_absent': total_absent, 'percentage': round(percentage, 1)
         })
-
     for u in users: process_member(u, False)
     for v in visitors: process_member(v, True)
-
     return Response({
         'community_name': community, 'month': month, 'year': year,
         'num_days': num_days, 'data': report_data
     })
 
 class TactsoBranchViewSet(viewsets.ModelViewSet):
- 
     queryset = TactsoBranch.objects.all()
     serializer_class = TactsoBranchSerializer
-
     def get_queryset(self):
         queryset = TactsoBranch.objects.all()
         uid = self.request.query_params.get('uid')
         if uid: queryset = queryset.filter(uid=uid)
         return queryset
-
     def create(self, request, *args, **kwargs):
         data = request.data.dict()
         if 'image_url' not in data: data['image_url'] = ""
         auth_faces = []
-        
         officer_file = request.FILES.get('education_officer_face_image')
         if officer_file:
             url = encrypt_and_upload_to_firebase(officer_file, 'secure_faces')
@@ -1004,7 +857,6 @@ class TactsoBranchViewSet(viewsets.ModelViewSet):
                 auth_faces.append(url)
             else: return Response({"error": "Failed to encrypt Officer face"}, status=500)
         else: return Response({"error": "Education Officer face is required"}, status=400)
-
         chair_file = request.FILES.get('chairperson_face_image')
         chair_url = None
         if chair_file:
@@ -1012,15 +864,11 @@ class TactsoBranchViewSet(viewsets.ModelViewSet):
             if chair_url: auth_faces.append(chair_url)
             else: return Response({"error": "Failed to encrypt Chairperson face"}, status=500)
         else: return Response({"error": "Chairperson face is required"}, status=400)
-
         data['authorized_user_face_urls'] = json.dumps(auth_faces)
-        
         serializer = self.get_serializer(data=data)
         if not serializer.is_valid(): return Response(serializer.errors, status=400)
-        
         self.perform_create(serializer)
         branch = serializer.instance
-
         TactsoCommitteeMember.objects.create(
             branch=branch, full_name=data.get('education_officer_name', 'Education Officer'),
             portfolio='Education Officer', email=data.get('email', ''), face_url=data['education_officer_face_url']
@@ -1029,51 +877,42 @@ class TactsoBranchViewSet(viewsets.ModelViewSet):
             branch=branch, full_name=data.get('chairperson_name', 'Chairperson'),
             portfolio='Chairperson', email=data.get('email', ''), face_url=chair_url
         )
-        
         return Response(serializer.data, status=201)  
 
+# ⭐️ OPTIMIZED
 class CommunityViewSet(CachedListMixin, viewsets.ModelViewSet):
-    queryset = Community.objects.all()
+    queryset = Community.objects.select_related('district', 'district__overseer').all()
     serializer_class = CommunitySerializer
-    
     def get_permissions(self):
         if self.request.method == 'GET': return [AllowAny()]
         return [IsFirebaseAuthenticated()]
-
     def get_authenticators(self):
         if self.request.method == 'GET': return []
         return [FirebaseAuthentication()]
-    
     def get_queryset(self):
-        queryset = Community.objects.all()
+        queryset = Community.objects.select_related('district', 'district__overseer').all()
         province = self.request.query_params.get('province')
         district__overseer_uid = self.request.query_params.get('district__overseer_uid')
-        
         if province: queryset = queryset.filter(district__overseer__province__iexact=province)
         if district__overseer_uid: queryset = queryset.filter(district__overseer__uid=district__overseer_uid)
         return queryset
 
 class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
-    queryset = District.objects.all()
+    queryset = District.objects.select_related('overseer').prefetch_related('communities').all()
     serializer_class = DistrictSerializer
-
     def get_permissions(self):
         if self.request.method == 'GET': return [AllowAny()]
         return [IsFirebaseAuthenticated()]
-
     def get_authenticators(self):
         if self.request.method == 'GET': return []
         return [FirebaseAuthentication()]
-
     def get_queryset(self):
         queryset = District.objects.select_related('overseer').prefetch_related('communities').all()
         province = self.request.query_params.get('province')
         limit = self.request.query_params.get('limit')
         overseer_uid = self.request.query_params.get('overseer_uid')
-
         if province and province != 'All': queryset = queryset.filter(overseer__province__iexact=province)
         if overseer_uid: queryset = queryset.filter(overseer__uid=overseer_uid)
-        
         if limit:
             try: return queryset[:int(limit)]
             except ValueError: pass
@@ -1093,54 +932,46 @@ class CatalogViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['name', 'category']
 
+# ⭐️ OPTIMIZED
 class SellerInventoryViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
     serializer_class = SellerListingSerializer
-    
+    queryset = SellerListing.objects.select_related('seller').all()
     def get_queryset(self):
-        queryset = SellerListing.objects.all()
+        queryset = SellerListing.objects.select_related('seller').all()
         seller_uid_param = self.request.query_params.get('seller_uid')
         if seller_uid_param: queryset = queryset.filter(seller__uid=seller_uid_param)
         return queryset
-        
     def perform_create(self, serializer): serializer.save()
 
 class OrderViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
     serializer_class = OrderSerializer 
-
+    queryset = Order.objects.select_related('user').prefetch_related('items__product').all()
     def get_queryset(self):
-        queryset = Order.objects.prefetch_related('items__product').select_related('user').all()
-        
+        queryset = Order.objects.select_related('user').prefetch_related('items__product').all()
         user_uid = self.request.query_params.get('user_uid')
         if user_uid: 
             queryset = queryset.filter(user__uid=user_uid)
-            
         seller_uid = self.request.query_params.get('seller_uid')
         if seller_uid:
             queryset = queryset.filter(items__product__seller__uid=seller_uid).distinct()
-            
         return queryset
-
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
     def perform_create(self, serializer): serializer.save()
-
     @action(detail=True, methods=['get'], authentication_classes=[], permission_classes=[AllowAny])
-    def verify_payment(selfrequest, pk=None):
+    def verify_payment(self, request, pk=None):
         order = self.get_object()
         if order.status == 'paid' and order.is_paid: return Response(self.get_serializer(order).data)
-
         url = f"https://api.paystack.co/transaction/verify/{order.id}"
         headers = {"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"}
-        
         try:
             resp = requests.get(url, headers=headers)
             data = resp.json()
@@ -1159,18 +990,17 @@ class OrderViewSet(viewsets.ModelViewSet):
             logger.error(f"Verification Error: {e}")
             return Response(self.get_serializer(order).data)
 
+# ⭐️ OPTIMIZED
 class OverseerCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
-    queryset = OverseerCommitteeMember.objects.all()
+    queryset = OverseerCommitteeMember.objects.select_related('overseer').all()
     serializer_class = OverseerCommitteeMemberSerializer
-    
     def create(self, request, *args, **kwargs):
         overseer_id = request.data.get('overseer')
         if overseer_id:
             current_count = OverseerCommitteeMember.objects.filter(overseer__id=overseer_id).count()
             if current_count >= 5: return Response({"error": "Maximum limit of 5 committee members reached."}, status=status.HTTP_400_BAD_REQUEST)
-        
         data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
         face_file = request.FILES.get('face_image')
         if face_file:
@@ -1178,15 +1008,13 @@ class OverseerCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
             if secure_url: data['face_url'] = secure_url
             else: return Response({"error": "Failed to encrypt and upload face."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else: return Response({"error": "Face image is strictly required."}, status=status.HTTP_400_BAD_REQUEST)
-
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
     def get_queryset(self):
-        queryset = OverseerCommitteeMember.objects.all()
+        queryset = OverseerCommitteeMember.objects.select_related('overseer').all()
         email = self.request.query_params.get('email')
         if email: queryset = queryset.filter(email__iexact=email.strip())
         overseer_id = self.request.query_params.get('overseer')
@@ -1200,13 +1028,11 @@ class OverseerExpenseReportViewSet(CachedListMixin, viewsets.ModelViewSet):
     permission_classes = [IsFirebaseAuthenticated]
     queryset = OverseerExpenseReport.objects.all()
     serializer_class = OverseerExpenseReportSerializer
-
     def get_queryset(self):
         queryset = OverseerExpenseReport.objects.all()
         month = self.request.query_params.get('month')
         year = self.request.query_params.get('year')
         limit = self.request.query_params.get('limit')
-
         if month and month != 'All': queryset = queryset.filter(month__iexact=month) 
         if year and year != 'All': queryset = queryset.filter(year=year)
         if limit:
@@ -1226,10 +1052,11 @@ class CareerOpportunityViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = CareerOpportunity.objects.all()
     serializer_class = CareerOpportunitySerializer
 
+# ⭐️ OPTIMIZED
 class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet): 
     authentication_classes = [FirebaseAuthentication] 
     permission_classes = [IsFirebaseAuthenticated] 
-    queryset = TactsoCommitteeMember.objects.all() 
+    queryset = TactsoCommitteeMember.objects.select_related('branch').all() 
     serializer_class = TactsoCommitteeMemberSerializer 
     def create(self, request, *args, **kwargs):
         branch_id = request.data.get('branch')
@@ -1238,20 +1065,19 @@ class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
             if current_count >= 5: return Response({"error": "Maximum limit of 5 committee members reached."}, status=status.HTTP_400_BAD_REQUEST)
         return super().create(request, *args, **kwargs)
 
+# ⭐️ OPTIMIZED
 class ApplicationRequestViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
-    queryset = ApplicationRequest.objects.all()
+    queryset = ApplicationRequest.objects.select_related('branch', 'user').all()
     serializer_class = ApplicationRequestSerializer
-
     def get_queryset(self):
-        queryset = ApplicationRequest.objects.all()
+        queryset = ApplicationRequest.objects.select_related('branch', 'user').all()
         branch_id = self.request.query_params.get('branch')
         if branch_id: queryset = queryset.filter(branch__id=branch_id)
         user_uid = self.request.query_params.get('user_uid')
         if user_uid: queryset = queryset.filter(user__uid=user_uid)
         return queryset
-
     def create(self, request, *args, **kwargs):
         data = request.data.dict()
         def encrypt_field(field_name):
@@ -1260,19 +1086,16 @@ class ApplicationRequestViewSet(CachedListMixin, viewsets.ModelViewSet):
                 secure_url = encrypt_and_upload_to_firebase(file_obj, 'secure_applications')
                 if secure_url: data[field_name] = secure_url
                 else: raise Exception(f"Failed to encrypt {field_name}")
-
         try:
             encrypt_field('id_passport_url')
             encrypt_field('school_results_url')
             encrypt_field('proof_of_registration_url')
             encrypt_field('other_qualifications_url')
-
             serializer = self.get_serializer(data=data)
             serializer.is_valid(raise_exception=True)
             self.perform_create(serializer)
             headers = self.get_success_headers(serializer.data)
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1287,14 +1110,11 @@ class AuditLogViewSet(viewsets.ModelViewSet):
     permission_classes = [IsFirebaseAuthenticated]
     queryset = AuditLog.objects.all().order_by('-timestamp')
     serializer_class = AuditLogSerializer
-    
     def get_queryset(self):
         queryset = AuditLog.objects.all().order_by('-timestamp')
         uid = self.request.query_params.get('uid')
-        
         if uid:
             queryset = queryset.filter(uid=uid)
-            
         return queryset
 
 class ContributionHistoryViewSet(viewsets.ModelViewSet):
@@ -1302,7 +1122,6 @@ class ContributionHistoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsFirebaseAuthenticated]
     queryset = ContributionHistory.objects.all()
     serializer_class = ContributionHistorySerializer
-    
     def get_queryset(self):
         qs = ContributionHistory.objects.all()
         overseer = self.request.query_params.get('overseer_uid')
@@ -1310,7 +1129,6 @@ class ContributionHistoryViewSet(viewsets.ModelViewSet):
         community = self.request.query_params.get('community')
         year = self.request.query_params.get('year')
         month = self.request.query_params.get('month')
-
         if overseer: qs = qs.filter(overseer_uid=overseer)
         if elder: qs = qs.filter(district_elder=elder)
         if community: qs = qs.filter(community=community)
@@ -1324,7 +1142,6 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
     queryset = MonthlyReport.objects.all()
     serializer_class = MonthlyReportSerializer
     lookup_field = 'id'
-
     @action(detail=False, methods=['post'])
     def archive_month(self, request):
         data = request.data
@@ -1334,17 +1151,13 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
         year = data.get('year')
         month = data.get('month')
         province = data.get('province')
-        
         report_data = data.get('report_data', {})
         expenses_data = data.get('expenses_data', {})
-
         if not all([overseer_uid, elder, community, year, month]):
             return Response({'error': 'Missing required fields'}, status=400)
-
         try:
             with transaction.atomic():
                 users = Users.objects.filter(overseer_uid=overseer_uid, district_elder_name=elder, community_name=community)
-
                 history_records = []
                 for user in users:
                     history_records.append(ContributionHistory(
@@ -1352,22 +1165,18 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
                         district_elder=elder, community=community, month=month, year=year,
                         week1=float(user.week1 or 0), week2=float(user.week2 or 0), week3=float(user.week3 or 0), week4=float(user.week4 or 0),
                     ))
-                    
                     user.week1 = "0"
                     user.week2 = "0"
                     user.week3 = "0"
                     user.week4 = "0"
                     user.save()
-                
                 ContributionHistory.objects.bulk_create(history_records)
-
                 report_id = f"{community}_{year}_{month}"
                 MonthlyReport.objects.update_or_create(
                     id=report_id,
                     defaults={'community_name': community, 'year': year, 'month': month, **report_data}
                 )
                 OverseerExpenseReport.objects.create(**expenses_data)
-
             return Response({'status': 'success', 'message': 'Month archived successfully'})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
@@ -1377,7 +1186,6 @@ class IssueReportViewSet(viewsets.ModelViewSet):
     permission_classes = [IsFirebaseAuthenticated]
     queryset = IssueReport.objects.all()
     serializer_class = IssueReportSerializer
-    
     def get_queryset(self):
         qs = IssueReport.objects.all()
         is_resolved = self.request.query_params.get('is_resolved') 
@@ -1389,21 +1197,20 @@ class EventDiaryViewSet(CachedListMixin, viewsets.ModelViewSet):
     permission_classes = [IsFirebaseAuthenticated]
     queryset = EventDiary.objects.all()
     serializer_class = EventDiarySerializer
-
     def get_queryset(self):
         queryset = EventDiary.objects.all()
         year = self.request.query_params.get('year')
         if year: queryset = queryset.filter(year=year)
         return queryset
 
+# ⭐️ OPTIMIZED
 class EventContributionViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
-    queryset = EventContribution.objects.all()
+    queryset = EventContribution.objects.select_related('event', 'overseer').all()
     serializer_class = EventContributionSerializer
-
     def get_queryset(self):
-        queryset = EventContribution.objects.all()
+        queryset = EventContribution.objects.select_related('event', 'overseer').all()
         event_id = self.request.query_params.get('event_id')
         overseer_uid = self.request.query_params.get('overseer_uid')
         if event_id: queryset = queryset.filter(event__id=event_id)
@@ -1419,14 +1226,12 @@ class ApostolicGreetingViewSet(viewsets.ModelViewSet):
     queryset = ApostolicGreeting.objects.all()
     serializer_class = ApostolicGreetingSerializer
     lookup_field = 'id'
-
     @action(detail=True, methods=['post']) 
     def like(self, request, id=None): 
         greeting = self.get_object() 
         greeting.likes += 1 
         greeting.save() 
         return Response({'likes': greeting.likes, 'views': greeting.views})
-
     @action(detail=True, methods=['post']) 
     def view_greeting(self, request, id=None): 
         greeting = self.get_object() 
