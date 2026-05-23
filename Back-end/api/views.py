@@ -2467,18 +2467,11 @@ class CareerOpportunityViewSet(CachedListMixin, viewsets.ModelViewSet):
 
 
 
-class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
-
-    authentication_classes = [FirebaseAuthentication]
-
-    permission_classes = [IsFirebaseAuthenticated]
-
-    queryset = TactsoCommitteeMember.objects.all()
-
-    serializer_class = TactsoCommitteeMemberSerializer
-
-    
-
+class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet): 
+    authentication_classes = [FirebaseAuthentication] 
+    permission_classes = [IsFirebaseAuthenticated] 
+    queryset = TactsoCommitteeMember.objects.all() 
+    serializer_class = TactsoCommitteeMemberSerializer 
     def create(self, request, *args, **kwargs):
 
         branch_id = request.data.get('branch')
