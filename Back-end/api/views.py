@@ -1977,10 +1977,7 @@ def monthly_attendance_report(request):
 
 
 class TactsoBranchViewSet(viewsets.ModelViewSet):
-
-    authentication_classes = [FirebaseAuthentication]
-
-    permission_classes = [IsFirebaseAuthenticated]
+ 
 
     queryset = TactsoBranch.objects.all()
 
