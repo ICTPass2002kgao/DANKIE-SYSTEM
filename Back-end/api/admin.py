@@ -3,12 +3,13 @@ from .models import (
     IssueReport, Songs, Product, Users, UserUniversityApplication,
     Overseer, District, Community, OverseerCommitteeMember,
     OverseerExpenseReport, UpcomingEvent,
-    CareerOpportunity, TactsoBranch, TactsoCommitteeMember, ApplicationRequest,
-    AdminStaffMember, AuditLog,
+    CareerOpportunity, TactsoBranch, TactsoCommitteeMember,
+    ApplicationRequest, AdminStaffMember, AuditLog,
     SellerListing, Order, OrderItem,
-    UsersHelp, ContributionHistory, MonthlyReport, Visitor
+    UsersHelp, ContributionHistory, MonthlyReport, Visitor,
+    AttendanceLog, EventDiary, EventContribution,
+    ApostolicGreeting
 )
-
 # ===========================
 # 1. CORE CONTENT
 # ===========================
@@ -236,3 +237,111 @@ class MonthlyReportAdmin(admin.ModelAdmin):
     list_display = ('community_name', 'month', 'year')
     list_filter = ('month', 'year')
     search_fields = ('community_name',)
+    
+# ===========================
+# 8. ATTENDANCE
+# ===========================
+
+@admin.register(AttendanceLog)
+class AttendanceLogAdmin(admin.ModelAdmin):
+    list_display = (
+        'community_name',
+        'member_uid',
+        'date',
+        'is_present',
+        'is_visitor'
+    )
+    list_filter = (
+        'is_present',
+        'is_visitor',
+        'date'
+    )
+    search_fields = (
+        'community_name',
+        'member_uid'
+    )
+
+
+# ===========================
+# 9. EVENTS
+# ===========================
+
+class EventContributionInline(admin.TabularInline):
+    model = EventContribution
+    extra = 0
+
+
+@admin.register(EventDiary)
+class EventDiaryAdmin(admin.ModelAdmin):
+    list_display = (
+        'title',
+        'day',
+        'month',
+        'year',
+        'is_active'
+    )
+    list_filter = (
+        'year',
+        'month',
+        'is_active'
+    )
+    search_fields = ('title',)
+    inlines = [EventContributionInline]
+
+
+@admin.register(EventContribution)
+class EventContributionAdmin(admin.ModelAdmin):
+    list_display = (
+        'event',
+        'overseer',
+        'amount',
+        'has_contributed',
+        'contribution_date'
+    )
+    list_filter = (
+        'has_contributed',
+        'contribution_date'
+    )
+    search_fields = (
+        'event__title',
+        'overseer__overseer_initials_surname'
+    )
+
+
+# ===========================
+# 10. APOSTOLIC GREETINGS
+# ===========================
+
+@admin.register(ApostolicGreeting)
+class ApostolicGreetingAdmin(admin.ModelAdmin):
+    list_display = (
+        'apostle',
+        'role',
+        'year',
+        'likes',
+        'views',
+        'created_at'
+    )
+    list_filter = ('year',)
+    search_fields = (
+        'apostle',
+        'role'
+    )
+
+
+# ===========================
+# OPTIONAL: DIRECT ORDER ITEMS
+# ===========================
+
+@admin.register(OrderItem)
+class OrderItemAdmin(admin.ModelAdmin):
+    list_display = (
+        'order',
+        'product',
+        'price',
+        'quantity'
+    )
+    search_fields = (
+        'product__name',
+        'order__id'
+    )
