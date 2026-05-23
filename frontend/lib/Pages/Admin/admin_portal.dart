@@ -65,8 +65,7 @@ class _AdminPortalState extends State<AdminPortal> {
   String province = '';
 
   // --- BADGE STATE VARIABLES ---
-  int _pendingSellersCount = 0;
-  int _unresolvedIssuesCount = 0; // Example for future expansion
+  int _pendingSellersCount = 0; 
 
   @override
   void initState() {

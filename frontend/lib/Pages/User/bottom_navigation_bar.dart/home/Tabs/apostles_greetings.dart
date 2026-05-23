@@ -1,5 +1,5 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, avoid_print
-
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -7,23 +7,25 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-// YOUR PROJECT IMPORTS
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 
 class ApostlesGreetings extends StatefulWidget {
   const ApostlesGreetings({super.key});
-
   @override
   State<ApostlesGreetings> createState() => _ApostlesGreetingsState();
 }
 
-class _ApostlesGreetingsState extends State<ApostlesGreetings> {
+// Added AutomaticKeepAliveClientMixin to preserve state when switching tabs
+class _ApostlesGreetingsState extends State<ApostlesGreetings>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   String _selectedLang = 'en';
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
-
+  Timer? _debounce;
   List<dynamic> _allGreetings = [];
   bool _isLoading = true;
 
@@ -42,12 +44,18 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
     _fetchGreetingsFromBackend();
   }
 
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose(); // Fixed memory leak by disposing controller
+    super.dispose();
+  }
+
   Future<void> _fetchGreetingsFromBackend() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken();
       if (token == null) return;
-
       final url = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/apostolic_greetings/',
       );
@@ -55,24 +63,25 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
         url,
         headers: {'Authorization': 'Bearer $token'},
       );
-
       if (response.statusCode == 200) {
-        setState(() {
-          _allGreetings = jsonDecode(response.body);
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _allGreetings = jsonDecode(response.body);
+            _isLoading = false;
+          });
+        }
       } else {
-        setState(() => _isLoading = false);
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
       print('Fetch error: $e');
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   List<dynamic> get filteredGreetings {
     if (_searchQuery.isEmpty) return _allGreetings;
-    final query = _searchQuery.toLowerCase();
+    final query = _searchQuery.toLowerCase().trim();
     return _allGreetings.where((greeting) {
       final apostle = greeting['apostle'].toString().toLowerCase();
       final year = greeting['year'].toString().toLowerCase();
@@ -82,6 +91,7 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final theme = Theme.of(context);
     final Color neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.1),
@@ -93,7 +103,6 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
       body: SafeArea(
         child: Column(
           children: [
-            // NEUMORPHIC SEARCH BAR
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 20.0,
@@ -101,7 +110,7 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
               ),
               child: NeumorphicContainer(
                 color: neumoBaseColor,
-                isPressed: true, // Inset effect to look like an input field
+                isPressed: true,
                 borderRadius: 18,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 15.0,
@@ -117,8 +126,16 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
                     Expanded(
                       child: TextField(
                         controller: _searchController,
-                        onChanged: (value) =>
-                            setState(() => _searchQuery = value),
+                        onChanged: (value) {
+                          // Implemented debouncing to prevent UI jank while typing
+                          if (_debounce?.isActive ?? false) _debounce!.cancel();
+                          _debounce = Timer(
+                            const Duration(milliseconds: 300),
+                            () {
+                              if (mounted) setState(() => _searchQuery = value);
+                            },
+                          );
+                        },
                         style: TextStyle(
                           color: theme.textTheme.bodyMedium?.color,
                           fontWeight: FontWeight.w600,
@@ -149,8 +166,6 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
                 ),
               ),
             ),
-
-            // NEUMORPHIC LANGUAGE SELECTOR
             Container(
               height: 65,
               margin: const EdgeInsets.only(top: 5, bottom: 10),
@@ -163,7 +178,6 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
                   String langName = _supportedLanguages.keys.elementAt(index);
                   String langCode = _supportedLanguages.values.elementAt(index);
                   bool isSelected = _selectedLang == langCode;
-
                   return Padding(
                     padding: const EdgeInsets.only(
                       right: 15,
@@ -178,7 +192,7 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
                           color: isSelected
                               ? theme.primaryColor
                               : neumoBaseColor,
-                          isPressed: isSelected, // Pressed down when active
+                          isPressed: isSelected,
                           borderRadius: 25,
                           padding: const EdgeInsets.symmetric(horizontal: 22),
                           child: Center(
@@ -203,8 +217,6 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
                 },
               ),
             ),
-
-            // PREMIUM NEUMORPHIC TOP HEADER
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
               child: NeumorphicContainer(
@@ -236,8 +248,6 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
                 ),
               ),
             ),
-
-            // LIST OF GREETINGS
             Expanded(
               child: _isLoading
                   ? Center(child: CupertinoActivityIndicator(radius: 18))
@@ -261,21 +271,16 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
                       itemCount: filteredGreetings.length,
                       itemBuilder: (context, index) {
                         final greeting = filteredGreetings[index];
-
-                        // Safe cast for JSON handling
                         final Map<String, dynamic> contentMap =
                             greeting['content_json'] is String
                             ? jsonDecode(greeting['content_json'])
                             : greeting['content_json'];
-
-                        // Language Fallback
                         Map<String, dynamic>? localizedContent =
                             contentMap[_selectedLang];
                         if (localizedContent == null) {
                           localizedContent =
                               contentMap['en'] ?? contentMap['zu'];
                         }
-
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 25.0),
                           child: GreetingExpandableCard(
@@ -295,22 +300,16 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings> {
   }
 }
 
-// =======================================================================
-// CUSTOM EXPANDABLE GREETING CARD (Premium Neumorphic Design)
-// =======================================================================
-
 class GreetingExpandableCard extends StatefulWidget {
   final Map<String, dynamic> greetingData;
   final Map<String, String> localizedContent;
   final Color baseColor;
-
   const GreetingExpandableCard({
     Key? key,
     required this.greetingData,
     required this.localizedContent,
     required this.baseColor,
   }) : super(key: key);
-
   @override
   State<GreetingExpandableCard> createState() => _GreetingExpandableCardState();
 }
@@ -346,7 +345,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
   Future<void> _toggleFavorite() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> favs = prefs.getStringList('favorite_greetings') ?? [];
-
     setState(() {
       _isFavorite = !_isFavorite;
       if (_isFavorite) {
@@ -355,14 +353,12 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
         favs.remove(widget.greetingData['id']);
       }
     });
-
     await prefs.setStringList('favorite_greetings', favs);
   }
 
   Future<void> _registerView() async {
     if (_hasViewed) return;
     _hasViewed = true;
-
     try {
       final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken();
@@ -373,7 +369,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
         url,
         headers: {'Authorization': 'Bearer $token'},
       );
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (mounted) setState(() => _views = data['views']);
@@ -384,18 +379,15 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
   }
 
   Future<void> _toggleLike() async {
-    if (_hasLiked) return; // Prevent multi-likes for UI purity
-
+    if (_hasLiked) return;
     setState(() {
       _hasLiked = true;
       _likes++;
     });
-
     final prefs = await SharedPreferences.getInstance();
     List<String> liked = prefs.getStringList('liked_greetings') ?? [];
     liked.add(widget.greetingData['id']);
     await prefs.setStringList('liked_greetings', liked);
-
     try {
       final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken();
@@ -406,7 +398,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
         url,
         headers: {'Authorization': 'Bearer $token'},
       );
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (mounted) setState(() => _likes = data['likes']);
@@ -428,7 +419,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
     String imgUrl =
         widget.greetingData['image_url'] ?? 'assets/profile_placeholder.png';
     bool isNetworkImg = imgUrl.startsWith('http');
-
     return NeumorphicContainer(
       color: widget.baseColor,
       isPressed: false,
@@ -437,7 +427,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // HEADER ROW (Profile, Name, Toggle Button)
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () {
@@ -506,10 +495,7 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
               ],
             ),
           ),
-
           SizedBox(height: 20),
-
-          // TITLE
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5.0),
             child: Text(
@@ -522,20 +508,18 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
               ),
             ),
           ),
-
-          // EXPANDABLE TEXT CONTENT
           AnimatedCrossFade(
             duration: Duration(milliseconds: 300),
             crossFadeState: _isExpanded
                 ? CrossFadeState.showSecond
                 : CrossFadeState.showFirst,
-            firstChild: SizedBox(width: double.infinity), // Collapsed state
+            firstChild: SizedBox(width: double.infinity),
             secondChild: Column(
               children: [
                 SizedBox(height: 15),
                 NeumorphicContainer(
                   color: widget.baseColor,
-                  isPressed: true, // Inset text area for readability
+                  isPressed: true,
                   borderRadius: 20,
                   padding: EdgeInsets.all(18),
                   child: Column(
@@ -564,16 +548,12 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
               ],
             ),
           ),
-
           SizedBox(height: 20),
           Divider(color: theme.primaryColor.withOpacity(0.1), thickness: 1.5),
           SizedBox(height: 10),
-
-          // NEUMORPHIC TACTILE ACTIONS ROW
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // LIKE
               _buildInteractionButton(
                 icon: _hasLiked
                     ? Icons.favorite_rounded
@@ -585,8 +565,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
                 onTap: _toggleLike,
                 theme: theme,
               ),
-
-              // VIEWS (Non-clickable, but styled identically)
               _buildInteractionButton(
                 icon: Icons.remove_red_eye_rounded,
                 iconColor: theme.hintColor.withOpacity(0.6),
@@ -594,8 +572,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
                 onTap: null,
                 theme: theme,
               ),
-
-              // FAVORITE
               _buildInteractionButton(
                 icon: _isFavorite
                     ? Icons.bookmark_rounded
@@ -607,8 +583,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
                 onTap: _toggleFavorite,
                 theme: theme,
               ),
-
-              // SHARE
               _buildInteractionButton(
                 icon: Icons.ios_share_rounded,
                 iconColor: theme.primaryColor.withOpacity(0.7),
@@ -623,7 +597,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
     );
   }
 
-  // Helper widget for the tactile bottom buttons
   Widget _buildInteractionButton({
     required IconData icon,
     required Color iconColor,

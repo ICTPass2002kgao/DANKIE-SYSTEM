@@ -1,15 +1,14 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, avoid_print
 
 import 'dart:convert';
-import 'package:http/http.dart' as http; // Add HTTP package
-import 'package:firebase_auth/firebase_auth.dart'; // REQUIRED FOR SECURE TOKEN
-import 'package:shared_preferences/shared_preferences.dart'; // REQUIRED FOR CACHING
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
-// YOUR PROJECT IMPORTS
-import 'package:ttact/Components/API.dart'; // Ensure this points to your Django URL
+import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/BibleVerseRepository.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 import 'package:ttact/Components/bottomsheet.dart';
@@ -26,10 +25,12 @@ class EventsTab extends StatefulWidget {
   State<EventsTab> createState() => _EventsTabState();
 }
 
-class _EventsTabState extends State<EventsTab> {
-  // Changed from QuerySnapshot to List of Maps for Django JSON
-  Future<List<dynamic>>? _eventsFuture;
+class _EventsTabState extends State<EventsTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // Prevents reloading when switching tabs
 
+  Future<List<dynamic>>? _eventsFuture;
   int _selectedCategoryIndex = 0;
   final List<String> _categories = [
     "All",
@@ -45,14 +46,12 @@ class _EventsTabState extends State<EventsTab> {
     _loadEvents();
   }
 
-  // --- NEW: FETCH FROM BOTH DJANGO APIs (EVENTS & DIARY), MERGE AND SORT ---
   void _loadEvents() {
     setState(() {
       _eventsFuture = _fetchEventsFromDjango();
     });
   }
 
-  // Helper function to extract month numbers for chronological sorting
   int _parseMonth(String monthStr) {
     if (monthStr.isEmpty) return 12;
     final cleanStr = monthStr.split('-')[0].trim().toLowerCase();
@@ -75,7 +74,6 @@ class _EventsTabState extends State<EventsTab> {
     return months[m] ?? 12;
   }
 
-  // Helper function to convert an event's string dates into a sortable DateTime
   DateTime _parseEventDate(dynamic event) {
     String dayStr = (event['day']?.toString() ?? '').toLowerCase();
     String monthStr = (event['month']?.toString() ?? '').toLowerCase();
@@ -83,7 +81,6 @@ class _EventsTabState extends State<EventsTab> {
         ? int.tryParse(event['year'].toString()) ?? DateTime.now().year
         : DateTime.now().year;
 
-    // Push "To Be Communicated" events to the far future so they appear last
     if (dayStr.contains('communicated') || monthStr.contains('communicated')) {
       return DateTime(year + 1, 12, 31);
     }
@@ -98,16 +95,13 @@ class _EventsTabState extends State<EventsTab> {
     final prefs = await SharedPreferences.getInstance();
 
     try {
-      // 1. Check for Cached Data FIRST
       String? cachedEvents = prefs.getString('saved_combined_events_data');
       if (cachedEvents != null) {
         print("⚡ Loading events instantly from Local Storage");
       }
 
-      // 2. SECURE FIX: Get the current Firebase user and Token
       User? user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        print("❌ Blocked: No user is currently logged in.");
         if (cachedEvents != null) {
           return json.decode(cachedEvents).take(3).toList();
         }
@@ -116,14 +110,12 @@ class _EventsTabState extends State<EventsTab> {
 
       String? token = await user.getIdToken();
       if (token == null) {
-        print("❌ Blocked: Could not retrieve Firebase token.");
         if (cachedEvents != null) {
           return json.decode(cachedEvents).take(3).toList();
         }
         return [];
       }
 
-      // 3. Build the URLs for BOTH tables
       final eventsUrl = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/events/');
       final diaryUrl = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/event_diary/',
@@ -134,7 +126,6 @@ class _EventsTabState extends State<EventsTab> {
         'Content-Type': 'application/json',
       };
 
-      // 4. Fetch from both endpoints concurrently
       final responses = await Future.wait([
         http
             .get(eventsUrl, headers: headers)
@@ -146,7 +137,6 @@ class _EventsTabState extends State<EventsTab> {
 
       List<dynamic> combinedEvents = [];
 
-      // Helper to extract JSON safely from DRF responses
       List<dynamic> extractData(http.Response res) {
         if (res.statusCode == 200) {
           final decoded = json.decode(res.body);
@@ -159,30 +149,23 @@ class _EventsTabState extends State<EventsTab> {
         return [];
       }
 
-      // Merge data
-      combinedEvents.addAll(extractData(responses[0])); // Data from /events/
-      combinedEvents.addAll(
-        extractData(responses[1]),
-      ); // Data from /event_diary/
+      combinedEvents.addAll(extractData(responses[0]));
+      combinedEvents.addAll(extractData(responses[1]));
 
-      // 5. Filter out past events and sort by nearest upcoming date
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
 
-      // Keep only events occurring today or in the future
       combinedEvents = combinedEvents.where((event) {
         DateTime eventDate = _parseEventDate(event);
         return eventDate.isAfter(today.subtract(const Duration(days: 1)));
       }).toList();
 
-      // Sort chronologically ascending (nearest first)
       combinedEvents.sort((a, b) {
         DateTime dateA = _parseEventDate(a);
         DateTime dateB = _parseEventDate(b);
         return dateA.compareTo(dateB);
       });
 
-      // 6. SAVE THE FRESH SORTED DATA TO LOCAL STORAGE
       if (combinedEvents.isNotEmpty) {
         await prefs.setString(
           'saved_combined_events_data',
@@ -191,11 +174,9 @@ class _EventsTabState extends State<EventsTab> {
         print("💾 Fresh merged events saved to Local Storage");
       }
 
-      // 7. Return the top 3 nearest events
       return combinedEvents.take(3).toList();
     } catch (e) {
       print("Network Error: $e");
-      // If the user has no internet, show them the saved data
       String? cachedEvents = prefs.getString('saved_combined_events_data');
       if (cachedEvents != null) {
         print("📴 No internet! Showing offline cached events.");
@@ -207,6 +188,7 @@ class _EventsTabState extends State<EventsTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final theme = Theme.of(context);
     final dailyVerse = GreetingsQuoteRepository.getDailyQuote();
 
@@ -223,12 +205,8 @@ class _EventsTabState extends State<EventsTab> {
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
           physics: const BouncingScrollPhysics(),
           children: [
-            // DAILY VERSE
             _buildNeumorphicDailyVerse(theme, neumoBaseColor, dailyVerse),
-
             const SizedBox(height: 20),
-
-            // OPPORTUNITY BANNER
             NeumorphicContainer(
               color: neumoBaseColor,
               isPressed: false,
@@ -236,14 +214,9 @@ class _EventsTabState extends State<EventsTab> {
               padding: EdgeInsets.all(5),
               child: _buildOpportunityBanner(context),
             ),
-
             const SizedBox(height: 10),
-
-            // CATEGORY FILTERS
             _buildNeumorphicFilters(theme, neumoBaseColor),
-
             const SizedBox(height: 10),
-
             Padding(
               padding: const EdgeInsets.only(left: 10.0),
               child: Text(
@@ -257,8 +230,6 @@ class _EventsTabState extends State<EventsTab> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // 5. EVENTS LIST (MERGED AND SORTED API DATA)
             FutureBuilder<List<dynamic>>(
               future: _eventsFuture,
               builder: (context, snapshot) {
@@ -272,11 +243,9 @@ class _EventsTabState extends State<EventsTab> {
                     ),
                   );
                 }
-
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
                   return _buildNeumorphicEmptyState(theme, neumoBaseColor);
                 }
-
                 return _buildEventsList(theme, neumoBaseColor, snapshot.data!);
               },
             ),
@@ -287,7 +256,6 @@ class _EventsTabState extends State<EventsTab> {
     );
   }
 
-  // --- UPDATED LIST BUILDER ---
   Widget _buildEventsList(
     ThemeData theme,
     Color neumoBaseColor,
@@ -298,17 +266,13 @@ class _EventsTabState extends State<EventsTab> {
         int index = entry.key;
         var event = entry.value;
 
-        // Highlight the first event
         bool isNextUpcoming = index == 0;
-
         Color textColor = isNextUpcoming
             ? theme.primaryColor
             : theme.textTheme.bodyMedium!.color!;
-
         IconData statusIcon = isNextUpcoming
             ? Icons.play_arrow_rounded
             : Icons.calendar_today_rounded;
-
         Color iconColor = isNextUpcoming ? theme.primaryColor : theme.hintColor;
 
         String day = event['day']?.toString() ?? '';
@@ -316,7 +280,6 @@ class _EventsTabState extends State<EventsTab> {
         String title = event['title'] ?? 'No Title';
         String description =
             event['description'] ?? 'Event details to be communicated.';
-        // Check for 'poster_url' (Django default) OR 'posterUrl' (if camelCase configured)
         String posterUrl = event['poster_url'] ?? event['posterUrl'] ?? '';
 
         return Padding(
@@ -344,7 +307,6 @@ class _EventsTabState extends State<EventsTab> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // LEFT: DATE BUBBLE
                   NeumorphicContainer(
                     color: isNextUpcoming
                         ? theme.primaryColor.withOpacity(0.1)
@@ -388,10 +350,7 @@ class _EventsTabState extends State<EventsTab> {
                       ],
                     ),
                   ),
-
                   SizedBox(width: 16),
-
-                  // MIDDLE: TITLE
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -423,10 +382,7 @@ class _EventsTabState extends State<EventsTab> {
                       ],
                     ),
                   ),
-
                   SizedBox(width: 10),
-
-                  // RIGHT: STATUS ICON
                   NeumorphicContainer(
                     color: neumoBaseColor,
                     isPressed: false,
@@ -441,8 +397,6 @@ class _EventsTabState extends State<EventsTab> {
       }).toList(),
     );
   }
-
-  // --- UI HELPERS ---
 
   Widget _buildNeumorphicEmptyState(ThemeData theme, Color baseColor) {
     return NeumorphicContainer(

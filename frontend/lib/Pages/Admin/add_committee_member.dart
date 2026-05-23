@@ -1,13 +1,15 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, prefer_const_literals_to_create_immutables, avoid_print
 
-import 'dart:convert'; // Added for JSON
+import 'dart:convert';
 import 'dart:io' as io;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http; // Added for API
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:ttact/Components/API.dart';
+import 'package:ttact/Components/NeuDesign.dart';
 
 // --- PLATFORM UTILITIES ---
 const double _desktopBreakpoint = 900.0;
@@ -37,33 +39,46 @@ class AddCommitteeMember extends StatefulWidget {
 
 class _AddCommitteeMemberState extends State<AddCommitteeMember> {
   // State for Desktop Split View
-  int? _selectedBranchId; // Changed to int (Django ID)
+  String? _selectedBranchId;
   Map<String, dynamic>? _selectedBranchData;
+
+  // Fetch branches with Firebase Auth Token
+  Future<http.Response> _fetchBranches() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final token = await user?.getIdToken();
+    return http.get(
+      Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/tactso_branches/'),
+      headers: {
+        if (token != null) 'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     final isLargeScreen = width > _desktopBreakpoint;
+    final theme = Theme.of(context);
+    final neumoBaseColor = Color.alphaBlend(
+      theme.primaryColor.withOpacity(0.08),
+      theme.scaffoldBackgroundColor,
+    );
 
     return Scaffold(
-      backgroundColor: Colors.grey[100],
-      appBar: AppBar(
-        title: Text(
-          "Manage Committees (Super Admin)",
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: IconThemeData(color: Colors.black87),
-      ),
-      body: isLargeScreen ? _buildDesktopLayout() : _buildMobileLayout(),
+      backgroundColor: neumoBaseColor,
+      body: isLargeScreen
+          ? _buildDesktopLayout(theme, neumoBaseColor)
+          : _buildMobileLayout(theme, neumoBaseColor),
     );
   }
 
   // --- LAYOUTS ---
 
-  Widget _buildMobileLayout() {
+  Widget _buildMobileLayout(ThemeData theme, Color neumoBaseColor) {
     return _buildBranchList(
+      theme: theme,
+      neumoBaseColor: neumoBaseColor,
       onTap: (id, data) {
         showModalBottomSheet(
           context: context,
@@ -75,7 +90,7 @@ class _AddCommitteeMemberState extends State<AddCommitteeMember> {
             maxChildSize: 0.95,
             builder: (_, controller) => Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: neumoBaseColor,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Column(
@@ -85,7 +100,7 @@ class _AddCommitteeMemberState extends State<AddCommitteeMember> {
                     height: 5,
                     width: 40,
                     decoration: BoxDecoration(
-                      color: Colors.grey[300],
+                      color: theme.primaryColor.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -108,7 +123,7 @@ class _AddCommitteeMemberState extends State<AddCommitteeMember> {
     );
   }
 
-  Widget _buildDesktopLayout() {
+  Widget _buildDesktopLayout(ThemeData theme, Color neumoBaseColor) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -116,10 +131,14 @@ class _AddCommitteeMemberState extends State<AddCommitteeMember> {
         Container(
           width: 350,
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(right: BorderSide(color: Colors.grey.shade300)),
+            color: neumoBaseColor,
+            border: Border(
+              right: BorderSide(color: theme.primaryColor.withOpacity(0.1)),
+            ),
           ),
           child: _buildBranchList(
+            theme: theme,
+            neumoBaseColor: neumoBaseColor,
             onTap: (id, data) {
               setState(() {
                 _selectedBranchId = id;
@@ -136,7 +155,10 @@ class _AddCommitteeMemberState extends State<AddCommitteeMember> {
               ? Center(
                   child: Text(
                     "Select a University Branch to manage its committee.",
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(
+                      color: theme.primaryColor.withOpacity(0.6),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 )
               : SingleChildScrollView(
@@ -155,66 +177,101 @@ class _AddCommitteeMemberState extends State<AddCommitteeMember> {
   // --- BRANCH LIST (DJANGO API) ---
 
   Widget _buildBranchList({
-    required Function(int, Map<String, dynamic>) onTap,
-    int? selectedId,
+    required Function(String, Map<String, dynamic>) onTap,
+    String? selectedId,
+    required ThemeData theme,
+    required Color neumoBaseColor,
   }) {
     return FutureBuilder<http.Response>(
-      // Fetch branches from Django
-      future: http.get(
-        Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/tactso_branches/'),
-      ),
+      future: _fetchBranches(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(child: CupertinoActivityIndicator());
+          return Center(
+            child: CupertinoActivityIndicator(color: theme.primaryColor),
+          );
         }
 
         if (snapshot.hasError || snapshot.data?.statusCode != 200) {
-          return Center(child: Text("Error loading branches"));
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                "Error loading branches.\n"
+                "Details: ${snapshot.error ?? 'Status Code ${snapshot.data?.statusCode}'}",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          );
         }
 
         List<dynamic> branches = json.decode(snapshot.data!.body);
 
         if (branches.isEmpty) {
-          return Center(child: Text("No Branches Found"));
+          return Center(
+            child: Text(
+              "No Branches Found",
+              style: TextStyle(color: theme.primaryColor),
+            ),
+          );
         }
 
         return ListView.builder(
           itemCount: branches.length,
+          padding: EdgeInsets.all(10),
           itemBuilder: (context, index) {
             final data = branches[index];
-            final int id = data['id'];
+            final String id = data['id'].toString();
             final bool isSelected = selectedId == id;
 
-            // Handle Django Snake Case
             final String uniName = data['university_name'] ?? 'Unknown';
             final String email = data['email'] ?? '';
             String? logoUrl = data['image_url'];
 
-            return Container(
-              color: isSelected
-                  ? Colors.blue.withOpacity(0.1)
-                  : Colors.transparent,
-              child: ListTile(
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 8,
-                ),
-                leading: CircleAvatar(
-                  backgroundColor: Colors.grey[200],
-                  backgroundImage: (logoUrl != null && logoUrl.isNotEmpty)
-                      ? NetworkImage(logoUrl)
-                      : null,
-                  child: (logoUrl == null || logoUrl.isEmpty)
-                      ? Icon(Icons.school, color: Colors.grey)
-                      : null,
-                ),
-                title: Text(
-                  uniName,
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(email, style: TextStyle(fontSize: 12)),
-                trailing: Icon(Icons.chevron_right, color: Colors.grey),
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8.0),
+              child: GestureDetector(
                 onTap: () => onTap(id, data),
+                child: NeumorphicContainer(
+                  isPressed: isSelected,
+                  color: isSelected
+                      ? theme.primaryColor.withOpacity(0.1)
+                      : null,
+                  borderRadius: 12,
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: NeumorphicContainer(
+                      isPressed: true,
+                      borderRadius: 30,
+                      padding: EdgeInsets.all(logoUrl != null ? 0 : 8),
+                      child: CircleAvatar(
+                        backgroundColor: Colors.transparent,
+                        backgroundImage: (logoUrl != null && logoUrl.isNotEmpty)
+                            ? NetworkImage(logoUrl)
+                            : null,
+                        child: (logoUrl == null || logoUrl.isEmpty)
+                            ? Icon(Icons.school, color: theme.primaryColor)
+                            : null,
+                      ),
+                    ),
+                    title: Text(
+                      uniName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: theme.textTheme.bodyMedium?.color,
+                      ),
+                    ),
+                    subtitle: Text(
+                      email,
+                      style: TextStyle(fontSize: 12, color: theme.hintColor),
+                    ),
+                    trailing: Icon(
+                      Icons.chevron_right,
+                      color: theme.primaryColor.withOpacity(0.5),
+                    ),
+                  ),
+                ),
               ),
             );
           },
@@ -229,7 +286,7 @@ class _AddCommitteeMemberState extends State<AddCommitteeMember> {
 // =============================================================================
 
 class CommitteeManagerView extends StatefulWidget {
-  final int branchId; // Django ID
+  final String branchId;
   final Map<String, dynamic> branchData;
 
   const CommitteeManagerView({
@@ -265,32 +322,39 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
     'Education Officer',
   ];
 
-  final Color _cardColor = Colors.white;
-  final Color _borderColor = Colors.grey.shade300;
-  final Color _inputFillColor = Colors.grey.shade50;
-  final Color _primaryColor = const Color(0xFF1E3A8A);
-  final Color _textColor = Colors.black87;
-  final Color _subTextColor = Colors.grey.shade600;
-
   @override
   void initState() {
     super.initState();
     _fetchMembers();
   }
 
-  // --- 1. FETCH MEMBERS (GET) ---
   Future<void> _fetchMembers() async {
     setState(() => _isLoadingMembers = true);
     try {
-      // Filter by branch ID
+      final user = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken();
+
       final uri = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/branch_committee/?branch=${widget.branchId}',
       );
-      final response = await http.get(uri);
+      final response = await http.get(
+        uri,
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
       if (response.statusCode == 200) {
+        List<dynamic> allMembers = json.decode(response.body);
+
         setState(() {
-          _members = json.decode(response.body);
+          // Manually filter the list in Flutter just in case the backend ignores the query parameter
+          _members = allMembers.where((member) {
+            // Ensure the 'branch' key matches what your JSON returns
+            return member['branch'].toString() == widget.branchId;
+          }).toList();
+
           _isLoadingMembers = false;
         });
       } else {
@@ -340,10 +404,16 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
       var uri = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/branch_committee/');
       var request = http.MultipartRequest('POST', uri);
 
+      final user = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken();
+
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+
       // Fields
-      request.fields['branch'] = widget.branchId.toString();
-      request.fields['fullname'] = _nameController.text
-          .trim(); // Matches Django Model 'fullname'
+      request.fields['branch'] = widget.branchId;
+      request.fields['fullname'] = _nameController.text.trim();
       request.fields['email'] = _emailController.text.trim();
       request.fields['role'] = _selectedRole!;
 
@@ -392,12 +462,18 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
   }
 
   // --- 3. DELETE MEMBER (DELETE) ---
-  Future<void> _deleteMember(int id) async {
+  Future<void> _deleteMember(String id) async {
     try {
+      final user = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken();
+
       final uri = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/branch_committee/$id/',
       );
-      final response = await http.delete(uri);
+      final response = await http.delete(
+        uri,
+        headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      );
 
       if (response.statusCode == 204) {
         Api().showMessage(context, "Deleted", "Member removed", Colors.grey);
@@ -412,8 +488,12 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
 
   @override
   Widget build(BuildContext context) {
-    // Handle potential null/missing keys from Django map
     final String uniName = widget.branchData['university_name'] ?? "University";
+    final theme = Theme.of(context);
+    final neumoBaseColor = Color.alphaBlend(
+      theme.primaryColor.withOpacity(0.08),
+      theme.scaffoldBackgroundColor,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -421,13 +501,11 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
         // Header
         Row(
           children: [
-            Container(
-              padding: EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(Icons.shield, color: Colors.blue, size: 30),
+            NeumorphicContainer(
+              isPressed: true,
+              borderRadius: 12,
+              padding: EdgeInsets.all(12),
+              child: Icon(Icons.shield, color: theme.primaryColor, size: 30),
             ),
             SizedBox(width: 15),
             Expanded(
@@ -439,14 +517,14 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
-                      color: _textColor,
+                      color: theme.textTheme.bodyMedium?.color,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     "Committee Management (Admin Override)",
-                    style: TextStyle(color: _subTextColor),
+                    style: TextStyle(color: theme.hintColor),
                   ),
                 ],
               ),
@@ -457,29 +535,18 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
         SizedBox(height: 30),
 
         // --- ADD FORM ---
-        Container(
+        NeumorphicContainer(
+          borderRadius: 20,
           padding: EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: _cardColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _borderColor),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 "Add New Member",
                 style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: _textColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: theme.primaryColor,
                 ),
               ),
               SizedBox(height: 20),
@@ -487,43 +554,49 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Image Picker
-                  InkWell(
+                  GestureDetector(
                     onTap: _pickImage,
-                    child: Container(
-                      width: 90,
-                      height: 90,
-                      decoration: BoxDecoration(
-                        color: _inputFillColor,
-                        border: Border.all(color: _borderColor),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: _faceImage == null
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_a_photo, color: _subTextColor),
-                                SizedBox(height: 4),
-                                Text(
-                                  "Face",
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: _subTextColor,
+                    child: NeumorphicContainer(
+                      isPressed: true,
+                      borderRadius: 15,
+                      padding: EdgeInsets.zero,
+                      child: Container(
+                        width: 90,
+                        height: 90,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: _faceImage == null
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_a_photo,
+                                    color: theme.primaryColor.withOpacity(0.5),
                                   ),
-                                ),
-                              ],
-                            )
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(11),
-                              child: kIsWeb
-                                  ? Image.network(
-                                      _faceImage!.path,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : Image.file(
-                                      io.File(_faceImage!.path),
-                                      fit: BoxFit.cover,
+                                  SizedBox(height: 4),
+                                  Text(
+                                    "Face",
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: theme.hintColor,
                                     ),
-                            ),
+                                  ),
+                                ],
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(15),
+                                child: kIsWeb
+                                    ? Image.network(
+                                        _faceImage!.path,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Image.file(
+                                        io.File(_faceImage!.path),
+                                        fit: BoxFit.cover,
+                                      ),
+                              ),
+                      ),
                     ),
                   ),
                   SizedBox(width: 20),
@@ -535,12 +608,14 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
                           _nameController,
                           "Full Name",
                           Icons.person,
+                          theme,
                         ),
                         SizedBox(height: 12),
                         _styledTextField(
                           _emailController,
                           "Email",
                           Icons.email,
+                          theme,
                         ),
                       ],
                     ),
@@ -551,46 +626,44 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
               Row(
                 children: [
                   Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedRole,
-                      hint: Text("Select Portfolio"),
-                      dropdownColor: _cardColor,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: _inputFillColor,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: _borderColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: _borderColor),
-                        ),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
+                    child: NeumorphicContainer(
+                      isPressed: true,
+                      borderRadius: 12,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 2,
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedRole,
+                          hint: Text(
+                            "Select Portfolio",
+                            style: TextStyle(
+                              color: theme.hintColor.withOpacity(0.6),
+                            ),
+                          ),
+                          dropdownColor: neumoBaseColor,
+                          isExpanded: true,
+                          items: _roles
+                              .map(
+                                (r) =>
+                                    DropdownMenuItem(value: r, child: Text(r)),
+                              )
+                              .toList(),
+                          onChanged: (v) => setState(() => _selectedRole = v),
                         ),
                       ),
-                      items: _roles
-                          .map(
-                            (r) => DropdownMenuItem(value: r, child: Text(r)),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _selectedRole = v),
                     ),
                   ),
                   SizedBox(width: 15),
-                  SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isUploading ? null : _addMember,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: EdgeInsets.symmetric(horizontal: 24),
+                  GestureDetector(
+                    onTap: _isUploading ? null : _addMember,
+                    child: NeumorphicContainer(
+                      color: theme.primaryColor,
+                      borderRadius: 10,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
                       ),
                       child: _isUploading
                           ? SizedBox(
@@ -601,7 +674,13 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
                                 strokeWidth: 2,
                               ),
                             )
-                          : Text("Add Member"),
+                          : Text(
+                              "ADD MEMBER",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                 ],
@@ -615,27 +694,27 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
           "Current Committee",
           style: TextStyle(
             fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: _textColor,
+            fontWeight: FontWeight.w900,
+            color: theme.primaryColor,
           ),
         ),
         SizedBox(height: 15),
 
         // --- GRID LIST (Local Data) ---
         _isLoadingMembers
-            ? Center(child: CupertinoActivityIndicator())
+            ? Center(
+                child: CupertinoActivityIndicator(color: theme.primaryColor),
+              )
             : _members.isEmpty
-            ? Container(
+            ? NeumorphicContainer(
+                isPressed: true,
                 padding: EdgeInsets.all(20),
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  "No members found.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                borderRadius: 12,
+                child: Center(
+                  child: Text(
+                    "No members found.",
+                    style: TextStyle(color: theme.hintColor),
+                  ),
                 ),
               )
             : GridView.builder(
@@ -650,41 +729,44 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
                 itemCount: _members.length,
                 itemBuilder: (context, index) {
                   var data = _members[index];
-                  final int id = data['id'];
+                  final String id = data['id'].toString();
 
-                  return Container(
+                  return NeumorphicContainer(
+                    borderRadius: 12,
                     padding: EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: _cardColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _borderColor),
-                    ),
                     child: Row(
                       children: [
-                        Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(10),
-                            color: Colors.grey[200],
-                            image: DecorationImage(
-                              image:
-                                  (data['face_url'] != null &&
-                                      data['face_url'].toString().isNotEmpty)
-                                  ? NetworkImage(data['face_url'])
-                                  : NetworkImage(
-                                          'https://via.placeholder.com/150',
-                                        )
-                                        as ImageProvider, // Fallback
-                              fit: BoxFit.cover,
-                              onError: (e, s) => Icon(Icons.person),
+                        NeumorphicContainer(
+                          isPressed: true,
+                          borderRadius: 10,
+                          padding: EdgeInsets.zero,
+                          child: Container(
+                            width: 50,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              image: DecorationImage(
+                                image:
+                                    (data['face_url'] != null &&
+                                        data['face_url'].toString().isNotEmpty)
+                                    ? NetworkImage(data['face_url'])
+                                    : NetworkImage(
+                                            'https://via.placeholder.com/150',
+                                          )
+                                          as ImageProvider,
+                                fit: BoxFit.cover,
+                                onError: (e, s) => Icon(Icons.person),
+                              ),
                             ),
+                            child:
+                                (data['face_url'] == null ||
+                                    data['face_url'].toString().isEmpty)
+                                ? Icon(
+                                    Icons.person,
+                                    color: theme.primaryColor.withOpacity(0.5),
+                                  )
+                                : null,
                           ),
-                          child:
-                              (data['face_url'] == null ||
-                                  data['face_url'].toString().isEmpty)
-                              ? Icon(Icons.person, color: Colors.grey)
-                              : null,
                         ),
                         SizedBox(width: 12),
                         Expanded(
@@ -693,17 +775,17 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
-                                data['fullname'] ?? 'Unknown',
+                                data['full_name'] ?? 'Unknown',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  color: _textColor,
+                                  color: theme.textTheme.bodyMedium?.color,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                data['role'] ?? 'Member',
+                                data['portfolio'] ?? 'Member',
                                 style: TextStyle(
-                                  color: _primaryColor,
+                                  color: theme.primaryColor,
                                   fontSize: 12,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -712,7 +794,10 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
                           ),
                         ),
                         IconButton(
-                          icon: Icon(Icons.delete_outline, color: Colors.red),
+                          icon: Icon(
+                            Icons.delete_outline,
+                            color: Colors.red.shade400,
+                          ),
                           onPressed: () => _deleteMember(id),
                         ),
                       ],
@@ -720,7 +805,7 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
                   );
                 },
               ),
-        SizedBox(height: 50), // Bottom padding
+        SizedBox(height: 50),
       ],
     );
   }
@@ -729,23 +814,25 @@ class _CommitteeManagerViewState extends State<CommitteeManagerView> {
     TextEditingController controller,
     String label,
     IconData icon,
+    ThemeData theme,
   ) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: _subTextColor, size: 20),
-        filled: true,
-        fillColor: _inputFillColor,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _borderColor),
+    return NeumorphicContainer(
+      isPressed: true,
+      borderRadius: 12,
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: TextField(
+        controller: controller,
+        style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+        decoration: InputDecoration(
+          hintText: label,
+          hintStyle: TextStyle(color: theme.hintColor.withOpacity(0.6)),
+          prefixIcon: Icon(icon, color: theme.primaryColor),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(
+            vertical: 16.0,
+            horizontal: 10.0,
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _borderColor),
-        ),
-        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }

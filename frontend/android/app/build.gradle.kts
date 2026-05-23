@@ -44,16 +44,15 @@ android {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 35
-        versionCode = 44
-        versionName = "1.0.44"
+        versionCode = 45
+        versionName = "1.0.45"
         
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
 
         ndk {
             abiFilters.add("arm64-v8a")
         }
-        
-        // 👇 ADDED THIS TO FIX DESUGARING ON SOME VERSIONS 👇
+         
         multiDexEnabled = true 
     }
     
@@ -87,4 +86,15 @@ dependencies {
 
     // 👇 UPDATED VERSION FROM 2.0.4 TO 2.1.4 👇
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+configurations.all {
+    resolutionStrategy {
+        force("androidx.camera:camera-core:1.5.0")
+        force("androidx.camera:camera-camera2:1.5.0")
+        force("androidx.camera:camera-lifecycle:1.5.0")
+        force("androidx.camera:camera-video:1.5.0")
+        force("androidx.camera:camera-view:1.5.0")
+        force("androidx.camera:camera-extensions:1.5.0")
+    }
 }

@@ -191,7 +191,7 @@ class _StaffMembersState extends State<StaffMembers> {
       request.fields['email'] = "admin@dankie.co.za";
       request.fields['role'] = 'Admin';
       request.fields['personal_email'] = emailController.text.trim();
-      request.fields['uid'] = FirebaseAuth.instance.currentUser!.uid ?? '';
+      request.fields['uid'] = FirebaseAuth.instance.currentUser?.uid ?? '';
 
       String token =
           await FirebaseAuth.instance.currentUser?.getIdToken() ?? '';

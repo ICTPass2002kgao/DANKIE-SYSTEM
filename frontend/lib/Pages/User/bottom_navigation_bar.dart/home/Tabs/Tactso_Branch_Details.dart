@@ -439,7 +439,7 @@ class TactsoBranchDetails extends StatelessWidget {
                     );
                   }
                 },
-                text: 'Ask for Help!',
+                text: 'Request for help!',
                 baseColor: neumoBaseColor,
                 textColor: theme.primaryColor,
                 isPrimary: false,

@@ -36,7 +36,13 @@ class MusicTab extends StatefulWidget {
   State<MusicTab> createState() => MusicTabState();
 }
 
-class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
+// ⭐️ FIX 1: Added AutomaticKeepAliveClientMixin
+class MusicTabState extends State<MusicTab>
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  // ⭐️ FIX 1.1: Tell Flutter to keep this widget alive when off-screen
+  @override
+  bool get wantKeepAlive => true;
+
   AdManager adManager = AdManager();
   int _songPlayCount = 0;
 
@@ -44,6 +50,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
   String _musicSearchQuery = '';
   String _selectedCategory = 'All';
   int? _selectedSongIndex;
+  Timer? _debounce; // ⭐️ Added for search debouncing
 
   // Lazy Loading / Pagination State Variables
   final ScrollController _scrollController = ScrollController();
@@ -70,6 +77,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
   }
 
   // --- 1. FETCH MUSIC PAGE (DJANGO - SECURED) ---
+  // ⭐️ FIX 2: Added query and category parameters for server-side filtering
   Future<List<dynamic>> _fetchMusicPage(int page) async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
@@ -84,8 +92,20 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
         return [];
       }
 
+      // Build query string based on Django backend expectations
+      String queryParams = '?page=$page&page_size=$_pageSize';
+
+      if (_musicSearchQuery.trim().isNotEmpty) {
+        queryParams +=
+            '&search=${Uri.encodeComponent(_musicSearchQuery.trim())}';
+      }
+
+      if (_selectedCategory != 'All') {
+        queryParams += '&category=${Uri.encodeComponent(_selectedCategory)}';
+      }
+
       final url = Uri.parse(
-        '${Api().BACKEND_BASE_URL_DEBUG}/songs/?page=$page&page_size=$_pageSize',
+        '${Api().BACKEND_BASE_URL_DEBUG}/songs/$queryParams',
       );
 
       final response = await http.get(
@@ -118,24 +138,27 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _loadInitialData() async {
-    _currentPage = 1;
-    _hasMoreSongs = true;
-    _allLoadedSongs.clear();
+  // ⭐️ FIX 3: Extracted data loading to easily refresh on search/category change
+  Future<void> _refreshData() async {
+    setState(() {
+      _currentPage = 1;
+      _hasMoreSongs = true;
+      _allLoadedSongs.clear();
+      _currentFilteredSongs.clear();
+    });
 
     final firstPageData = await _fetchMusicPage(_currentPage);
-    if (firstPageData.isEmpty || firstPageData.length < _pageSize) {
-      _hasMoreSongs = false;
-    }
 
-    // ⭐️ FIX: Basic Deduplication for the first load to be safe
-    final Set<String> seenUrls = {};
-    for (var song in firstPageData) {
-      final url = song['song_url'] ?? song['songUrl'];
-      if (url != null && !seenUrls.contains(url)) {
-        seenUrls.add(url);
-        _allLoadedSongs.add(song);
-      }
+    if (mounted) {
+      setState(() {
+        if (firstPageData.isEmpty || firstPageData.length < _pageSize) {
+          _hasMoreSongs = false;
+        }
+        _allLoadedSongs.addAll(firstPageData);
+        _currentFilteredSongs = List.from(
+          _allLoadedSongs,
+        ); // Update visual list directly
+      });
     }
   }
 
@@ -158,26 +181,21 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
             _hasMoreSongs = false;
           }
 
-          // ⭐️ FIX FOR INFINITE REPEATING SONGS: Deduplication logic
-          // Collect all the URLs we currently have in the list to prevent duplicates
           final existingUrls = _allLoadedSongs
               .map((song) => song['song_url'] ?? song['songUrl'])
               .toSet();
 
-          // Only keep songs from the new page that are NOT already in our list
           final newSongs = nextPageData.where((song) {
             final url = song['song_url'] ?? song['songUrl'];
             return url != null && !existingUrls.contains(url);
           }).toList();
 
-          // If the backend sent us data, but every single item was a duplicate,
-          // it means the backend pagination is failing and looping Page 1. Stop fetching.
           if (nextPageData.isNotEmpty && newSongs.isEmpty) {
             _hasMoreSongs = false;
           } else {
             _allLoadedSongs.addAll(newSongs);
-            _currentPage =
-                nextPage; // Only increment if we successfully found new data
+            _currentFilteredSongs = List.from(_allLoadedSongs);
+            _currentPage = nextPage;
           }
 
           _isLoadingNextPage = false;
@@ -216,7 +234,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
         showPlatformMessage(
           context,
           "Song Not Found",
-          "The shared song could not be found in our library.",
+          "The shared song could not be found in our currently loaded library. Please try searching for it.",
           Colors.orange,
         );
       }
@@ -292,13 +310,20 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
     );
     _initLocalPath();
 
-    _initialLoadFuture = _loadInitialData();
+    _initialLoadFuture = _refreshData(); // ⭐️ Uses new refresh method
     _scrollController.addListener(_onScroll);
 
+    // ⭐️ FIX 4: Implemented search debouncing so we don't spam the server
     _musicSearchController.addListener(() {
-      setState(() {
-        _musicSearchQuery = _musicSearchController.text;
-        _selectedSongIndex = null;
+      if (_debounce?.isActive ?? false) _debounce!.cancel();
+      _debounce = Timer(const Duration(milliseconds: 500), () {
+        if (_musicSearchQuery != _musicSearchController.text) {
+          setState(() {
+            _musicSearchQuery = _musicSearchController.text;
+            _selectedSongIndex = null;
+          });
+          _refreshData(); // Fetch new server results based on search
+        }
       });
     });
 
@@ -307,6 +332,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _rotationController.dispose();
@@ -316,6 +342,9 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // ⭐️ REQUIRED FOR AutomaticKeepAliveClientMixin
+    super.build(context);
+
     final theme = Theme.of(context);
 
     // TINT CALCULATION
@@ -383,7 +412,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
             double bottomPos = snapshot.hasData ? 95 : 15;
             return AnimatedPositioned(
               duration: Duration(milliseconds: 300),
-              right: 85, // Positioned beside the Library button
+              right: 85,
               bottom: bottomPos,
               child: GestureDetector(
                 onTap: () {
@@ -414,7 +443,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
             double bottomPos = snapshot.hasData ? 95 : 15;
             return AnimatedPositioned(
               duration: Duration(milliseconds: 300),
-              right: 15, // Fixed position for consistency across all screens
+              right: 15,
               bottom: bottomPos,
               child: GestureDetector(
                 onTap: () {
@@ -593,10 +622,15 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6.0),
                       child: GestureDetector(
-                        onTap: () => setState(() {
-                          _selectedCategory = category;
-                          _selectedSongIndex = null;
-                        }),
+                        onTap: () {
+                          if (_selectedCategory != category) {
+                            setState(() {
+                              _selectedCategory = category;
+                              _selectedSongIndex = null;
+                            });
+                            _refreshData(); // ⭐️ Fetch category data from backend
+                          }
+                        },
                         child: NeumorphicContainer(
                           color: isSelected ? theme.primaryColor : baseColor,
                           isPressed: false,
@@ -647,10 +681,15 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
                     return Padding(
                       padding: const EdgeInsets.only(right: 12.0),
                       child: GestureDetector(
-                        onTap: () => setState(() {
-                          _selectedCategory = category;
-                          _selectedSongIndex = null;
-                        }),
+                        onTap: () {
+                          if (_selectedCategory != category) {
+                            setState(() {
+                              _selectedCategory = category;
+                              _selectedSongIndex = null;
+                            });
+                            _refreshData(); // ⭐️ Fetch category data from backend
+                          }
+                        },
                         child: NeumorphicContainer(
                           color: isSelected ? theme.primaryColor : baseColor,
                           isPressed: false,
@@ -702,31 +741,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
           );
         }
 
-        final String query = _musicSearchQuery.toLowerCase().trim();
-
-        final filteredSongs = _allLoadedSongs.where((songData) {
-          final String songName =
-              (songData['song_name'] ?? songData['songName'] ?? '')
-                  .toString()
-                  .toLowerCase();
-          final String artist = (songData['artist'] ?? '')
-              .toString()
-              .toLowerCase();
-          final String category = (songData['category'] ?? '')
-              .toString()
-              .toLowerCase();
-
-          final bool categoryMatches =
-              _selectedCategory == 'All' ||
-              category == _selectedCategory.toLowerCase();
-          final bool searchMatches =
-              query.isEmpty ||
-              songName.contains(query) ||
-              artist.contains(query);
-          return categoryMatches && searchMatches;
-        }).toList();
-
-        if (filteredSongs.isEmpty) {
+        if (_currentFilteredSongs.isEmpty) {
           return Center(
             child: Text(
               'No songs found.',
@@ -734,8 +749,6 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
             ),
           );
         }
-
-        _currentFilteredSongs = filteredSongs;
 
         return ListView.builder(
           controller: _scrollController,
@@ -801,9 +814,13 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
             padding: EdgeInsets.zero,
             child: Container(
               decoration: BoxDecoration(
+                // ⭐️ FIX 5: Prominent border for selected item, subtle border for unselected
                 border: isSelected
-                    ? Border.all(color: theme.splashColor, width: 0.1)
-                    : Border.all(color: theme.primaryColor, width: 1.5),
+                    ? Border.all(color: theme.primaryColor, width: 1.5)
+                    : Border.all(
+                        color: theme.primaryColor.withOpacity(0.3),
+                        width: 0.5,
+                      ),
                 borderRadius: BorderRadius.circular(15),
               ),
               child: ListTile(
@@ -833,7 +850,7 @@ class MusicTabState extends State<MusicTab> with TickerProviderStateMixin {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
-                    color: isSelected ? theme.primaryColor : theme.primaryColor,
+                    color: theme.primaryColor,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

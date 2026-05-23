@@ -1,14 +1,14 @@
 // ignore_for_file: prefer_const_constructors, avoid_print, use_build_context_synchronously
 
-import 'dart:convert'; // For parsing JSON
+import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:http/http.dart' as http; // Connect to Django
-import 'package:firebase_auth/firebase_auth.dart'; // REQUIRED FOR SECURE TOKEN
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 
 class FindNearbyBranch extends StatefulWidget {
@@ -18,14 +18,16 @@ class FindNearbyBranch extends StatefulWidget {
   State<FindNearbyBranch> createState() => _FindNearbyBranchState();
 }
 
-class _FindNearbyBranchState extends State<FindNearbyBranch> {
+class _FindNearbyBranchState extends State<FindNearbyBranch>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // Prevents reloading when switching tabs
+
   GoogleMapController? _mapController;
   Set<Marker> _markers = {};
   LatLng? _currentPosition;
   bool _isLoading = true;
-  List<dynamic> _nearestCommunities = []; // Store the top 5 nearest communities
-
-  // Default fallback (Polokwane/Limpopo for testing if GPS fails completely)
+  List<dynamic> _nearestCommunities = [];
   static const LatLng _defaultLocation = LatLng(-23.8962, 29.4486);
 
   @override
@@ -35,12 +37,10 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
   }
 
   Future<void> _initializeLocation() async {
-    // 1. Check Permissions
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        // Even if denied, try to load map with communities based on default location
         _currentPosition = _defaultLocation;
         _fetchCommunitiesFromDjango();
         setState(() => _isLoading = false);
@@ -48,7 +48,6 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
       }
     }
 
-    // 2. Get User Position
     try {
       Position position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
@@ -59,40 +58,30 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
           _currentPosition = LatLng(position.latitude, position.longitude);
         });
       }
-
-      // 3. Fetch Data from Django
       _fetchCommunitiesFromDjango();
     } catch (e) {
       print("GPS Error: $e");
-      // Still fetch communities even if GPS fails, using default location
       _currentPosition = _defaultLocation;
       _fetchCommunitiesFromDjango();
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  List<dynamic> addresses = [];
   Future<void> _fetchCommunitiesFromDjango() async {
     try {
-      // SECURE FIX: Grab the current user and their token
       User? user = FirebaseAuth.instance.currentUser;
       if (user == null) {
-        print("❌ Blocked: No user is currently logged in.");
         if (mounted) setState(() => _isLoading = false);
         return;
       }
 
       String? token = await user.getIdToken();
       if (token == null) {
-        print("❌ Blocked: Could not retrieve Firebase token.");
         if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // REPLACE WITH YOUR ACTUAL DJANGO IP ADDRESS
       final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/communities/');
-
-      // SECURE FIX: Attach the Authorization header
       final response = await http.get(
         url,
         headers: {
@@ -104,24 +93,19 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
       if (response.statusCode == 200) {
         List<dynamic> data = json.decode(response.body);
         Set<Marker> newMarkers = {};
-
         LatLng referencePosition = _currentPosition ?? _defaultLocation;
-
-        // Calculate distance for each community
         List<Map<String, dynamic>> processedData = [];
+
         for (var item in data) {
           if (item['latitude'] != null && item['longitude'] != null) {
             double lat = (item['latitude'] as num).toDouble();
             double lng = (item['longitude'] as num).toDouble();
-
             double distanceInMeters = Geolocator.distanceBetween(
               referencePosition.latitude,
               referencePosition.longitude,
               lat,
               lng,
             );
-
-            // Create a new map to safely add the distance without modifying immutable dynamic types
             Map<String, dynamic> communityData = Map<String, dynamic>.from(
               item,
             );
@@ -130,44 +114,36 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
           }
         }
 
-        // Sort by distance (closest first)
         processedData.sort(
           (a, b) =>
               (a['distance'] as double).compareTo(b['distance'] as double),
         );
-
-        // Take only the top 5 nearest communities
         List<Map<String, dynamic>> top5Communities = processedData
             .take(5)
             .toList();
 
-        // 1. Add Marker for the User's Current Location (Blue color to distinguish)
         if (_currentPosition != null) {
           newMarkers.add(
             Marker(
               markerId: const MarkerId('user_current_location'),
               position: _currentPosition!,
               icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueBlue, // Set explicitly to Blue
+                BitmapDescriptor.hueBlue,
               ),
               infoWindow: const InfoWindow(
                 title: 'Your Location',
                 snippet: 'You are here',
               ),
-              zIndex: 2, // Ensure it shows above other markers
+              zIndex: 2,
             ),
           );
         }
 
-        // 2. Add Markers ONLY for the top 5 nearest communities (Purple/Violet color)
         for (var item in top5Communities) {
           double lat = (item['latitude'] as num).toDouble();
           double lng = (item['longitude'] as num).toDouble();
           String name = item['community_name'] ?? "Unknown Branch";
           String districtName = item['district_elder_name'] ?? '';
-          // String overseer = item['overseer_initials_surname'] ?? '';
-
-          // BUG FIX: Generate a strict unique ID since Django doesn't send the DB 'id'
           String uniqueMarkerId =
               item['id']?.toString() ?? "${name}_${lat}_${lng}";
 
@@ -176,7 +152,7 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
               markerId: MarkerId(uniqueMarkerId),
               position: LatLng(lat, lng),
               icon: BitmapDescriptor.defaultMarkerWithHue(
-                BitmapDescriptor.hueViolet, // Set explicitly to Purple/Violet
+                BitmapDescriptor.hueViolet,
               ),
               infoWindow: InfoWindow(
                 title: '$name ($districtName)',
@@ -189,16 +165,11 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
 
         if (mounted) {
           setState(() {
-            addresses = processedData;
             _nearestCommunities = top5Communities;
             _markers = newMarkers;
           });
-
-          // Once data is loaded, try to focus the camera
           _zoomToUserOrFitMarkers();
         }
-      } else {
-        print("Django Error: ${response.statusCode} - ${response.body}");
       }
     } catch (e) {
       print("API Connection Error: $e");
@@ -207,14 +178,10 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
     }
   }
 
-  // --- SMART ZOOM LOGIC ---
   void _zoomToUserOrFitMarkers() {
     if (_mapController == null) return;
-
-    // We now prioritize fitting both the user AND the nearby markers in view
     if (_markers.isNotEmpty) {
       List<LatLng> points = _markers.map((m) => m.position).toList();
-
       double minLat = points.first.latitude;
       double maxLat = points.first.latitude;
       double minLng = points.first.longitude;
@@ -233,7 +200,7 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
             southwest: LatLng(minLat, minLng),
             northeast: LatLng(maxLat, maxLng),
           ),
-          80, // Padding
+          80,
         ),
       );
     } else if (_currentPosition != null) {
@@ -250,15 +217,12 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
     if (await canLaunchUrl(googleMapsUrl)) {
       await launchUrl(googleMapsUrl);
     } else {
-      // Fallback for devices without Google Maps app
       final Uri browserUrl = Uri.parse(
         "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng",
       );
       await launchUrl(browserUrl, mode: LaunchMode.inAppBrowserView);
     }
   }
-
-  // --- UI BUILDER METHODS ---
 
   Widget _buildIntroCard(BuildContext context, ThemeData theme) {
     return Container(
@@ -355,11 +319,10 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
                   zoom: 14,
                 ),
                 markers: _markers,
-                myLocationEnabled:
-                    false, // Turned off native blue dot to rely on custom Blue marker
+                myLocationEnabled: false,
                 myLocationButtonEnabled: true,
                 mapType: MapType.satellite,
-                zoomControlsEnabled: false, // Cleaner look
+                zoomControlsEnabled: false,
                 compassEnabled: true,
                 onMapCreated: (controller) {
                   _mapController = controller;
@@ -371,6 +334,10 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
   }
 
   Widget _buildNearestList(ThemeData theme) {
+    final Color neumoBaseColor = Color.alphaBlend(
+      theme.primaryColor.withOpacity(0.08),
+      theme.scaffoldBackgroundColor,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -425,11 +392,6 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
             itemBuilder: (context, index) {
               final item = _nearestCommunities[index];
               double distanceInKm = item['distance'] / 1000;
-
-              final Color neumoBaseColor = Color.alphaBlend(
-                theme.primaryColor.withOpacity(0.08),
-                theme.scaffoldBackgroundColor,
-              );
               return Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
@@ -461,7 +423,7 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Row(
-                        children: [ 
+                        children: [
                           Container(
                             height: 50,
                             width: 50,
@@ -507,8 +469,6 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
                               ],
                             ),
                           ),
-
-                          // Right Distance & Button
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
@@ -565,8 +525,8 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final theme = Theme.of(context);
-
     final Color neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.08),
       theme.scaffoldBackgroundColor,
@@ -575,7 +535,6 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
       backgroundColor: neumoBaseColor,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          // Desktop / Tablet Landscape Layout
           if (constraints.maxWidth > 800) {
             return SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -587,7 +546,6 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Left Column: Map
                     Expanded(
                       flex: 3,
                       child: Column(
@@ -648,10 +606,7 @@ class _FindNearbyBranchState extends State<FindNearbyBranch> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _buildMapContainer(
-                      theme,
-                      450,
-                    ), // slightly taller on mobile for better view
+                    _buildMapContainer(theme, 450),
                     const SizedBox(height: 36),
                     _buildNearestList(theme),
                     const SizedBox(height: 60),
