@@ -1,0 +1,23 @@
+@import "tailwindcss"; 
+:root {
+  /* ==========================================================
+     🎨 MASTER COLOR THEME CONTROLLER
+     Change these to update the entire website instantly.
+     ========================================================== */
+  
+  --theme-primary: #2563eb;      /* The main DANKIE blue */
+  --theme-primary-hover: #1d4ed8;/* Darker blue for hovers */
+  
+  --theme-bg-color: #f8fafc;     /* Very soft, clean off-white background */
+  --theme-card-bg: #ffffff;      /* Pure white for cards */
+  
+  --theme-text-main: #0f172a;    /* Dark slate for main headings */
+  --theme-text-muted: #64748b;   /* Gray for paragraph text */
+}
+
+body {
+  background-color: var(--theme-bg-color);
+  color: var(--theme-text-main);
+  /* Smooth scrolling for anchor links */
+  scroll-behavior: smooth; 
+}
