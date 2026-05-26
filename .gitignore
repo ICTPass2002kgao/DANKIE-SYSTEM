@@ -1,55 +1,56 @@
 # Miscellaneous
-Frontend/*.class
-Frontend/*.log
-Frontend/*.pyc
-frontend/*.swp
-frontend/.DS_Store
-frontend/.atom/
-frontend/build/
-frontend/.buildlog/
-frontend/.history
-frontend/.svn/
-frontend/.swiftpm/
-frontend/migrate_working_dir/
-frontend/*.pem
+frontend/mobile_app/*.class
+frontend/mobile_app/*.log
+frontend/mobile_app/*.pyc
+frontend/mobile_app/*.swp
+frontend/mobile_app/.DS_Store
+frontend/mobile_app/.atom/
+frontend/mobile_app/build/
+frontend/mobile_app/.buildlog/
+frontend/mobile_app/.history
+frontend/mobile_app/.svn/
+frontend/mobile_app/.swiftpm/
+frontend/mobile_app/migrate_working_dir/
+frontend/mobile_app/*.pem
 # IntelliJ related
-frontend/*.iml
-frontend/*.ipr
-frontend/*.iws
-frontend/*env
-frontend/android/app/upload-keystore.jks
-frontend/android/local.properties
-frontend/.idea/ 
-frontend/node_modules
-frontend/.txt
+
+frontend/mobile_app/*.iml
+frontend/mobile_app/*.ipr
+frontend/mobile_app/*.iws
+frontend/mobile_app/*env
+frontend/mobile_app/android/app/upload-keystore.jks
+frontend/mobile_app/android/local.properties
+frontend/mobile_app/.idea/ 
+frontend/mobile_app/node_modules
+frontend/mobile_app/.txt
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
 #.vscode/
 
 # Flutter/Dart/Pub related
-Front-end/**/doc/api/
-Front-end/**/ios/Flutter/.last_build_id
-Front-end/.dart_tool/
-Front-end/.flutter-plugins
-Front-end/.flutter-plugins-dependencies
-Front-end/.pub-cache/
-Front-end/.pub/
-Front-end/build/
+frontend/mobile_app/**/doc/api/
+frontend/mobile_app/**/ios/Flutter/.last_build_id
+frontend/mobile_app/.dart_tool/
+frontend/mobile_app/.flutter-plugins
+frontend/mobile_app/.flutter-plugins-dependencies
+frontend/mobile_app/.pub-cache/
+frontend/mobile_app/.pub/
+frontend/mobile_app/build/
 
 # Symbolication related
-Front-end/app.*.symbols
+frontend/mobile_app/app.*.symbols
 
 # Obfuscation related
-Front-end/app.*.map.json
+frontend/mobile_app/app.*.map.json
 
 # Android Studio will place build artifacts here
-Front-end/android/app/debug
-Front-end/android/app/profile
-Front-end/android/app/release
-Front-end/android/.gradle
-Front-end/android/.kotlin
-Front-end/android/*.iml
+frontend/mobile_app/android/app/debug
+frontend/mobile_app/android/app/profile
+frontend/mobile_app/android/app/release
+frontend/mobile_app/android/.gradle
+frontend/mobile_app/android/.kotlin
+frontend/mobile_app/android/*.iml
 
 Back-end/*.env
 Back-end/new_env
@@ -61,26 +62,29 @@ Back-end/new_env/
 __pycache__/
 db.sqlite3
 staticfiles/
-# Fixed lowercase frontend mappings
-frontend/ios/Pods/
-frontend/ios/.symlinks/
-frontend/ios/Flutter/Flutter.framework
-frontend/ios/Flutter/Flutter.podspec
-frontend/ios/DerivedData/
-frontend/.dart_tool/
-frontend/.flutter-plugins
-frontend/.flutter-plugins-dependencies
-frontend/.pub-cache/
-frontend/.pub/
-frontend/build/
-frontend/android/build/
-frontend/android/.gradle/
-frontend/android/.kotlin/
-frontend/android/app/debug/
-frontend/android/app/profile/
-frontend/android/app/release/
-frontend/functions/node_modules/
-frontend/functions/.env
+# Fixed lowercase frontend/mobile_app mappings
+frontend/mobile_app/ios/Pods/
+frontend/mobile_app/ios/.symlinks/
+frontend/mobile_app/ios/Flutter/Flutter.framework
+frontend/mobile_app/ios/Flutter/Flutter.podspec
+frontend/mobile_app/ios/DerivedData/
+frontend/mobile_app/.dart_tool/
+frontend/mobile_app/.flutter-plugins
+frontend/mobile_app/.flutter-plugins-dependencies
+frontend/mobile_app/.pub-cache/
+frontend/mobile_app/.pub/
+frontend/mobile_app/build/
+frontend/mobile_app/android/build/
+frontend/mobile_app/android/.gradle/
+frontend/mobile_app/android/.kotlin/
+frontend/mobile_app/android/app/debug/
+frontend/mobile_app/android/app/profile/
+frontend/mobile_app/android/app/release/
+frontend/mobile_app/functions/node_modules/
+frontend/mobile_app/functions/.env
+frontend/mobile_app/.github
+frontend/mobile_app/.firebase
+
 .DS_Store
 *.DS_Store
 **/.DS_Store
