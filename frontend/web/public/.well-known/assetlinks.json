@@ -1,0 +1,11 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.thetact.ttact",
+    "sha256_cert_fingerprints": [
+      "3937d5776b9a9d15d0bbae482e3b117e1cd2585668fd34ddc7fb5f25bbd33054", 
+      "96F3C00BA7A65C08FFA52D727352CD8C0B001A6A0A95D6A1A7FF38349940F94B"    
+    ]
+  }
+}]
