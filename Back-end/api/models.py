@@ -3,6 +3,9 @@ from django.db import models
 from django.utils import timezone
 from geopy.geocoders import Nominatim 
 
+import time
+from django.db import models, connection 
+
 GENDER_CHOICES = (
     ('Male', 'Male'),
     ('Female', 'Female'),
@@ -258,6 +261,51 @@ class District(models.Model):
     def __str__(self):
         return f"{self.district_elder_name} ({self.overseer})"
  
+
+# --- NEW BACKGROUND TASK ---
+def batch_geocode_communities(community_ids):
+    """
+    Runs in the background to prevent server timeouts.
+    Includes a 1.5-second sleep to respect Nominatim's strict ToS.
+    """
+    try:
+        from .models import Community # Import inside to avoid circular dependencies
+        geolocator = Nominatim(user_agent="tact_backend_v2_smart_search")
+        
+        for cid in community_ids:
+            try:
+                community = Community.objects.get(id=cid)
+                overseer = community.district.overseer
+                address_attempts = [
+                    f"{community.community_name}, {overseer.region}, {overseer.province}, South Africa",
+                    f"{community.community_name}, {overseer.province}, South Africa",
+                    f"{community.community_name}, South Africa",
+                    f"{overseer.region}, {overseer.province}, South Africa"
+                ]
+                
+                for address in address_attempts:
+                    try:
+                        time.sleep(1.5)  # CRITICAL: Prevents IP bans from Nominatim
+                        location = geolocator.geocode(address, timeout=10)
+                        if location:
+                            # Use update() to save silently without re-triggering signals
+                            Community.objects.filter(id=cid).update(
+                                latitude=location.latitude,
+                                longitude=location.longitude,
+                                full_address=address
+                            )
+                            break 
+                    except Exception:
+                        continue 
+            except Exception as e:
+                print(f"Error processing community {cid}: {e}")
+                pass
+    finally:
+        # Prevents database connection leaks in background threads
+        connection.close()
+
+
+# --- UPDATED COMMUNITY MODEL ---
 class Community(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     district = models.ForeignKey(District, related_name='communities', on_delete=models.CASCADE)
@@ -269,27 +317,12 @@ class Community(models.Model):
 
     def save(self, *args, **kwargs):
         overseer = self.district.overseer
-        address_attempts = [
-            f"{self.community_name}, {overseer.region}, {overseer.province}, South Africa",
-            f"{self.community_name}, {overseer.province}, South Africa",
-            f"{self.community_name}, South Africa",
-            f"{overseer.region}, {overseer.province}, South Africa"
-        ]
-        self.full_address = address_attempts[0]
-
-        if not self.latitude or not self.longitude:
-            geolocator = Nominatim(user_agent="tact_backend_v2_smart_search")
-            for address in address_attempts:
-                try:
-                    location = geolocator.geocode(address, timeout=10)
-                    if location:
-                        self.latitude = location.latitude
-                        self.longitude = location.longitude
-                        self.full_address = address 
-                        break 
-                except Exception as e:
-                    continue 
- 
+        
+        # Provide a basic fallback string instantly so the UI isn't blank
+        if not self.full_address:
+             self.full_address = f"{self.community_name}, {overseer.region}, {overseer.province}, South Africa"
+             
+        # The heavy Nominatim lookup is removed from here
         super(Community, self).save(*args, **kwargs)
 
     def __str__(self):

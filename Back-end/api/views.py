@@ -590,7 +590,6 @@ def create_payment_link(request):
 # ===========================================================================================================
 # 4. MODEL VIEWSETS
 # ===========================================================================================================
-
 class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method == 'GET':
@@ -627,6 +626,7 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
                     districts_data = raw_districts
             except Exception as e:
                 return Response({"error": f"Invalid districts JSON format: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        
         data['districts'] = [] 
         sec_file = request.FILES.get('secretary_face_image')
         if sec_file:
@@ -634,11 +634,14 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
         chair_file = request.FILES.get('chairperson_face_image')
         if chair_file:
             data['chairperson_face_url'] = encrypt_and_upload_to_firebase(chair_file, 'secure_faces') 
+        
         serializer = self.get_serializer(data=data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
         self.perform_create(serializer)
         overseer = serializer.instance
+        
         if data.get('secretary_name') and data.get('secretary_face_url'):
             OverseerCommitteeMember.objects.create(
                 overseer=overseer, full_name=data['secretary_name'], portfolio='Secretary', face_url=data['secretary_face_url']
@@ -647,18 +650,55 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
             OverseerCommitteeMember.objects.create(
                 overseer=overseer, full_name=data['chairperson_name'], portfolio='Chairperson', face_url=data['chairperson_face_url']
             )
+        
+        created_community_ids = []
+
         for d_data in districts_data:
             district = District.objects.create(
                 overseer=overseer,
                 district_elder_name=d_data.get('district_elder_name', 'Unknown')
             )
             for c_data in d_data.get('communities', []):
-                Community.objects.create(
+                comm = Community.objects.create(
                     district=district,
                     community_name=c_data.get('community_name', 'Unknown')
                 )
+                created_community_ids.append(comm.id)
+
+        if created_community_ids:
+            threading.Thread(
+                target=batch_geocode_communities, 
+                args=(created_community_ids,)
+            ).start()
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+
+# ⭐️ OPTIMIZED
+class CommunityViewSet(CachedListMixin, viewsets.ModelViewSet):
+    queryset = Community.objects.select_related('district', 'district__overseer').all()
+    serializer_class = CommunitySerializer
+    
+    def get_permissions(self):
+        if self.request.method == 'GET': 
+            return [AllowAny()]
+        return [IsFirebaseAuthenticated()]
+        
+    def get_authenticators(self):
+        if self.request.method == 'GET': 
+            return []
+        return [FirebaseAuthentication()]
+        
+    def get_queryset(self):
+        queryset = Community.objects.select_related('district', 'district__overseer').all()
+        province = self.request.query_params.get('province')
+        district__overseer_uid = self.request.query_params.get('district__overseer_uid')
+        if province: 
+            queryset = queryset.filter(district__overseer__province__iexact=province)
+        if district__overseer_uid: 
+            queryset = queryset.filter(district__overseer__uid=district__overseer_uid)
+        return queryset
+    
 class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
@@ -878,25 +918,7 @@ class TactsoBranchViewSet(viewsets.ModelViewSet):
             portfolio='Chairperson', email=data.get('email', ''), face_url=chair_url
         )
         return Response(serializer.data, status=201)  
-
-# ⭐️ OPTIMIZED
-class CommunityViewSet(CachedListMixin, viewsets.ModelViewSet):
-    queryset = Community.objects.select_related('district', 'district__overseer').all()
-    serializer_class = CommunitySerializer
-    def get_permissions(self):
-        if self.request.method == 'GET': return [AllowAny()]
-        return [IsFirebaseAuthenticated()]
-    def get_authenticators(self):
-        if self.request.method == 'GET': return []
-        return [FirebaseAuthentication()]
-    def get_queryset(self):
-        queryset = Community.objects.select_related('district', 'district__overseer').all()
-        province = self.request.query_params.get('province')
-        district__overseer_uid = self.request.query_params.get('district__overseer_uid')
-        if province: queryset = queryset.filter(district__overseer__province__iexact=province)
-        if district__overseer_uid: queryset = queryset.filter(district__overseer__uid=district__overseer_uid)
-        return queryset
-
+ 
 class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = District.objects.select_related('overseer').prefetch_related('communities').all()
     serializer_class = DistrictSerializer
