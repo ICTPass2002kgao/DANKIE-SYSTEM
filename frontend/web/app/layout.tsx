@@ -3,6 +3,7 @@ import { Poppins } from "next/font/google";
 import "./globals.css";
 import Navbar from "./components/navbar";
 import Footer from "./components/footer";
+import CookieConsent from "./components/cookie-consent"; // Import the new component
 
 const poppins = Poppins({ 
   subsets: ["latin"],
@@ -10,8 +11,8 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Dankie | TACT Digital Ecosystem",
-  description: "The official digital infrastructure for The Twelve Apostles Church in Trinity.",
+  title: "Dankie | TACT Digital Platform",
+  description: "The official digital platform for The Twelve Apostles Church in Trinity, connecting members globally with secure access to church resources, events, and community features.",
   icons: {
     icon: "https://res.cloudinary.com/dajihjqkc/image/upload/v1779755909/dankie_logo_htz2re.png",
   }
@@ -42,6 +43,9 @@ export default function RootLayout({
           </main>
           <Footer />
         </div>
+        
+        {/* Mount the Cookie Consent banner at the root level */}
+        <CookieConsent />
       </body>
     </html>
   );
