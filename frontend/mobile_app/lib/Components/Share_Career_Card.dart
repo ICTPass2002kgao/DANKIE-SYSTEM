@@ -35,7 +35,7 @@ class CareerShareSheet extends StatefulWidget {
 class _CareerShareSheetState extends State<CareerShareSheet> {
   final ScreenshotController _screenshotController = ScreenshotController();
   bool _isGenerating = false;
-  final String _appDomain = "https://tact-3c612.web.app";
+  final String _appDomain = "https://dankie.netlify.app";
 
   Future<void> _generateAndShare() async {
     setState(() => _isGenerating = true);

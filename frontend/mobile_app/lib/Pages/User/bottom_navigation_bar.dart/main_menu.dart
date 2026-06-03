@@ -33,6 +33,11 @@ const double _desktopBreakpoint = 1000.0;
 bool isLargeScreen(BuildContext context) =>
     MediaQuery.of(context).size.width >= _desktopBreakpoint;
 
+bool get isIOSPlatform {
+  return defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
+}
+
 class MotherPage extends StatefulWidget {
   final Function(bool) onToggleTheme;
   final int initialIndex;
@@ -67,6 +72,27 @@ class _MotherPageState extends State<MotherPage>
 
   // ⭐️ SCROLL VISIBILITY STATE
   bool _isBottomNavVisible = true;
+
+  // --- OVERSEER UPDATE STATE VARIABLES ---
+  bool _isLoadingOverseers = false;
+  List<dynamic> _overseersList = [];
+  Map<String, dynamic>? currentOverseerData;
+  Map<String, dynamic>? selectedDistrictData;
+  String? selectedProvince;
+  String? selectedMemberUid;
+  String? selectedDistrictElder;
+  String? selectedCommunityName;
+  List<String> provinces = [
+    'Gauteng',
+    'Western Cape',
+    'KwaZulu-Natal',
+    'Eastern Cape',
+    'Free State',
+    'Limpopo',
+    'Mpumalanga',
+    'North West',
+    'Northern Cape',
+  ];
 
   @override
   void initState() {
@@ -261,6 +287,16 @@ class _MotherPageState extends State<MotherPage>
               }
             });
 
+            // OVERSEER AVAILABILITY CHECK
+            // Check if user has an overseer assigned and verify it
+            dynamic overseerId =
+                _userData['overseer_uid'] ??
+                _userData['overseer_id'] ??
+                _userData['overseer'];
+            if (overseerId != null && overseerId.toString().isNotEmpty) {
+              await _verifyOverseerStatus(token, overseerId);
+            }
+
             // GENDER CHECK: Trigger Neumorphic Pop-up if gender is missing
             String? gender = _userData['gender'];
             if (gender == null || gender.toString().trim().isEmpty) {
@@ -280,6 +316,696 @@ class _MotherPageState extends State<MotherPage>
     }
   }
 
+  // ===========================================================================
+  // ⭐️ OVERSEER UPDATE LOGIC
+  // ===========================================================================
+
+  Future<void> _verifyOverseerStatus(String token, dynamic overseerId) async {
+    try {
+      final url = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?uid=$overseerId',
+      );
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        bool isMissing = false;
+
+        if (decoded is List && decoded.isEmpty) {
+          isMissing = true;
+        } else if (decoded is Map &&
+            decoded.containsKey('results') &&
+            (decoded['results'] as List).isEmpty) {
+          isMissing = true;
+        }
+
+        if (isMissing) {
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _showUpdateOverseerPopup();
+            });
+          }
+        }
+      } else if (response.statusCode == 404) {
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showUpdateOverseerPopup();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking overseer status: $e");
+    }
+  }
+
+  List<String> _getDistrictElderNames(Map<String, dynamic>? data) {
+    if (data == null ||
+        !data.containsKey('districts') ||
+        data['districts'] == null) {
+      return [];
+    }
+    return (data['districts'] as List<dynamic>)
+        .map((district) => district['district_elder_name'] as String?)
+        .where((name) => name != null)
+        .cast<String>()
+        .toSet()
+        .toList();
+  }
+
+  List<String> _getCommunityNamesForDistrict(
+    Map<String, dynamic>? districtData,
+  ) {
+    if (districtData == null ||
+        !districtData.containsKey('communities') ||
+        districtData['communities'] == null) {
+      return [];
+    }
+    return (districtData['communities'] as List<dynamic>)
+        .map((community) => community['community_name'] as String?)
+        .where((name) => name != null)
+        .cast<String>()
+        .toSet()
+        .toList();
+  }
+
+  Future<void> _fetchAndSetOverseersForProvince(
+    String province,
+    StateSetter setStateModal,
+  ) async {
+    setStateModal(() {
+      _isLoadingOverseers = true;
+      _overseersList = [];
+    });
+
+    final url = Uri.parse(
+      '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?province=$province',
+    );
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic> && decoded.containsKey('results')) {
+          setStateModal(() {
+            _overseersList = decoded['results'] as List<dynamic>;
+          });
+        } else if (decoded is List) {
+          setStateModal(() {
+            _overseersList = decoded;
+          });
+        }
+      }
+    } catch (e) {
+      print("Network Error: $e");
+    } finally {
+      setStateModal(() {
+        _isLoadingOverseers = false;
+      });
+    }
+  }
+
+  void _buildActionSheet({
+    required BuildContext context,
+    required String title,
+    required List<String> actions,
+    required ValueChanged<String> onSelected,
+  }) {
+    if (isIOSPlatform) {
+      showCupertinoModalPopup(
+        context: context,
+        builder: (BuildContext context) => CupertinoActionSheet(
+          title: Text(title),
+          actions: actions.map((item) {
+            return CupertinoActionSheetAction(
+              child: Text(item),
+              onPressed: () {
+                onSelected(item);
+                Navigator.pop(context);
+              },
+            );
+          }).toList(),
+          cancelButton: CupertinoActionSheetAction(
+            child: const Text('Cancel'),
+            onPressed: () {
+              Navigator.pop(context);
+            },
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        builder: (BuildContext context) => Container(
+          padding: const EdgeInsets.all(16.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const Divider(),
+                ...actions.map((item) {
+                  return ListTile(
+                    title: Text(item),
+                    onTap: () {
+                      onSelected(item);
+                      Navigator.pop(context);
+                    },
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildNeumorphicSelectionTile({
+    required String title,
+    required String trailingText,
+    required VoidCallback onTap,
+    required BuildContext context,
+    required Color baseColor,
+  }) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: GestureDetector(
+        onTap: onTap,
+        child: NeumorphicContainer(
+          color: baseColor,
+          isPressed: false,
+          borderRadius: 12,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: theme.textTheme.bodyMedium?.color,
+                  fontSize: 14,
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 150),
+                    child: Text(
+                      trailingText,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: theme.primaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 16,
+                    color: theme.hintColor.withOpacity(0.5),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showOverseerSearchSheet(
+    BuildContext context,
+    Color neumoBaseColor,
+    StateSetter setMainDialogState,
+  ) {
+    String searchQuery = '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (BuildContext modalContext) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setStateModal) {
+            final theme = Theme.of(context);
+            final filteredOverseers = _overseersList.where((overseer) {
+              final name = (overseer['overseer_initials_surname'] ?? '')
+                  .toString()
+                  .toLowerCase();
+              return name.contains(searchQuery.toLowerCase());
+            }).toList();
+
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              decoration: BoxDecoration(
+                color: neumoBaseColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+              ),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 16),
+                  Container(
+                    width: 50,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: theme.hintColor.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Search Overseer',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: NeumorphicContainer(
+                      isPressed: true,
+                      color: neumoBaseColor,
+                      borderRadius: 12,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      child: TextField(
+                        onChanged: (val) {
+                          setStateModal(() {
+                            searchQuery = val;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Search by initials/surname...',
+                          hintStyle: TextStyle(
+                            color: theme.hintColor.withOpacity(0.6),
+                          ),
+                          prefixIcon: Icon(
+                            CupertinoIcons.search,
+                            color: theme.primaryColor,
+                          ),
+                          border: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: filteredOverseers.isEmpty
+                        ? Center(
+                            child: Text(
+                              "No overseers found",
+                              style: TextStyle(color: theme.hintColor),
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: filteredOverseers.length,
+                            itemBuilder: (context, index) {
+                              final overseer = filteredOverseers[index];
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 4,
+                                ),
+                                title: Text(
+                                  overseer['overseer_initials_surname']
+                                      .toString(),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.textTheme.bodyMedium?.color,
+                                  ),
+                                ),
+                                trailing: Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 14,
+                                  color: theme.hintColor.withOpacity(0.5),
+                                ),
+                                onTap: () {
+                                  setMainDialogState(() {
+                                    selectedMemberUid = overseer['uid'];
+                                    currentOverseerData =
+                                        overseer as Map<String, dynamic>;
+                                    selectedDistrictElder = null;
+                                    selectedCommunityName = null;
+                                    selectedDistrictData = null;
+                                  });
+                                  Navigator.pop(modalContext);
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showUpdateOverseerPopup() {
+    final theme = Theme.of(context);
+    final neumoBaseColor = Color.alphaBlend(
+      theme.primaryColor.withOpacity(0.08),
+      theme.scaffoldBackgroundColor,
+    );
+    bool isSaving = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Forces the user to make a selection
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final List<String> districtElderNames = _getDistrictElderNames(
+              currentOverseerData,
+            );
+            final List<String> communityNames = _getCommunityNamesForDistrict(
+              selectedDistrictData,
+            );
+
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.all(20),
+              child: NeumorphicContainer(
+                color: neumoBaseColor,
+                borderRadius: 24,
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Icon(
+                        Icons.update_rounded,
+                        size: 60,
+                        color: theme.primaryColor,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        "Update Congregation",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: theme.primaryColor,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Your previously selected overseer is no longer available. Please update your details.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: theme.hintColor, fontSize: 13),
+                      ),
+                      const SizedBox(height: 24),
+
+                      _buildNeumorphicSelectionTile(
+                        context: context,
+                        baseColor: neumoBaseColor,
+                        title: 'Province',
+                        trailingText: selectedProvince ?? 'Select',
+                        onTap: () {
+                          _buildActionSheet(
+                            context: context,
+                            title: 'Select your Province',
+                            actions: provinces,
+                            onSelected: (province) {
+                              setStateDialog(() {
+                                selectedProvince = province;
+                                selectedMemberUid = null;
+                                currentOverseerData = null;
+                                selectedDistrictElder = null;
+                                selectedCommunityName = null;
+                                selectedDistrictData = null;
+                              });
+                              _fetchAndSetOverseersForProvince(
+                                province,
+                                setStateDialog,
+                              );
+                            },
+                          );
+                        },
+                      ),
+
+                      if (selectedProvince != null) ...[
+                        if (_isLoadingOverseers)
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: isIOSPlatform
+                                  ? const CupertinoActivityIndicator()
+                                  : const CircularProgressIndicator(),
+                            ),
+                          ),
+
+                        if (!_isLoadingOverseers)
+                          _buildNeumorphicSelectionTile(
+                            context: context,
+                            baseColor: neumoBaseColor,
+                            title: 'Overseer',
+                            trailingText: selectedMemberUid != null
+                                ? (currentOverseerData?['overseer_initials_surname'] ??
+                                      'Selected')
+                                : 'Select',
+                            onTap: () {
+                              if (_overseersList.isEmpty) {
+                                Api().showMessage(
+                                  context,
+                                  'No Overseers',
+                                  'No overseers found for this province.',
+                                  Colors.orange,
+                                );
+                                return;
+                              }
+                              _showOverseerSearchSheet(
+                                context,
+                                neumoBaseColor,
+                                setStateDialog,
+                              );
+                            },
+                          ),
+                      ],
+
+                      if (currentOverseerData != null)
+                        _buildNeumorphicSelectionTile(
+                          context: context,
+                          baseColor: neumoBaseColor,
+                          title: 'District Elder',
+                          trailingText: selectedDistrictElder ?? 'Select',
+                          onTap: () {
+                            if (districtElderNames.isEmpty) {
+                              Api().showMessage(
+                                context,
+                                'No Districts',
+                                'No districts found.',
+                                Colors.orange,
+                              );
+                              return;
+                            }
+                            _buildActionSheet(
+                              context: context,
+                              title: 'Choose District Elder',
+                              actions: districtElderNames,
+                              onSelected: (elderName) {
+                                setStateDialog(() {
+                                  selectedDistrictElder = elderName;
+                                  selectedDistrictData =
+                                      (currentOverseerData?['districts']
+                                                  as List<dynamic>?)
+                                              ?.firstWhere(
+                                                (district) =>
+                                                    district['district_elder_name'] ==
+                                                    elderName,
+                                                orElse: () => null,
+                                              )
+                                          as Map<String, dynamic>?;
+                                  selectedCommunityName = null;
+                                });
+                              },
+                            );
+                          },
+                        ),
+
+                      if (selectedDistrictData != null)
+                        _buildNeumorphicSelectionTile(
+                          context: context,
+                          baseColor: neumoBaseColor,
+                          title: 'Community',
+                          trailingText: selectedCommunityName ?? 'Select',
+                          onTap: () {
+                            if (communityNames.isEmpty) {
+                              Api().showMessage(
+                                context,
+                                'No Communities',
+                                'No communities found.',
+                                Colors.orange,
+                              );
+                              return;
+                            }
+                            _buildActionSheet(
+                              context: context,
+                              title: 'Choose Community',
+                              actions: communityNames,
+                              onSelected: (communityName) {
+                                setStateDialog(() {
+                                  selectedCommunityName = communityName;
+                                });
+                              },
+                            );
+                          },
+                        ),
+
+                      const SizedBox(height: 24),
+
+                      GestureDetector(
+                        onTap: (selectedCommunityName == null || isSaving)
+                            ? null
+                            : () async {
+                                setStateDialog(() => isSaving = true);
+                                bool success = await _updateOverseerDetails(
+                                  selectedProvince!,
+                                  selectedMemberUid!,
+                                  selectedDistrictElder!,
+                                  selectedCommunityName!,
+                                );
+                                if (success && mounted) {
+                                  Navigator.pop(dialogContext);
+                                } else {
+                                  setStateDialog(() => isSaving = false);
+                                }
+                              },
+                        child: NeumorphicContainer(
+                          color: selectedCommunityName == null
+                              ? theme.hintColor.withOpacity(0.3)
+                              : theme.primaryColor,
+                          borderRadius: 12,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: isSaving
+                                ? SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    "SAVE & CONTINUE",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<bool> _updateOverseerDetails(
+    String province,
+    String overseerUid,
+    String districtElder,
+    String communityName,
+  ) async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return false;
+
+    try {
+      String? token = await user.getIdToken();
+      String? userId = _userData['uid'];
+
+      if (userId == null) return false;
+
+      final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/$userId/');
+
+      final response = await http.patch(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'province': province,
+          'overseer_uid': overseerUid,
+          'district_elder_name': districtElder,
+          'community_name': communityName,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        setState(() {
+          _userData['province'] = province;
+          _userData['overseer_uid'] = overseerUid;
+          _userData['district_elder_name'] = districtElder;
+          _userData['community_name'] = communityName;
+        });
+        return true;
+      } else {
+        print(
+          "Failed to update congregation details: ${response.statusCode} - ${response.body}",
+        );
+        Api().showMessage(
+          context,
+          "Error",
+          "Could not save your new details. Please try again.",
+          Colors.red,
+        );
+        return false;
+      }
+    } catch (e) {
+      print("Error updating congregation details: $e");
+      Api().showMessage(
+        context,
+        "Error",
+        "A network error occurred.",
+        Colors.red,
+      );
+      return false;
+    }
+  }
+
+  // ===========================================================================
+  // ⭐️ GENDER SELECTION LOGIC
+  // ===========================================================================
   void _showGenderSelectionPopup() {
     final theme = Theme.of(context);
     final neumoBaseColor = Color.alphaBlend(
@@ -1094,7 +1820,7 @@ class _MotherPageState extends State<MotherPage>
                   Icons.description_outlined,
                   "Terms & Conditions",
                   () => _launchLegalUrl(
-                    "https://dankie-website.web.app/terms_and_conditions.html",
+                    "https://dankie.netlify.app/terms-and-conditions",
                   ),
                 ),
                 SizedBox(height: 10),
@@ -1104,7 +1830,7 @@ class _MotherPageState extends State<MotherPage>
                   Icons.privacy_tip_outlined,
                   "Privacy Policy",
                   () => _launchLegalUrl(
-                    "https://dankie-website.web.app/privacy_policy.html",
+                    "https://dankie.netlify.app/policy-privacy",
                   ),
                 ),
                 SizedBox(height: 10),
@@ -1233,7 +1959,7 @@ class _MotherPageState extends State<MotherPage>
                   Icons.description_outlined,
                   "Terms & Conditions",
                   () => _launchLegalUrl(
-                    "https://dankie-website.web.app/terms_and_conditions.html",
+                    "https://dankie.netlify.app/terms-and-conditions",
                   ),
                 ),
                 _buildDrawerTile(
@@ -1242,7 +1968,7 @@ class _MotherPageState extends State<MotherPage>
                   Icons.shield_outlined,
                   "Privacy Policy",
                   () => _launchLegalUrl(
-                    "https://dankie-website.web.app/privacy_policy.html",
+                    "https://dankie.netlify.app/policy-privacy",
                   ),
                 ),
                 _buildDrawerTile(

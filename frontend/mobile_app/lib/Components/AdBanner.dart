@@ -22,21 +22,21 @@ class AdManager {
 
   // --- PLATFORM-SAFE AD UNIT ID DEFINITIONS ---
 
-  /// Ad Unit IDs (replace with your real ones when live)
+  /// Ad Unit IDs
   // FIX: Use isAndroidPlatform check instead of Platform.isAndroid
   final String _bannerAdUnitId = isAndroidPlatform
       ? 'ca-app-pub-6759693957212853/4627097298' // Android Ad Unit
-      : 'ca-app-pub-3940256099942544/6300978111'; // iOS/Other Ad Unit (Test Ad Unit)
+      : 'ca-app-pub-6759693957212853/5876561794'; // iOS Production Ad Unit
 
   // FIX: Use isAndroidPlatform check instead of Platform.isAndroid
   final String _interstitialAdUnitId = isAndroidPlatform
       ? 'ca-app-pub-6759693957212853/8015639971'
-      : 'ca-app-pub-3940256099942544/1033173712';
+      : 'ca-app-pub-3940256099942544/1033173712'; // Keep test ID if not created yet on iOS
 
   // FIX: Use isAndroidPlatform check instead of Platform.isAndroid
   final String _rewardedInterstitialAdUnitId = isAndroidPlatform
       ? 'ca-app-pub-6759693957212853/4756966871'
-      : 'ca-app-pub-3940256099942544/5354046340';
+      : 'ca-app-pub-6759693957212853/9607950799'; // iOS Production Ad Unit
   
   // --- END AD UNIT ID DEFINITIONS ---
 

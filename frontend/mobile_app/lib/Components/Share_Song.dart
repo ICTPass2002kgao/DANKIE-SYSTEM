@@ -52,7 +52,7 @@ class TikTokShareSheet extends StatefulWidget {
 class _TikTokShareSheetState extends State<TikTokShareSheet> {
   double _clipDurationSeconds = 15.0;
   bool _isGenerating = false;
-  final String _appDomain = "https://tact-3c612.web.app";
+  final String _appDomain = "https://dankie.netlify.app";
   late final ScreenshotController _screenshotController;
 
   @override

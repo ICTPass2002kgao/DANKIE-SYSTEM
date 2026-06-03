@@ -1150,7 +1150,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                     child: GestureDetector(
                                       onTap: () async {
                                         final Uri url = Uri.parse(
-                                          "https://dankie-website.web.app/terms_and_conditions.html",
+                                          "https://dankie.netlify.app/terms-and-conditions",
                                         );
                                         if (!await launchUrl(
                                           url,
@@ -1173,7 +1173,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                     child: GestureDetector(
                                       onTap: () async {
                                         final Uri url = Uri.parse(
-                                          "https://dankie-website.web.app/privacy_policy.html",
+                                          "https://dankie.netlify.app/policy-privacy",
                                         );
                                         if (!await launchUrl(
                                           url,
