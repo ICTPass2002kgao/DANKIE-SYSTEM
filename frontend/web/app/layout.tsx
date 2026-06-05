@@ -12,6 +12,7 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: "Dankie | TACT Digital Platform",
+  keywords: ["TACTSO","TACT","DANKIE","The Twelve Apostles Church in Trinity","The Twelve Apostles Church in Trinity, TACT, church app, digital platform, secure access, church resources, events, community features"],
   description: "The official digital platform for The Twelve Apostles Church in Trinity, connecting members globally with secure access to church resources, events, and community features.",
   icons: {
     icon: "https://res.cloudinary.com/dajihjqkc/image/upload/v1779755909/dankie_logo_htz2re.png",
