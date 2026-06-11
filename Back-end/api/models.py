@@ -260,67 +260,7 @@ class District(models.Model):
 
     def __str__(self):
         return f"{self.district_elder_name} ({self.overseer})"
- 
-import time
-import uuid
-from geopy.geocoders import Nominatim 
-from django.db import models, connection 
-
-# --- NEW BACKGROUND TASK ---
-def batch_geocode_communities(community_ids):
-    """
-    Runs in the background to prevent server timeouts.
-    Includes a 1.5-second sleep to respect Nominatim's strict ToS.
-    """
-    try:
-        from .models import Community # Import inside to avoid circular dependencies
-        geolocator = Nominatim(user_agent="tact_backend_v2_smart_search")
-        
-        for cid in community_ids:
-            try:
-                community = Community.objects.select_related('district__overseer').get(id=cid)
-                
-                # Safely extract values, defaulting to empty string if null
-                overseer = community.district.overseer
-                region = getattr(overseer, 'region', '') or ''
-                province = getattr(overseer, 'province', '') or ''
-                c_name = getattr(community, 'community_name', '') or ''
-                
-                # Build smart query pieces, filtering out empty ones to prevent Nominatim errors
-                address_attempts = []
-                
-                if c_name and region and province:
-                    address_attempts.append(f"{c_name}, {region}, {province}, South Africa")
-                if c_name and province:
-                    address_attempts.append(f"{c_name}, {province}, South Africa")
-                if c_name:
-                    address_attempts.append(f"{c_name}, South Africa")
-                if region and province:
-                    address_attempts.append(f"{region}, {province}, South Africa")
-                
-                for address in address_attempts:
-                    try:
-                        time.sleep(1.5)  # CRITICAL: Prevents IP bans from Nominatim
-                        location = geolocator.geocode(address, timeout=10)
-                        if location:
-                            # Use update() to save silently without re-triggering signals
-                            Community.objects.filter(id=cid).update(
-                                latitude=location.latitude,
-                                longitude=location.longitude,
-                                full_address=address
-                            )
-                            break 
-                    except Exception as geo_e:
-                        print(f"Geocoding failed for {address}: {geo_e}")
-                        continue 
-            except Exception as e:
-                print(f"Error processing community {cid}: {e}")
-                pass
-    finally:
-        # Prevents database connection leaks in background threads
-        connection.close()
-
-
+  
 # --- UPDATED COMMUNITY MODEL ---
 class Community(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

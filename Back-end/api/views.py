@@ -1090,7 +1090,7 @@ class OverseerCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         overseer_id = request.data.get('overseer')
         if overseer_id:
             current_count = OverseerCommitteeMember.objects.filter(overseer__id=overseer_id).count()
-            if current_count >= 5: return Response({"error": "Maximum limit of 5 committee members reached."}, status=status.HTTP_400_BAD_REQUEST)
+            if current_count >= 30: return Response({"error": "Maximum limit of 30 committee members reached."}, status=status.HTTP_400_BAD_REQUEST)
         data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
         face_file = request.FILES.get('face_image')
         if face_file:
