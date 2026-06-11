@@ -261,6 +261,10 @@ class District(models.Model):
     def __str__(self):
         return f"{self.district_elder_name} ({self.overseer})"
  
+import time
+import uuid
+from geopy.geocoders import Nominatim 
+from django.db import models, connection 
 
 # --- NEW BACKGROUND TASK ---
 def batch_geocode_communities(community_ids):
@@ -274,14 +278,25 @@ def batch_geocode_communities(community_ids):
         
         for cid in community_ids:
             try:
-                community = Community.objects.get(id=cid)
+                community = Community.objects.select_related('district__overseer').get(id=cid)
+                
+                # Safely extract values, defaulting to empty string if null
                 overseer = community.district.overseer
-                address_attempts = [
-                    f"{community.community_name}, {overseer.region}, {overseer.province}, South Africa",
-                    f"{community.community_name}, {overseer.province}, South Africa",
-                    f"{community.community_name}, South Africa",
-                    f"{overseer.region}, {overseer.province}, South Africa"
-                ]
+                region = getattr(overseer, 'region', '') or ''
+                province = getattr(overseer, 'province', '') or ''
+                c_name = getattr(community, 'community_name', '') or ''
+                
+                # Build smart query pieces, filtering out empty ones to prevent Nominatim errors
+                address_attempts = []
+                
+                if c_name and region and province:
+                    address_attempts.append(f"{c_name}, {region}, {province}, South Africa")
+                if c_name and province:
+                    address_attempts.append(f"{c_name}, {province}, South Africa")
+                if c_name:
+                    address_attempts.append(f"{c_name}, South Africa")
+                if region and province:
+                    address_attempts.append(f"{region}, {province}, South Africa")
                 
                 for address in address_attempts:
                     try:
@@ -295,7 +310,8 @@ def batch_geocode_communities(community_ids):
                                 full_address=address
                             )
                             break 
-                    except Exception:
+                    except Exception as geo_e:
+                        print(f"Geocoding failed for {address}: {geo_e}")
                         continue 
             except Exception as e:
                 print(f"Error processing community {cid}: {e}")
@@ -308,7 +324,8 @@ def batch_geocode_communities(community_ids):
 # --- UPDATED COMMUNITY MODEL ---
 class Community(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    district = models.ForeignKey(District, related_name='communities', on_delete=models.CASCADE)
+    # Pass 'District' as a string to prevent circular reference errors
+    district = models.ForeignKey('District', related_name='communities', on_delete=models.CASCADE)
     district_elder_name = models.TextField(max_length=255, blank=True, null=True)
     community_name = models.CharField(max_length=255)
     full_address = models.TextField(blank=True)
@@ -316,18 +333,26 @@ class Community(models.Model):
     longitude = models.FloatField(blank=True, null=True)
 
     def save(self, *args, **kwargs):
-        overseer = self.district.overseer
-        
-        # Provide a basic fallback string instantly so the UI isn't blank
+        # Only assign an initial address if it's empty
         if not self.full_address:
-             self.full_address = f"{self.community_name}, {overseer.region}, {overseer.province}, South Africa"
-             
-        # The heavy Nominatim lookup is removed from here
+            try:
+                # Safely attempt to fetch relations
+                overseer = self.district.overseer
+                region = getattr(overseer, 'region', '') or ''
+                province = getattr(overseer, 'province', '') or ''
+                c_name = getattr(self, 'community_name', '') or ''
+                
+                parts = [c_name, region, province, "South Africa"]
+                self.full_address = ", ".join([p.strip() for p in parts if p.strip()])
+            except Exception:
+                # Fallback if relations aren't committed to the database yet
+                self.full_address = f"{getattr(self, 'community_name', 'Unknown Community')}, South Africa"
+                
         super(Community, self).save(*args, **kwargs)
 
     def __str__(self):
-        return self.community_name
-
+        return str(self.community_name)
+    
 # ===============================================================================================
 # 3. FINANCIAL & EVENTS
 # ===============================================================================================

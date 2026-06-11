@@ -590,6 +590,62 @@ def create_payment_link(request):
 # ===========================================================================================================
 # 4. MODEL VIEWSETS
 # ===========================================================================================================
+import threading
+import time
+from geopy.geocoders import Nominatim
+from django.db import connection
+
+# --- NEW BACKGROUND TASK ---
+def batch_geocode_communities(community_ids):
+    """
+    Runs in the background to prevent server timeouts.
+    Includes a 1.5-second sleep to respect Nominatim's strict ToS.
+    """
+    try:
+        from .models import Community # Import inside to avoid circular dependencies
+        geolocator = Nominatim(user_agent="tact_backend_v2_smart_search")
+        
+        for cid in community_ids:
+            try:
+                # Use select_related to prevent missing relations in background thread
+                community = Community.objects.select_related('district__overseer').get(id=cid)
+                overseer = community.district.overseer
+                
+                region = getattr(overseer, 'region', '') or ''
+                province = getattr(overseer, 'province', '') or ''
+                c_name = getattr(community, 'community_name', '') or ''
+                
+                # Build safe search strings
+                address_attempts = []
+                if c_name and region and province:
+                    address_attempts.append(f"{c_name}, {region}, {province}, South Africa")
+                if c_name and province:
+                    address_attempts.append(f"{c_name}, {province}, South Africa")
+                if c_name:
+                    address_attempts.append(f"{c_name}, South Africa")
+                
+                for address in address_attempts:
+                    try:
+                        time.sleep(1.5)  # CRITICAL: Prevents IP bans from Nominatim
+                        location = geolocator.geocode(address, timeout=10)
+                        if location:
+                            Community.objects.filter(id=cid).update(
+                                latitude=location.latitude,
+                                longitude=location.longitude,
+                                full_address=address
+                            )
+                            break 
+                    except Exception as geo_err:
+                        print(f"Geocoding iteration failed: {geo_err}")
+                        continue 
+            except Exception as e:
+                print(f"Error processing community {cid}: {e}")
+                pass
+    finally:
+        # Prevents database connection leaks in background threads
+        connection.close()
+
+
 class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method == 'GET':
@@ -615,15 +671,27 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
         return queryset
 
     def create(self, request, *args, **kwargs): 
-        data = request.data.dict() 
+        data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
         districts_data = []
+        
         if 'districts' in data:
             try:
                 raw_districts = data.pop('districts') 
                 if isinstance(raw_districts, str):
-                    districts_data = json.loads(raw_districts)
-                elif isinstance(raw_districts, list):
-                    districts_data = raw_districts
+                    parsed = json.loads(raw_districts)
+                else:
+                    parsed = raw_districts
+                    
+                # ⭐️ SMART PARSING: Safely convert Flutter's Map/Dict into the expected List
+                if isinstance(parsed, dict):
+                    for elder_name, comms in parsed.items():
+                        districts_data.append({
+                            'district_elder_name': elder_name,
+                            'communities': comms
+                        })
+                elif isinstance(parsed, list):
+                    districts_data = parsed
+                    
             except Exception as e:
                 return Response({"error": f"Invalid districts JSON format: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -665,6 +733,7 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
                 )
                 created_community_ids.append(comm.id)
 
+        # ⭐️ Safely trigger geocoding on a separate thread
         if created_community_ids:
             threading.Thread(
                 target=batch_geocode_communities, 
@@ -672,7 +741,6 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
             ).start()
 
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
 
 # ⭐️ OPTIMIZED
 class CommunityViewSet(CachedListMixin, viewsets.ModelViewSet):
