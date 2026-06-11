@@ -147,7 +147,7 @@ class _Login_PageState extends State<Login_Page>
 
       List<Map<String, String>> potentialIdentities = [];
 
-      // CHECK OVERSEER COMMITTEE
+      // 1. CHECK OVERSEER COMMITTEE
       var overseerProfile = await _fetchProfileFromDjango(
         'overseers',
         email,
@@ -157,6 +157,8 @@ class _Login_PageState extends State<Login_Page>
         var members = await _fetchListFromDjango(
           'committee_members',
           'overseer=${overseerProfile['id']}',
+          filterKey: 'overseer',
+          filterValue: overseerProfile['id'].toString(),
         );
         potentialIdentities = members
             .map<Map<String, String>>(
@@ -178,17 +180,55 @@ class _Login_PageState extends State<Login_Page>
         return;
       }
 
-      // CHECK TACTSO BRANCH COMMITTEE
+      // 2. CHECK TACTSO BRANCH COMMITTEE
+      // First, check if they logged in as the Main Branch Account via UID
       var tactsoProfile = await _fetchProfileFromDjango(
         'tactso_branches',
         uid,
         queryParam: 'uid',
       );
+
+      // Fallback 1: Try checking the branch via Email
+      if (tactsoProfile == null) {
+        tactsoProfile = await _fetchProfileFromDjango(
+          'tactso_branches',
+          email,
+          queryParam: 'email',
+        );
+      }
+
+      // Fallback 2: Check if they are a Committee Member for a branch
+      if (tactsoProfile == null) {
+        var committeeMemberCheck = await _fetchListFromDjango(
+          'branch_committee',
+          'email=$email',
+          filterKey: 'email',
+          filterValue: email, // Strict client-side filter
+        );
+
+        if (committeeMemberCheck.isNotEmpty) {
+          var branchId =
+              committeeMemberCheck[0]['branch'] ??
+              committeeMemberCheck[0]['branch_id'];
+          if (branchId != null) {
+            tactsoProfile = await _fetchProfileFromDjango(
+              'tactso_branches',
+              branchId.toString(),
+              queryParam: 'id',
+            );
+          }
+        }
+      }
+
+      // If we successfully identified the exact Branch, fetch ONLY its committee members
       if (tactsoProfile != null) {
         var members = await _fetchListFromDjango(
           'branch_committee',
           'branch=${tactsoProfile['id']}',
+          filterKey: 'branch', // Strict client-side filter prevents ghost data
+          filterValue: tactsoProfile['id'].toString(),
         );
+
         potentialIdentities = members
             .map<Map<String, String>>(
               (m) => {
@@ -209,8 +249,13 @@ class _Login_PageState extends State<Login_Page>
         return;
       }
 
-      // CHECK ADMIN STAFF
-      var staffList = await _fetchListFromDjango('staff', 'uid=$uid');
+      // 3. CHECK ADMIN STAFF
+      var staffList = await _fetchListFromDjango(
+        'staff',
+        'uid=$uid',
+        filterKey: 'uid',
+        filterValue: uid,
+      );
       if (staffList.isNotEmpty) {
         potentialIdentities = staffList
             .map<Map<String, String>>(
@@ -232,7 +277,7 @@ class _Login_PageState extends State<Login_Page>
         return;
       }
 
-      // STANDARD USER
+      // 4. STANDARD USER
       var userProfile = await _fetchProfileFromDjango(
         'users',
         uid,
@@ -265,18 +310,35 @@ class _Login_PageState extends State<Login_Page>
       url,
       headers: {'Authorization': 'Bearer $token'},
     );
+
     if (response.statusCode == 200) {
       var decoded = json.decode(response.body);
       List results = (decoded is Map) ? decoded['results'] : decoded;
-      return results.isNotEmpty ? results[0] : null;
+
+      if (results.isNotEmpty) {
+        // ⭐️ STRICT EXACT MATCH FALLBACK ⭐️
+        // Because Django might ignore the queryParam, we manually enforce it here.
+        try {
+          return results.firstWhere((r) {
+            if (r[queryParam] == null) return false;
+            return r[queryParam].toString().toLowerCase() ==
+                identifier.toLowerCase();
+          });
+        } catch (e) {
+          // If the exact match somehow isn't there, fall back to null
+          return null;
+        }
+      }
     }
     return null;
   }
 
   Future<List<dynamic>> _fetchListFromDjango(
     String endpoint,
-    String query,
-  ) async {
+    String query, {
+    String? filterKey,
+    String? filterValue,
+  }) async {
     final user = FirebaseAuth.instance.currentUser;
     String token = await user?.getIdToken() ?? "";
     final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/$endpoint/?$query');
@@ -284,9 +346,22 @@ class _Login_PageState extends State<Login_Page>
       url,
       headers: {'Authorization': 'Bearer $token'},
     );
+
     if (response.statusCode == 200) {
       var decoded = json.decode(response.body);
-      return (decoded is Map) ? decoded['results'] : decoded;
+      List results = (decoded is Map) ? decoded['results'] : decoded;
+
+      // ⭐️ STRICT CLIENT-SIDE FILTERING ⭐️
+      // Purges any ghost data that doesn't strictly belong to this branch
+      if (filterKey != null && filterValue != null) {
+        results = results.where((r) {
+          if (r[filterKey] == null) return false;
+          return r[filterKey].toString().toLowerCase() ==
+              filterValue.toLowerCase();
+        }).toList();
+      }
+
+      return results;
     }
     return [];
   }

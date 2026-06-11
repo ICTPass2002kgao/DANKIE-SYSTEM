@@ -43,7 +43,8 @@ class OverseerService {
     required XFile? secretaryImage,
     required String chairpersonName,
     required XFile? chairpersonImage,
-    required Map<String, List<Map<String, String>>> districtsData,
+    // ⭐️ CHANGED: Map to List to match the UI and Django
+    required List<Map<String, dynamic>> districtsData,
     required String adminUid,
   }) async {
     // Generate Email
@@ -58,23 +59,7 @@ class OverseerService {
         password: defaultPassword,
       );
 
-      // Step B: Prepare District JSON
-      List<Map<String, dynamic>> formattedDistricts = [];
-      districtsData.forEach((elderName, communities) {
-        List<Map<String, dynamic>> comms = [];
-        for (var c in communities) {
-          comms.add({
-            'community_name': c['communityName'],
-            'district_elder_name': elderName,
-          });
-        }
-        formattedDistricts.add({
-          'district_elder_name': elderName,
-          'communities': comms,
-        });
-      });
-
-      // Step C: Send to Django
+      // Step B: Send to Django
       final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/overseers/');
       var request = http.MultipartRequest('POST', url);
       String? token = await FirebaseAuth.instanceFor(
@@ -88,7 +73,9 @@ class OverseerService {
       request.fields['region'] = region;
       request.fields['code'] = code;
       request.fields['uid'] = uid; // The new UID we just created
-      request.fields['districts'] = jsonEncode(formattedDistricts);
+
+      // ⭐️ CHANGED: Pass the perfectly structured List straight to JSON encode
+      request.fields['districts'] = jsonEncode(districtsData);
 
       // ⭐️ MISSING FIELDS ADDED HERE ⭐️
       request.fields['secretary_name'] = secretaryName;

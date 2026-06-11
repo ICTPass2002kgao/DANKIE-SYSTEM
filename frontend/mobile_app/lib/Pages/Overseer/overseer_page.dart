@@ -6,8 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
-import 'package:ionicons/ionicons.dart';
+import 'package:flutter/foundation.dart'; 
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ttact/Components/API.dart';

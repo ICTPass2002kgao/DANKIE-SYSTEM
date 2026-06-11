@@ -5,8 +5,7 @@ import 'package:http/http.dart' as http; // Added for Django
 import 'package:firebase_auth/firebase_auth.dart'; // REQUIRED FOR SECURE TOKEN
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:ionicons/ionicons.dart';
-import 'package:ttact/Components/API.dart'; // Ensure API is imported
+ import 'package:ttact/Components/API.dart'; // Ensure API is imported
 import 'package:ttact/Components/HomePageHelpers.dart';
 import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/Tactso_Branch_Details.dart'
     hide isIOSPlatform;

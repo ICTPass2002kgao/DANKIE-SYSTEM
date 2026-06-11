@@ -254,7 +254,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
               children: [
                 if (!kIsWeb) ...[
                   _buildNeuShareBtn(
-                    icon: FontAwesomeIcons.whatsapp,
+                    icon: Icons.chat_bubble_outline,
                     color: Colors.white,
                     bgColor: const Color(0xFF25D366),
                     label: "Video Status",
@@ -264,7 +264,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
                   const SizedBox(width: 25),
 
                   _buildNeuShareBtn(
-                    icon: FontAwesomeIcons.whatsapp,
+                    icon: Icons.chat_bubble_outline,
                     color: Colors.white,
                     bgColor: const Color(0xFF25D366),
                     label: "WhatsApp Chat",

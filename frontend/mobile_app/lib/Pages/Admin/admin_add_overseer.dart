@@ -116,7 +116,8 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
   ];
   String? selectedProvince;
 
-  Map<String, List<Map<String, String>>> districtCommunities = {};
+  // ⭐️ CRITICAL FIX: Changed from Map to List to match Django's JSON expectation
+  List<Map<String, dynamic>> districtList = [];
 
   Future<void> _pickImage(String role) async {
     final picker = ImagePicker();
@@ -136,10 +137,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
   }
 
   Future<void> _handleSubmit() async {
-    // UPDATED VALIDATION: Ensure committee details are present
     if (overseerInitialsAndSurname.text.isEmpty ||
         selectedProvince == null ||
-        districtCommunities.isEmpty ||
+        districtList.isEmpty || // ⭐️
         secretaryNameController.text.isEmpty ||
         secretaryImageFile == null ||
         chairpersonNameController.text.isEmpty ||
@@ -167,7 +167,7 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
         chairpersonName: chairpersonNameController.text.trim(),
         chairpersonImage: chairpersonImageFile,
         // ----------------------
-        districtsData: districtCommunities,
+        districtsData: districtList, // ⭐️ Passing the perfectly formatted List
         adminUid: widget.uid ?? FirebaseAuth.instance.currentUser?.uid ?? '',
       );
 
@@ -195,7 +195,7 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
     overseerRegionController.clear();
     setState(() {
       selectedProvince = null;
-      districtCommunities.clear();
+      districtList.clear(); // ⭐️
       secretaryImageFile = null;
       chairpersonImageFile = null;
     });
@@ -467,9 +467,14 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                     onTap: () {
                       String name = overseerDistrictElderController.text.trim();
                       if (name.isNotEmpty &&
-                          !districtCommunities.containsKey(name)) {
+                          !districtList.any(
+                            (d) => d['district_elder_name'] == name,
+                          )) {
                         setState(() {
-                          districtCommunities[name] = [];
+                          districtList.add({
+                            'district_elder_name': name,
+                            'communities': <Map<String, dynamic>>[],
+                          });
                           overseerDistrictElderController.clear();
                         });
                       }
@@ -487,8 +492,13 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
           ),
         ),
         SizedBox(height: 20),
-        if (districtCommunities.isNotEmpty)
-          ...districtCommunities.keys.map((elderName) {
+
+        // ⭐️ Iterate over the properly formatted List
+        if (districtList.isNotEmpty)
+          ...districtList.map((district) {
+            String elderName = district['district_elder_name'];
+            List<Map<String, dynamic>> communities = district['communities'];
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 15.0),
               child: NeumorphicContainer(
@@ -511,7 +521,9 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                         ),
                         InkWell(
                           onTap: () => setState(
-                            () => districtCommunities.remove(elderName),
+                            () => districtList.removeWhere(
+                              (d) => d['district_elder_name'] == elderName,
+                            ),
                           ),
                           child: Icon(
                             Icons.delete,
@@ -522,29 +534,34 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
                       ],
                     ),
                     Divider(),
-                    ...districtCommunities[elderName]!.map(
-                      (c) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
-                          children: [
-                            Icon(Icons.home_work, size: 14, color: Colors.grey),
-                            SizedBox(width: 8),
-                            Text(c['communityName']!),
-                            Spacer(),
-                            InkWell(
-                              onTap: () => setState(
-                                () => districtCommunities[elderName]!.remove(c),
-                              ),
-                              child: Icon(
-                                Icons.close,
-                                size: 14,
-                                color: Colors.grey,
-                              ),
+                    ...communities
+                        .map(
+                          (c) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.home_work,
+                                  size: 14,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(width: 8),
+                                Text(c['community_name']!),
+                                Spacer(),
+                                InkWell(
+                                  onTap: () =>
+                                      setState(() => communities.remove(c)),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
+                          ),
+                        )
+                        .toList(),
                     SizedBox(height: 10),
                     Row(
                       children: [
@@ -589,7 +606,10 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
   void _addCommunity(String elderName, String commName) {
     if (commName.trim().isNotEmpty) {
       setState(() {
-        districtCommunities[elderName]!.add({'communityName': commName.trim()});
+        var district = districtList.firstWhere(
+          (d) => d['district_elder_name'] == elderName,
+        );
+        district['communities'].add({'community_name': commName.trim()});
         overseerCommunityNameController.clear();
       });
     }
@@ -609,7 +629,6 @@ class _AdminAddOverseerState extends State<AdminAddOverseer> {
     );
   }
 
-  // UPDATED IMAGE PICKER: Enhanced feedback for biometrics
   Widget _buildImagePicker(
     String label,
     XFile? file,

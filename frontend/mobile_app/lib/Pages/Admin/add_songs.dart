@@ -13,8 +13,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:ionicons/ionicons.dart';
+import 'package:flutter_ionicons/flutter_ionicons.dart';
+import 'package:http/http.dart' as http; 
 import 'package:url_launcher/url_launcher.dart'; // REQUIRED to open and view the contract
 import 'package:ttact/Components/API.dart';
 
@@ -508,7 +508,7 @@ class _AddMusicState extends State<AddMusic> {
                 children: [
                   Icon(
                     _selectedFile == null
-                        ? Ionicons.cloud_upload_outline
+                        ? Ionicons.cloud_upload
                         : Ionicons.musical_notes,
                     size: 55,
                     color: primary,
@@ -677,7 +677,7 @@ class _AddMusicState extends State<AddMusic> {
                     fontSize: 15,
                   ),
                 ),
-                Icon(Ionicons.calendar_outline, color: primary),
+                Icon(Ionicons.calendar, color: primary),
               ],
             ),
           ),
@@ -697,7 +697,7 @@ class _AddMusicState extends State<AddMusic> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Ionicons.play_circle, color: primary, size: 24),
+                    Icon(Ionicons.play, color: primary, size: 24),
                     SizedBox(width: 10),
                     Text(
                       'Play Uploaded Audio',
@@ -750,7 +750,7 @@ class _AddMusicState extends State<AddMusic> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Ionicons.folder_open_outline,
+              Ionicons.folder_open,
               size: 60,
               color: color.hintColor,
             ),
@@ -834,7 +834,7 @@ class _AddMusicState extends State<AddMusic> {
                           borderRadius: 12,
                           padding: EdgeInsets.all(12),
                           child: Icon(
-                            Ionicons.eye_outline,
+                            Ionicons.eye,
                             color: primary,
                             size: 22,
                           ),
@@ -851,8 +851,8 @@ class _AddMusicState extends State<AddMusic> {
                         padding: EdgeInsets.all(12),
                         child: Icon(
                           hasContract
-                              ? Ionicons.sync_outline
-                              : Ionicons.cloud_upload_outline,
+                              ? Ionicons.cloud_done
+                              : Ionicons.cloud_upload,
                           color: hasContract ? Colors.green : primary,
                           size: 22,
                         ),

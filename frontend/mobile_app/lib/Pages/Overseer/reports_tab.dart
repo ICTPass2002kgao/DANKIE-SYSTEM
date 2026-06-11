@@ -9,7 +9,7 @@ import 'package:printing/printing.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/Aduit_Logs/Overseer_Audit_Logs.dart';
 import 'package:ttact/Components/CustomOutlinedButton.dart';
-import 'package:ttact/Pages/Overseer/Services/pdf_generator_service.dart';
+import 'package:ttact/Pages/Overseer/components/pdf_generator_service.dart';
 
 class ReportsTab extends StatefulWidget {
   final String? committeeMemberName;

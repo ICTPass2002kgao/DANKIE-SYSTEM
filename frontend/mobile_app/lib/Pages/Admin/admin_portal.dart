@@ -4,8 +4,7 @@ import 'dart:convert'; // Added for JSON decoding
 import 'package:http/http.dart' as http; // Added for API calls
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
-import 'package:ionicons/ionicons.dart';
+import 'package:flutter/material.dart'; 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 import 'package:ttact/Pages/Admin/Overseer_BalanceSheet_Global.dart';
@@ -85,7 +84,7 @@ class _AdminPortalState extends State<AdminPortal> {
     return [
       {
         'label': 'Dashboard',
-        'icon': Ionicons.grid_outline,
+        'icon': Icons.grid_on,
         'badge': 0,
         'page': ProfessionalDashboard(
           uid: widget.uid,
@@ -102,7 +101,7 @@ class _AdminPortalState extends State<AdminPortal> {
       },
       {
         'label': 'Songs',
-        'icon': Ionicons.musical_notes_outline,
+        'icon': Icons.music_note_outlined,
         'badge': 0,
         'page': AddMusic(
           uid: widget.uid,

@@ -415,7 +415,7 @@ class _EventShareSheetState extends State<EventShareSheet> {
                 children: [
                   if (!kIsWeb) ...[
                     _buildNeuShareBtn(
-                      icon: FontAwesomeIcons.whatsapp,
+                      icon: Icons.chat_bubble_outline,
                       color: Colors.white,
                       bg: Color(0xFF25D366),
                       label: "Status",
@@ -423,7 +423,7 @@ class _EventShareSheetState extends State<EventShareSheet> {
                     ),
                     SizedBox(width: 25),
                     _buildNeuShareBtn(
-                      icon: FontAwesomeIcons.whatsapp,
+                      icon: Icons.chat_bubble_outline,
                       color: Colors.white,
                       bg: Color(0xFF25D366),
                       label: "WhatsApp",

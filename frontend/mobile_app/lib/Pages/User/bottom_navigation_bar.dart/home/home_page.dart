@@ -2,8 +2,8 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:ionicons/ionicons.dart';
-import 'package:ttact/Components/AdBanner.dart';
+import 'package:flutter_ionicons/flutter_ionicons.dart';
+  import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/HomePageHelpers.dart';
 import 'package:ttact/Components/NotificationService.dart';
 import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/apostles_greetings.dart';
@@ -140,11 +140,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   // ⭐️ THE ADVANCED SCROLLABLE TAB BAR ⭐️
   Widget _buildPremiumTabSwitcher(ThemeData theme, Color baseColor) {
     final tabs = [
-      {'icon': Ionicons.calendar_outline, 'label': 'EVENTS'},
+      {'icon': Ionicons.calendar, 'label': 'EVENTS'},
       {'icon': Icons.near_me_outlined, 'label': 'FIND NEARBY'},
-      {'icon': Ionicons.musical_notes_outline, 'label': 'MUSIC'},
-      {'icon': Ionicons.business_outline, 'label': 'BRANCHES'},
-      {'icon': Ionicons.briefcase_outline, 'label': 'CAREER'},
+      {'icon': Ionicons.musical_notes, 'label': 'MUSIC'},
+      {'icon': Ionicons.business, 'label': 'BRANCHES'},
+      {'icon': Ionicons.briefcase, 'label': 'CAREER'},
       {'icon': Icons.message_outlined, 'label': 'APOSTLES GREETINGS'},
     ];
 

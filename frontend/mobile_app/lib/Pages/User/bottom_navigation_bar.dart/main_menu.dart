@@ -1,18 +1,22 @@
 // ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables, use_build_context_synchronously, avoid_print
 
-import 'dart:async'; // Required for Timer
+import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http; // Added for Django
-import 'package:firebase_auth/firebase_auth.dart'; // REQUIRED FOR SECURE TOKEN
+import 'package:flutter_ionicons/flutter_ionicons.dart';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:ionicons/ionicons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
+
+// --- ⭐️ NEW LOCATION IMPORTS ---
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AdBanner.dart';
@@ -24,10 +28,8 @@ import 'events.dart';
 import 'history_page.dart';
 import 'home/home_page.dart';
 
-// ⭐️ IMPORT YOUR NEUMORPHIC COMPONENT
 import 'package:ttact/Components/NeuDesign.dart';
 
-// --- PLATFORM UTILITIES ---
 const double _desktopBreakpoint = 1000.0;
 
 bool isLargeScreen(BuildContext context) =>
@@ -62,15 +64,12 @@ class _MotherPageState extends State<MotherPage>
   late AppLinks _appLinks;
   Map<String, dynamic> _userData = {};
 
-  // ⭐️ Added StreamSubscription to listen for auth changes globally
   StreamSubscription<User?>? _authSubscription;
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   TextEditingController issueTitle = TextEditingController();
   TextEditingController issueDescription = TextEditingController();
-  // bool get _isMobileWeb => kIsWeb && !isLargeScreen(context); // Unused currently
 
-  // ⭐️ SCROLL VISIBILITY STATE
   bool _isBottomNavVisible = true;
 
   // --- OVERSEER UPDATE STATE VARIABLES ---
@@ -82,6 +81,7 @@ class _MotherPageState extends State<MotherPage>
   String? selectedMemberUid;
   String? selectedDistrictElder;
   String? selectedCommunityName;
+
   List<String> provinces = [
     'Gauteng',
     'Western Cape',
@@ -100,13 +100,12 @@ class _MotherPageState extends State<MotherPage>
     _currentIndex = widget.initialIndex;
     _initDeepLinks();
 
-    // ⭐️ Instantly refresh UI & Data whenever login state changes anywhere in the app
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen((
       User? user,
     ) {
       if (mounted) {
-        setState(() {}); // Force UI to rebuild (e.g., WowAppBar)
-        fetchUserData(); // Fetch specific Django roles/data
+        setState(() {});
+        fetchUserData();
       }
     });
   }
@@ -119,7 +118,6 @@ class _MotherPageState extends State<MotherPage>
     super.dispose();
   }
 
-  // --- DEEP LINK LOGIC ---
   Future<void> _initDeepLinks() async {
     _appLinks = AppLinks();
     try {
@@ -145,8 +143,6 @@ class _MotherPageState extends State<MotherPage>
     }
   }
 
-  // --- USER DATA & ROLE LOGIC (SECURED) ---
-
   void _reportIssue() async {
     if (issueTitle.text.isEmpty || issueDescription.text.isEmpty) {
       Api().showMessage(
@@ -158,7 +154,6 @@ class _MotherPageState extends State<MotherPage>
       return;
     }
 
-    // SECURE FIX: Grab the current user and their token
     User? user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
       Api().showMessage(
@@ -179,7 +174,7 @@ class _MotherPageState extends State<MotherPage>
         url,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token', // SECURE FIX: Inject token
+          'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
           'title': issueTitle.text,
@@ -214,20 +209,8 @@ class _MotherPageState extends State<MotherPage>
   }
 
   Future<void> fetchUserData() async {
-    // SECURE FIX: Grab current user dynamically
     User? user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      if (mounted) {
-        setState(() {
-          _isSeller = false;
-          _userData = {};
-        });
-      }
-      return;
-    }
-
-    // ⭐️ GUEST SAFETY CHECK: Prevents anonymous accounts from being kicked out
-    if (user.isAnonymous) {
+    if (user == null || user.isAnonymous) {
       if (mounted) {
         setState(() {
           _isSeller = false;
@@ -241,7 +224,6 @@ class _MotherPageState extends State<MotherPage>
       String? token = await user.getIdToken();
       if (token == null) return;
 
-      // Query Django API for user profile by UID
       final url = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/users/?uid=${user.uid}',
       );
@@ -249,7 +231,7 @@ class _MotherPageState extends State<MotherPage>
       final response = await http.get(
         url,
         headers: {
-          'Authorization': 'Bearer $token', // SECURE FIX: Inject token
+          'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
       );
@@ -261,7 +243,6 @@ class _MotherPageState extends State<MotherPage>
 
           String role = data['role']?.toString().toLowerCase() ?? '';
 
-          // ROLE CHECK: If not member or seller, return to login
           if (!role.contains('member') && role != 'seller') {
             await FirebaseAuth.instance.signOut();
             if (mounted) {
@@ -279,7 +260,6 @@ class _MotherPageState extends State<MotherPage>
               _userData = data;
               _isSeller = _userData['role'] == 'Seller';
 
-              // Adjust index if role changes permissions
               if (_isSeller) {
                 if (_currentIndex > 4) _currentIndex = 4;
               } else {
@@ -287,17 +267,68 @@ class _MotherPageState extends State<MotherPage>
               }
             });
 
-            // OVERSEER AVAILABILITY CHECK
-            // Check if user has an overseer assigned and verify it
-            dynamic overseerId =
-                _userData['overseer_uid'] ??
-                _userData['overseer_id'] ??
-                _userData['overseer'];
-            if (overseerId != null && overseerId.toString().isNotEmpty) {
-              await _verifyOverseerStatus(token, overseerId);
+            // ⭐️ TRIGGER LOCATION CHECK SILENTLY
+            _checkLocationAndRelocation();
+
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              int savedCount = prefs.getInt('overseer_count') ?? 0;
+
+              final countRes = await http.get(
+                Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/overseers/?limit=1'),
+                headers: {'Content-Type': 'application/json'},
+              );
+
+              int currentCount = savedCount;
+              if (countRes.statusCode == 200) {
+                final decodedCount = jsonDecode(countRes.body);
+
+                if (decodedCount is Map) {
+                  if (decodedCount.containsKey('count')) {
+                    var rawCount = decodedCount['count'];
+                    if (rawCount is int) {
+                      currentCount = rawCount;
+                    } else if (rawCount is String) {
+                      currentCount = int.tryParse(rawCount) ?? savedCount;
+                    }
+                  } else if (decodedCount.containsKey('results') &&
+                      decodedCount['results'] is List) {
+                    currentCount = (decodedCount['results'] as List).length;
+                  }
+                } else if (decodedCount is List) {
+                  currentCount = decodedCount.length;
+                }
+
+                await prefs.setInt('overseer_count', currentCount);
+              }
+
+              dynamic overseerId =
+                  _userData['overseer_uid'] ??
+                  _userData['overseer_id'] ??
+                  _userData['overseer'];
+              bool isExternal =
+                  _userData['role']?.toString().toLowerCase() ==
+                  'external member';
+              bool isOverseerMissing =
+                  (overseerId == null ||
+                  overseerId.toString().trim().isEmpty ||
+                  overseerId == 'none');
+
+              if (isExternal && currentCount > savedCount) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _showUpdateOverseerPopup(isNewAddition: true);
+                });
+              } else if (isOverseerMissing && !isExternal) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _showUpdateOverseerPopup(isNewAddition: false);
+                });
+              } else if (!isOverseerMissing && !isExternal) {
+                await _verifyOverseerStatus(token, overseerId);
+              }
+            } catch (e) {
+              debugPrint("Error checking dynamic overseer count: $e");
             }
 
-            // GENDER CHECK: Trigger Neumorphic Pop-up if gender is missing
             String? gender = _userData['gender'];
             if (gender == null || gender.toString().trim().isEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -313,6 +344,240 @@ class _MotherPageState extends State<MotherPage>
       }
     } catch (e) {
       debugPrint("Error fetching user data from Django: $e");
+    }
+  }
+
+  // ===========================================================================
+  // ⭐️ RELOCATION & GPS LOGIC
+  // ===========================================================================
+  Future<void> _checkLocationAndRelocation() async {
+    if (kIsWeb) return; // Skip on web to avoid permission blocking UX
+
+    String registeredProvince = _userData['province'] ?? 'none';
+    if (registeredProvince.toLowerCase() == 'none')
+      return; // Skip if they don't even have a province yet
+
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
+      }
+      if (permission == LocationPermission.deniedForever) return;
+
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.low,
+      );
+
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        String currentPhysicalProvince =
+            placemarks.first.administrativeArea ?? '';
+
+        // Clean up province strings to ensure accurate matching
+        currentPhysicalProvince = currentPhysicalProvince
+            .replaceAll(' Province', '')
+            .trim();
+
+        // Verify it is a valid SA province
+        String? matchedProvince;
+        for (var p in provinces) {
+          if (currentPhysicalProvince.toLowerCase().contains(p.toLowerCase())) {
+            matchedProvince = p;
+            break;
+          }
+        }
+
+        if (matchedProvince != null) {
+          String uid = _userData['uid'];
+          final prefs = await SharedPreferences.getInstance();
+          String visitingKey = 'is_visiting_${uid}_$matchedProvince';
+          String dateKey = 'relocation_date_${uid}_$matchedProvince';
+
+          // 1. If physical province MATCHES registered province
+          if (matchedProvince.toLowerCase() ==
+              registeredProvince.toLowerCase()) {
+            // Reset timers if they went back home
+            await prefs.remove(visitingKey);
+            await prefs.remove(dateKey);
+            return;
+          }
+
+          // 2. If physical province is DIFFERENT
+          bool isJustVisiting = prefs.getBool(visitingKey) ?? false;
+          if (isJustVisiting)
+            return; // Ignore them if they already said they are visiting
+
+          String? startDateStr = prefs.getString(dateKey);
+          if (startDateStr == null) {
+            // Day 1 in new province
+            await prefs.setString(dateKey, DateTime.now().toIso8601String());
+          } else {
+            DateTime startDate = DateTime.parse(startDateStr);
+            int daysPassed = DateTime.now().difference(startDate).inDays;
+
+            if (daysPassed >= 3) {
+              // Trigger Relocation Prompt
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _showRelocationPrompt(matchedProvince!, visitingKey);
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Silent Geocoding Error: $e");
+    }
+  }
+
+  void _showRelocationPrompt(String newProvince, String visitingKey) {
+    final theme = Theme.of(context);
+    final neumoBaseColor = Color.alphaBlend(
+      theme.primaryColor.withOpacity(0.08),
+      theme.scaffoldBackgroundColor,
+    );
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: const EdgeInsets.all(20),
+          child: NeumorphicContainer(
+            color: neumoBaseColor,
+            borderRadius: 24,
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Icon(
+                  CupertinoIcons.location_solid,
+                  size: 60,
+                  color: theme.primaryColor,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "Location Update",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "We noticed you have been in $newProvince for 3 days. Did you relocate?",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: theme.hintColor, fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+
+                GestureDetector(
+                  onTap: () async {
+                    Navigator.pop(dialogContext);
+                    await _handleRelocationConfirmed(newProvince);
+                  },
+                  child: NeumorphicContainer(
+                    color: theme.primaryColor,
+                    borderRadius: 12,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: Text(
+                        "YES, I RELOCATED",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setBool(
+                      visitingKey,
+                      true,
+                    ); // Don't ask again for this province
+                    if (mounted) Navigator.pop(dialogContext);
+                  },
+                  child: Text(
+                    "No, I am just visiting",
+                    style: TextStyle(
+                      color: theme.hintColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handleRelocationConfirmed(String newProvince) async {
+    Api().showLoading(context);
+    try {
+      // 1. Check if there are ANY overseers in the new province
+      final url = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?province=$newProvince',
+      );
+      final response = await http.get(
+        url,
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      Navigator.pop(context); // close loading
+
+      bool hasOverseers = false;
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded.containsKey('results')) {
+          hasOverseers = (decoded['results'] as List).isNotEmpty;
+        } else if (decoded is List) {
+          hasOverseers = decoded.isNotEmpty;
+        }
+      }
+
+      if (!hasOverseers) {
+        // AUTOMATIC EXTERNAL MEMBER CONVERSION
+        Api().showMessage(
+          context,
+          "No Overseers Found",
+          "There are currently no overseers registered in $newProvince. You have been placed as an External Member.",
+          Colors.orange,
+        );
+        await _updateToExternalMember(physicalProvince: newProvince);
+      } else {
+        // OVERSEERS EXIST: Pre-select province and open the standard update popup
+        setState(() {
+          selectedProvince = newProvince;
+        });
+        _showUpdateOverseerPopup(isNewAddition: false, lockProvince: true);
+      }
+    } catch (e) {
+      Navigator.pop(context); // close loading
+      Api().showMessage(
+        context,
+        "Error",
+        "Failed to verify network.",
+        Colors.red,
+      );
     }
   }
 
@@ -348,14 +613,14 @@ class _MotherPageState extends State<MotherPage>
         if (isMissing) {
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              _showUpdateOverseerPopup();
+              _showUpdateOverseerPopup(isNewAddition: false);
             });
           }
         }
       } else if (response.statusCode == 404) {
         if (mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showUpdateOverseerPopup();
+            _showUpdateOverseerPopup(isNewAddition: false);
           });
         }
       }
@@ -690,7 +955,10 @@ class _MotherPageState extends State<MotherPage>
     );
   }
 
-  void _showUpdateOverseerPopup() {
+  void _showUpdateOverseerPopup({
+    bool isNewAddition = false,
+    bool lockProvince = false,
+  }) {
     final theme = Theme.of(context);
     final neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.08),
@@ -698,12 +966,32 @@ class _MotherPageState extends State<MotherPage>
     );
     bool isSaving = false;
 
+    // If locked (e.g. from relocation auto-trigger), fetch overseers automatically
+    if (lockProvince && selectedProvince != null && _overseersList.isEmpty) {
+      // Small delay to let the dialog build first before running setStateModal
+      Future.delayed(Duration(milliseconds: 100), () {
+        // A bit hacky to call it without the explicit setStateDialog of the builder,
+        // but fetching it gracefully handles state updates via the parent.
+      });
+    }
+
     showDialog(
       context: context,
-      barrierDismissible: false, // Forces the user to make a selection
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
+            // Auto fetch if locked and empty
+            if (lockProvince &&
+                selectedProvince != null &&
+                _overseersList.isEmpty &&
+                !_isLoadingOverseers) {
+              _fetchAndSetOverseersForProvince(
+                selectedProvince!,
+                setStateDialog,
+              );
+            }
+
             final List<String> districtElderNames = _getDistrictElderNames(
               currentOverseerData,
             );
@@ -725,13 +1013,17 @@ class _MotherPageState extends State<MotherPage>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Icon(
-                        Icons.update_rounded,
+                        isNewAddition
+                            ? Icons.notifications_active_rounded
+                            : Icons.update_rounded,
                         size: 60,
                         color: theme.primaryColor,
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        "Update Congregation",
+                        isNewAddition
+                            ? "New Congregations Added!"
+                            : "Update Congregation",
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 20,
@@ -741,7 +1033,11 @@ class _MotherPageState extends State<MotherPage>
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "Your previously selected overseer is no longer available. Please update your details.",
+                        isNewAddition
+                            ? "Additional overseers have been registered. Please check if your congregation is now available."
+                            : (lockProvince
+                                  ? "Please select your new congregation for $selectedProvince."
+                                  : "Please select your congregation. If it is not listed, you can continue as an External Member."),
                         textAlign: TextAlign.center,
                         style: TextStyle(color: theme.hintColor, fontSize: 13),
                       ),
@@ -752,27 +1048,30 @@ class _MotherPageState extends State<MotherPage>
                         baseColor: neumoBaseColor,
                         title: 'Province',
                         trailingText: selectedProvince ?? 'Select',
-                        onTap: () {
-                          _buildActionSheet(
-                            context: context,
-                            title: 'Select your Province',
-                            actions: provinces,
-                            onSelected: (province) {
-                              setStateDialog(() {
-                                selectedProvince = province;
-                                selectedMemberUid = null;
-                                currentOverseerData = null;
-                                selectedDistrictElder = null;
-                                selectedCommunityName = null;
-                                selectedDistrictData = null;
-                              });
-                              _fetchAndSetOverseersForProvince(
-                                province,
-                                setStateDialog,
-                              );
-                            },
-                          );
-                        },
+                        onTap: lockProvince
+                            ? () {}
+                            : () {
+                                // Disable tap if locked
+                                _buildActionSheet(
+                                  context: context,
+                                  title: 'Select your Province',
+                                  actions: provinces,
+                                  onSelected: (province) {
+                                    setStateDialog(() {
+                                      selectedProvince = province;
+                                      selectedMemberUid = null;
+                                      currentOverseerData = null;
+                                      selectedDistrictElder = null;
+                                      selectedCommunityName = null;
+                                      selectedDistrictData = null;
+                                    });
+                                    _fetchAndSetOverseersForProvince(
+                                      province,
+                                      setStateDialog,
+                                    );
+                                  },
+                                );
+                              },
                       ),
 
                       if (selectedProvince != null) ...[
@@ -929,6 +1228,35 @@ class _MotherPageState extends State<MotherPage>
                           ),
                         ),
                       ),
+
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                setStateDialog(() => isSaving = true);
+                                // Pass the locked province if they relocated
+                                bool success = await _updateToExternalMember(
+                                  physicalProvince: lockProvince
+                                      ? selectedProvince
+                                      : null,
+                                );
+                                if (success && mounted) {
+                                  Navigator.pop(dialogContext);
+                                } else {
+                                  setStateDialog(() => isSaving = false);
+                                }
+                              },
+                        child: Text(
+                          "My congregation is not listed (External Member)",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: theme.hintColor,
+                            fontWeight: FontWeight.w600,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -938,6 +1266,65 @@ class _MotherPageState extends State<MotherPage>
         );
       },
     );
+  }
+
+  // ⭐️ API CALL: UPDATE TO EXTERNAL MEMBER
+  Future<bool> _updateToExternalMember({String? physicalProvince}) async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return false;
+
+    try {
+      String? token = await user.getIdToken();
+      String? userId = _userData['uid'];
+
+      if (userId == null) return false;
+
+      final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/$userId/');
+
+      final response = await http.patch(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'role': 'External Member',
+          'overseer_uid': 'none',
+          'province': physicalProvince ?? 'none',
+          'district_elder_name': 'none',
+          'community_name': 'none',
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        if (mounted) {
+          setState(() {
+            _userData['role'] = 'External Member';
+            _userData['overseer_uid'] = 'none';
+            _userData['province'] = physicalProvince ?? 'none';
+            _userData['district_elder_name'] = 'none';
+            _userData['community_name'] = 'none';
+          });
+        }
+        return true;
+      } else {
+        Api().showMessage(
+          context,
+          "Error",
+          "Could not update status.",
+          Colors.red,
+        );
+        return false;
+      }
+    } catch (e) {
+      Api().showMessage(
+        context,
+        "Error",
+        "Network error occurred.",
+        Colors.red,
+      );
+      return false;
+    }
   }
 
   Future<bool> _updateOverseerDetails(
@@ -957,6 +1344,12 @@ class _MotherPageState extends State<MotherPage>
 
       final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/$userId/');
 
+      // If they were an external member, reset them to standard Member unless they are a Seller
+      String currentRole = _userData['role']?.toString() ?? 'Member';
+      String newRole = currentRole.toLowerCase() == 'external member'
+          ? 'Member'
+          : currentRole;
+
       final response = await http.patch(
         url,
         headers: {
@@ -964,6 +1357,7 @@ class _MotherPageState extends State<MotherPage>
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
+          'role': newRole,
           'province': province,
           'overseer_uid': overseerUid,
           'district_elder_name': districtElder,
@@ -973,6 +1367,7 @@ class _MotherPageState extends State<MotherPage>
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         setState(() {
+          _userData['role'] = newRole;
           _userData['province'] = province;
           _userData['overseer_uid'] = overseerUid;
           _userData['district_elder_name'] = districtElder;
@@ -1017,7 +1412,7 @@ class _MotherPageState extends State<MotherPage>
 
     showDialog(
       context: context,
-      barrierDismissible: false, // Forces the user to make a selection
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
@@ -1219,13 +1614,13 @@ class _MotherPageState extends State<MotherPage>
 
   List<Map<String, dynamic>> _getNavItems() {
     List<Map<String, dynamic>> items = [
-      {'icon': Ionicons.home_outline, 'label': 'Home'},
-      {'icon': Ionicons.calendar_outline, 'label': 'Events'},
+      {'icon': Ionicons.home, 'label': 'Home'},
+      {'icon': Ionicons.calendar, 'label': 'Events'},
       {'icon': Icons.local_mall_outlined, 'label': 'Shopping'},
       {'icon': Icons.history_outlined, 'label': 'History'},
     ];
     if (_isSeller) {
-      items.add({'icon': Ionicons.storefront_outline, 'label': 'My Shop'});
+      items.add({'icon': Ionicons.storefront, 'label': 'My Shop'});
     }
     return items;
   }
@@ -1256,7 +1651,6 @@ class _MotherPageState extends State<MotherPage>
     final theme = Theme.of(context);
     final isDesktop = isLargeScreen(context);
 
-    // Subtle tint for that premium "off-white" or "deep-dark" look
     final Color neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.08),
       theme.scaffoldBackgroundColor,
@@ -1298,7 +1692,6 @@ class _MotherPageState extends State<MotherPage>
             bottom: false,
             child: Column(
               children: [
-                // ⭐️ THE NEW WOW APP BAR ⭐️
                 _buildWowAppBar(theme, neumoBaseColor),
 
                 Expanded(
@@ -1315,7 +1708,6 @@ class _MotherPageState extends State<MotherPage>
                         }
                       }
 
-                      // Failsafe for small content or reaching the top
                       if (notification.metrics.maxScrollExtent <= 0 ||
                           notification.metrics.pixels <=
                               notification.metrics.minScrollExtent) {
@@ -1359,16 +1751,12 @@ class _MotherPageState extends State<MotherPage>
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _buildNavItem(Ionicons.home_outline, 0, theme),
-                          _buildNavItem(Ionicons.calendar_outline, 1, theme),
+                          _buildNavItem(Ionicons.home, 0, theme),
+                          _buildNavItem(Ionicons.calendar, 1, theme),
                           _buildNavItem(Icons.local_mall_outlined, 2, theme),
                           _buildNavItem(Icons.history_outlined, 3, theme),
                           if (_isSeller)
-                            _buildNavItem(
-                              Ionicons.storefront_outline,
-                              4,
-                              theme,
-                            ),
+                            _buildNavItem(Ionicons.storefront, 4, theme),
                         ],
                       ),
                     ),
@@ -1424,11 +1812,9 @@ class _MotherPageState extends State<MotherPage>
 
     bool isHomePage = _currentIndex == 0;
 
-    // Updated Login Check: Treat anonymous users as NOT fully logged in
     final currentUser = FirebaseAuth.instance.currentUser;
     bool isLoggedIn = currentUser != null && !currentUser.isAnonymous;
 
-    // Greeting Logic
     String topLine = "";
     String bottomLine = "";
 
@@ -1454,9 +1840,8 @@ class _MotherPageState extends State<MotherPage>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // --- 1. LEFT: MENU TOGGLE (Animated) ---
             _buildNeuIconButton(
-              icon: Ionicons.grid_outline,
+              icon: Ionicons.grid,
               color: contentColor,
               onTap: () {
                 HapticFeedback.mediumImpact();
@@ -1465,7 +1850,6 @@ class _MotherPageState extends State<MotherPage>
               baseColor: neumoBaseColor,
             ),
 
-            // --- 2. CENTER: DYNAMIC TITLE ---
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1480,7 +1864,6 @@ class _MotherPageState extends State<MotherPage>
                     ),
                   ),
                   SizedBox(height: 2),
-                  // GRADIENT TEXT
                   ShaderMask(
                     shaderCallback: (bounds) => LinearGradient(
                       colors: [theme.primaryColor, Colors.purpleAccent],
@@ -1492,7 +1875,7 @@ class _MotherPageState extends State<MotherPage>
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
-                        color: Colors.white, // Required for shader
+                        color: Colors.white,
                         fontFamily: 'Roboto',
                       ),
                     ),
@@ -1501,7 +1884,6 @@ class _MotherPageState extends State<MotherPage>
               ),
             ),
 
-            // --- 3. RIGHT: ACTIONS (Cart / Profile) ---
             if (!_isSeller && isLoggedIn)
               _buildNeuIconButton(
                 icon: Icons.shopping_bag_outlined,
@@ -1514,10 +1896,9 @@ class _MotherPageState extends State<MotherPage>
                   );
                 },
                 baseColor: neumoBaseColor,
-                hasBadge: true, // Show a little red dot
+                hasBadge: true,
               )
             else if (isLoggedIn)
-              // If user is logged in but no cart needed, show Profile Avatar
               Container(
                 height: 45,
                 width: 45,
@@ -1555,14 +1936,13 @@ class _MotherPageState extends State<MotherPage>
                 ),
               )
             else
-              SizedBox(width: 45), // Spacer
+              SizedBox(width: 45),
           ],
         ),
       ),
     );
   }
 
-  // --- HELPER: ANIMATED NEUMORPHIC ICON BUTTON ---
   Widget _buildNeuIconButton({
     required IconData icon,
     required Color color,
@@ -1578,7 +1958,6 @@ class _MotherPageState extends State<MotherPage>
         decoration: BoxDecoration(
           color: baseColor,
           borderRadius: BorderRadius.circular(16),
-          // The "Wow" Shadows
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.15),
@@ -1930,7 +2309,7 @@ class _MotherPageState extends State<MotherPage>
                   _buildDrawerTile(
                     theme,
                     neumoBaseColor,
-                    Ionicons.person_outline,
+                    Ionicons.person,
                     "Profile",
                     () {
                       Navigator.pop(context);
@@ -2053,7 +2432,6 @@ class _MotherPageState extends State<MotherPage>
   // --- LOGOUT & HELP ---
   Future<void> _logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
-    // REMOVED: await prefs.remove('authToken'); Firebase handles this!
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 

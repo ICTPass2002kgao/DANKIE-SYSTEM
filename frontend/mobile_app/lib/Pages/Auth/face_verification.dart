@@ -144,8 +144,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
 
   // --- Web Fallback Flow ---
   Future<void> _captureWebAndVerify() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized)
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
+    }
 
     if (widget.identities.isEmpty) {
       _api.showMessage(
@@ -192,19 +193,15 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
       bool isTestAccount = testAccounts.contains(typedEmail);
       Map<String, String>? testIdentity;
 
-      // Find the specific identity corresponding to the test account
-      for (var identity in widget.identities) {
-        String? identityEmail = identity['email']?.trim().toLowerCase();
+      // Find the specific identity corresponding to the test account ONLY if logged in as a test account
+      if (isTestAccount) {
+        for (var identity in widget.identities) {
+          String? identityEmail = identity['email']?.trim().toLowerCase();
 
-        if (identityEmail != null && testAccounts.contains(identityEmail)) {
-          isTestAccount = true;
-          testIdentity = identity;
-          break;
-        }
-
-        if (isTestAccount && identityEmail == typedEmail) {
-          testIdentity = identity;
-          break;
+          if (identityEmail == typedEmail) {
+            testIdentity = identity;
+            break;
+          }
         }
       }
 

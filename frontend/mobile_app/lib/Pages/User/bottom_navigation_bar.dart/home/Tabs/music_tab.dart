@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter_ionicons/flutter_ionicons.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -11,8 +12,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:ionicons/ionicons.dart';
-import 'package:path_provider/path_provider.dart';
+ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AdBanner.dart' hide isAndroidPlatform;
@@ -779,7 +779,7 @@ class MusicTabState extends State<MusicTab>
                               Icon(
                                 Api().isIOSPlatform
                                     ? CupertinoIcons.music_note
-                                    : Ionicons.musical_notes_outline,
+                                    : Ionicons.musical_notes,
                                 color: isSelected
                                     ? Colors.white
                                     : theme.hintColor,
