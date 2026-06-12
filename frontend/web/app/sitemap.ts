@@ -1,7 +1,6 @@
 import { MetadataRoute } from 'next'
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  // Update this to the actual live domain of the Pure Roots website
+export default function sitemap(): MetadataRoute.Sitemap { 
   const baseUrl = 'https://www.dankiemobile.org.za' 
 
   return [

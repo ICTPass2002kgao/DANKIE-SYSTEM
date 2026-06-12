@@ -264,7 +264,7 @@ class _SignUpPageState extends State<SignUpPage> {
   bool _obscureConfirmPassword = true;
   bool isChecked = false;
   Api backendService = Api();
-  List<String> roles = ['Member', 'Seller'];
+  List<String> roles = ['Member', 'Seller', 'External Member'];
   String? role;
 
   String? selectedMemberUid;

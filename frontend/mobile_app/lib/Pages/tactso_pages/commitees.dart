@@ -246,8 +246,8 @@ class _CommitteeTabState extends State<CommitteeTab> {
                 );
                 return;
               }
-              Navigator.pop(context);
-              Api().showLoading(context);
+              Navigator.pop(context); // Close the confirmation dialog
+              Api().showLoading(context); // Open loading dialog
               try {
                 final user = FirebaseAuth.instance.currentUser;
                 if (user == null) throw Exception("User not logged in");
@@ -263,7 +263,7 @@ class _CommitteeTabState extends State<CommitteeTab> {
                   headers: {'Authorization': 'Bearer $token'},
                 );
 
-                if (response.statusCode == 204) {
+                if (response.statusCode == 204 || response.statusCode == 200) {
                   await TactsoAuditLogs.logAction(
                     action: "DELETE_COMMITTEE_MEMBER",
                     details: "Removed $memberName from committee",
@@ -280,16 +280,25 @@ class _CommitteeTabState extends State<CommitteeTab> {
                   );
 
                   _fetchCommittee();
-                  Navigator.pop(context);
+                  Navigator.pop(context); // Close loading dialog on success
                   Api().showMessage(
                     context,
                     "Deleted",
                     "Member removed.",
                     Colors.grey,
                   );
+                } else {
+                  // FIX: Handle API errors appropriately to stop the infinite loading
+                  Navigator.pop(context); // Close loading dialog on error
+                  Api().showMessage(
+                    context,
+                    "Error",
+                    "Failed to delete member. Status Code: ${response.statusCode}",
+                    Colors.red,
+                  );
                 }
               } catch (e) {
-                Navigator.pop(context);
+                Navigator.pop(context); // Close loading dialog on exception
                 Api().showMessage(context, "Error", "$e", Colors.red);
               }
             },

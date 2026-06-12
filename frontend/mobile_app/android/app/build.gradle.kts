@@ -19,7 +19,6 @@ fun getKeystoreProperties(key: String): String {
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
-    id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -29,23 +28,21 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8 // Changed to 1.8 for desugaring compatibility
-        targetCompatibility = JavaVersion.VERSION_1_8 // Changed to 1.8 for desugaring compatibility
-        
-        // 👇 ADDED THIS LINE 👇
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
         isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8.toString()
+        jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
     defaultConfig {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 35
-        versionCode = 48
-        versionName = "1.0.48"
+        versionCode = 49
+        versionName = "1.0.49"
         
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
 
@@ -81,10 +78,9 @@ android {
 flutter {
     source = "../.."
 }
+
 dependencies {
     implementation("com.google.android.gms:play-services-ads:22.6.0")
-
-    // 👇 UPDATED VERSION FROM 2.0.4 TO 2.1.4 👇
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
@@ -96,5 +92,24 @@ configurations.all {
         force("androidx.camera:camera-video:1.5.0")
         force("androidx.camera:camera-view:1.5.0")
         force("androidx.camera:camera-extensions:1.5.0")
+    }
+}
+
+// 👇 DESTRUCTIVE FORCE TO OVERRIDE INCOMPATIBLE THIRD-PARTY PLUGINS 👇
+subprojects {
+    afterEvaluate {
+        if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {
+            configure<com.android.build.gradle.BaseExtension> {
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_11
+                    targetCompatibility = JavaVersion.VERSION_11
+                }
+            }
+        }
+        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+            compilerOptions {
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+            }
+        }
     }
 }
