@@ -436,7 +436,7 @@ class TactsoCommitteeMember(models.Model):
     portfolio = models.CharField(max_length=255, verbose_name="Portfolio")
     accepted_ts_and_cs = models.BooleanField(default=False)
     face_url = models.TextField(blank=True, verbose_name="Face URL")
-    added_at = models.TextField(blank=True, verbose_name="Added At")
+    added_at = models.TextField(blank=True, verbose_name="Added At",auto_created=True)
 
     def __str__(self):
         return f"{self.full_name} ({self.branch.university_name})"

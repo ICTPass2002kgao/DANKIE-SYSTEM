@@ -226,8 +226,8 @@ def process_bulk_email_task(include_terms, include_policy):
         docs = db.collection('users').stream()
         connection = get_connection()
         connection.open()
-        terms_link = "https://dankie-website.web.app/terms_and_conditions.html"
-        policy_link = "https://dankie-website.web.app/privacy_policy.html"
+        terms_link = "https://dankiemobile.org.za/terms-and-conditions"
+        policy_link = "https://dankiemobile.org.za/policy-privacy"
         for doc in docs:
             u = doc.to_dict()
             email = u.get('email')

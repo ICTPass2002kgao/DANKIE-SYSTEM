@@ -169,7 +169,7 @@ ENCRYPTION_KEY = os.environ.get('FERNET_KEY')
 if not ENCRYPTION_KEY:
     # Only print warning in dev, or check DEBUG status
     if DEBUG:
-        print("⚠️ WARNING: FERNET_K;\/EY not found in env. Using temporary key (DATA LOSS RISK).")
+        print("⚠️ WARNING: FERNET_KEY not found in env. Using temporary key (DATA LOSS RISK).")
     ENCRYPTION_KEY = Fernet.generate_key()
 else:
     # Ensure it's bytes
@@ -197,6 +197,44 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # 10. PRODUCTION HEADERS
 # ==========================================
 
+import os
+
+# ==========================================
+# CACHE CONFIGURATION (Using Redis Database 1)
+# ==========================================
+REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:8000/1")
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": REDIS_URL,
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {
+                "max_connections": 50,
+                "retry_on_timeout": True,
+            },
+            "IGNORE_EXCEPTIONS": True,
+            "SOCKET_CONNECT_TIMEOUT": 5,
+            "SOCKET_TIMEOUT": 5,
+        },
+        "KEY_PREFIX": "dankie_prod", 
+    }
+}
+
+# ==========================================
+# CELERY CONFIGURATION (Using Redis Database 0)
+# ==========================================
+# We use database 0 for the message broker to prevent conflicts with the cache
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:8000/0")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:8000/0")
+
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minute hard limit to kill stuck tasks
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
