@@ -1148,12 +1148,31 @@ class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
     permission_classes = [IsFirebaseAuthenticated] 
     queryset = TactsoCommitteeMember.objects.select_related('branch').all() 
     serializer_class = TactsoCommitteeMemberSerializer 
+    
     def create(self, request, *args, **kwargs):
         branch_id = request.data.get('branch')
         if branch_id:
             current_count = TactsoCommitteeMember.objects.filter(branch__id=branch_id).count()
-            if current_count >= 5: return Response({"error": "Maximum limit of 5 committee members reached."}, status=status.HTTP_400_BAD_REQUEST)
-        return super().create(request, *args, **kwargs)
+            if current_count >= 6: 
+                return Response({"error": "Maximum limit of 6 committee members reached."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
+        face_file = request.FILES.get('face_image')
+        
+        if face_file:
+            secure_url = encrypt_and_upload_to_firebase(face_file, 'secure_faces')
+            if secure_url: 
+                data['face_url'] = secure_url
+            else: 
+                return Response({"error": "Failed to encrypt and upload face."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else: 
+            return Response({"error": "Face image is strictly required."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 # ⭐️ OPTIMIZED
 class ApplicationRequestViewSet(CachedListMixin, viewsets.ModelViewSet):
