@@ -24,6 +24,7 @@ django-appconf==1.2.0
 django-cors-headers==4.9.0
 django-cryptography-5==2.0.3
 django-filter==25.2
+django-redis==7.0.0
 django-simpleui==2026.1.13
 djangorestframework==3.16.1
 dlib==20.0.0
@@ -86,6 +87,7 @@ pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 PyYAML==6.0.3
+redis==8.0.0
 requests==2.32.5
 scikit-image==0.26.0
 scikit-learn==1.8.0

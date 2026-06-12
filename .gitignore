@@ -79,6 +79,8 @@ frontend/mobile_app/android/.gradle/
 frontend/mobile_app/android/.kotlin/
 frontend/mobile_app/android/app/debug/
 frontend/mobile_app/ios/build/
+frontend/mobile_app/android/app/debug/
+frontend/mobile_app/android/app/
 frontend/mobile_app/android/app/profile/
 frontend/mobile_app/android/app/release/
 frontend/mobile_app/functions/node_modules/
