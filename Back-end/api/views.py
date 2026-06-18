@@ -139,6 +139,30 @@ class IsFirebaseAuthenticated(BasePermission):
 # 2. HELPER FUNCTIONS (Security, AI, Email)
 # ==========================================
 
+def generate_face_encoding(file_obj):
+    if GLOBAL_FACE_APP is None: return "[]"
+    try:
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        for chunk in file_obj.chunks():
+            temp_file.write(chunk)
+        temp_file.close()
+
+        img = cv2.imread(temp_file.name)
+        if img is None: return "[]"
+        faces = GLOBAL_FACE_APP.get(img)
+        if not faces: return "[]"
+        
+        # Sort by largest face bounding box
+        faces = sorted(faces, key=lambda x: (x.bbox[2]-x.bbox[0]) * (x.bbox[3]-x.bbox[1]), reverse=True)
+        embedding = faces[0].embedding.tolist()
+        return json.dumps(embedding)
+    except Exception as e:
+        logger.error(f"Face Encoding Generation Error: {e}")
+        return "[]"
+    finally:
+        if 'temp_file' in locals() and os.path.exists(temp_file.name):
+            os.remove(temp_file.name)
+        file_obj.seek(0)  # CRITICAL: Reset the file pointer for Firebase upload
 def encrypt_and_upload_to_firebase(file_obj, folder):
     if not cipher_suite: return None
     try:
@@ -207,18 +231,61 @@ def perform_verification(live_path, ref_path, is_encrypted_ref):
 def recognize_face(request):
     live_file = request.FILES.get('live_image')
     ref_url = request.data.get('reference_url')
-    if not live_file or not ref_url: return Response({'error': 'Missing data'}, status=400)
+    candidates_json = request.data.get('candidates')
+
+    if not live_file: return Response({'error': 'Missing live image data'}, status=400)
+    if not ref_url and not candidates_json: return Response({'error': 'Missing verification targets'}, status=400)
+
     temp_live = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg").name
     try:
         with open(temp_live, 'wb+') as f:
             for chunk in live_file.chunks(): f.write(chunk)
-        is_encrypted = ref_url.endswith('.enc') or '.enc?' in ref_url
-        result = perform_verification(temp_live, ref_url, is_encrypted)
-        if result.get('error'): return Response({'matched': False, 'message': result['error']})
-        return Response({'matched': result['matched'], 'distance': result.get('score', 0.0)})
+
+        if candidates_json:
+            # FAST PATH: Check against all loaded encodings at once natively
+            try:
+                candidates = json.loads(candidates_json)
+            except Exception:
+                return Response({'error': 'Invalid candidates JSON format'}, status=400)
+
+            img = cv2.imread(temp_live)
+            if img is None: return Response({'matched': False, 'message': 'Invalid live image format'})
+            faces = GLOBAL_FACE_APP.get(img)
+            if not faces: return Response({'matched': False, 'message': 'No face detected in live feed'})
+            
+            faces = sorted(faces, key=lambda x: (x.bbox[2]-x.bbox[0]) * (x.bbox[3]-x.bbox[1]), reverse=True)
+            emb_live = faces[0].embedding.reshape(1, -1)
+
+            best_match_id = None
+            highest_sim = 0.0
+
+            for cand in candidates:
+                try:
+                    encoding_data = cand.get('encoding', '[]')
+                    if not encoding_data or encoding_data == '[]': continue
+                    
+                    encoding_list = json.loads(encoding_data)
+                    emb_ref = np.array(encoding_list).reshape(1, -1)
+                    sim = cosine_similarity(emb_live, emb_ref)[0][0]
+                    
+                    if sim > 0.50 and sim > highest_sim:
+                        highest_sim = float(sim)
+                        best_match_id = cand.get('id')
+                except Exception as e:
+                    continue
+
+            if best_match_id:
+                return Response({'matched': True, 'matched_id': best_match_id, 'distance': highest_sim})
+            return Response({'matched': False, 'message': 'Face did not match any committee members'})
+
+        else:
+            # LEGACY PATH: Decrypting/Downloading 1-to-1 URL match
+            is_encrypted = ref_url.endswith('.enc') or '.enc?' in ref_url
+            result = perform_verification(temp_live, ref_url, is_encrypted)
+            if result.get('error'): return Response({'matched': False, 'message': result['error']})
+            return Response({'matched': result['matched'], 'distance': result.get('score', 0.0)})
     finally:
         if os.path.exists(temp_live): os.remove(temp_live)
-
 @shared_task
 def process_bulk_email_task(include_terms, include_policy):
     try:
@@ -697,10 +764,15 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
         
         data['districts'] = [] 
         sec_file = request.FILES.get('secretary_face_image')
+        sec_enc = "[]"
         if sec_file:
+            sec_enc = generate_face_encoding(sec_file)
             data['secretary_face_url'] = encrypt_and_upload_to_firebase(sec_file, 'secure_faces')
+            
         chair_file = request.FILES.get('chairperson_face_image')
+        chair_enc = "[]"
         if chair_file:
+            chair_enc = generate_face_encoding(chair_file)
             data['chairperson_face_url'] = encrypt_and_upload_to_firebase(chair_file, 'secure_faces') 
         
         serializer = self.get_serializer(data=data)
@@ -712,11 +784,11 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
         
         if data.get('secretary_name') and data.get('secretary_face_url'):
             OverseerCommitteeMember.objects.create(
-                overseer=overseer, full_name=data['secretary_name'], portfolio='Secretary', face_url=data['secretary_face_url']
+                overseer=overseer, full_name=data['secretary_name'], portfolio='Secretary', face_url=data['secretary_face_url'], face_encorded_json=sec_enc
             )
         if data.get('chairperson_name') and data.get('chairperson_face_url'):
             OverseerCommitteeMember.objects.create(
-                overseer=overseer, full_name=data['chairperson_name'], portfolio='Chairperson', face_url=data['chairperson_face_url']
+                overseer=overseer, full_name=data['chairperson_name'], portfolio='Chairperson', face_url=data['chairperson_face_url'], face_encorded_json=chair_enc
             )
         
         created_community_ids = []
@@ -785,6 +857,7 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
         face_file = request.FILES.get('face_image')
         if face_file:
+            data['face_encorded_json'] = generate_face_encoding(face_file)
             secure_url = encrypt_and_upload_to_firebase(face_file, 'secure_faces')
             if secure_url: 
                 data['face_url'] = secure_url
@@ -792,11 +865,13 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
                 return Response({"error": "Failed to encrypt and upload face."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else:
             return Response({"error": "Face image is required for biometric access."}, status=status.HTTP_400_BAD_REQUEST)
+        
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
     @action(detail=False, methods=['get'])
     def find_by_face(self,request):
         url = request.query_params.get('url')
@@ -957,36 +1032,43 @@ class TactsoBranchViewSet(viewsets.ModelViewSet):
         data = request.data.dict()
         if 'image_url' not in data: data['image_url'] = ""
         auth_faces = []
+        
         officer_file = request.FILES.get('education_officer_face_image')
+        officer_enc = "[]"
         if officer_file:
+            officer_enc = generate_face_encoding(officer_file)
             url = encrypt_and_upload_to_firebase(officer_file, 'secure_faces')
             if url:
                 data['education_officer_face_url'] = url
                 auth_faces.append(url)
             else: return Response({"error": "Failed to encrypt Officer face"}, status=500)
         else: return Response({"error": "Education Officer face is required"}, status=400)
+        
         chair_file = request.FILES.get('chairperson_face_image')
         chair_url = None
+        chair_enc = "[]"
         if chair_file:
+            chair_enc = generate_face_encoding(chair_file)
             chair_url = encrypt_and_upload_to_firebase(chair_file, 'secure_faces')
             if chair_url: auth_faces.append(chair_url)
             else: return Response({"error": "Failed to encrypt Chairperson face"}, status=500)
         else: return Response({"error": "Chairperson face is required"}, status=400)
+        
         data['authorized_user_face_urls'] = json.dumps(auth_faces)
         serializer = self.get_serializer(data=data)
         if not serializer.is_valid(): return Response(serializer.errors, status=400)
         self.perform_create(serializer)
         branch = serializer.instance
+        
         TactsoCommitteeMember.objects.create(
             branch=branch, full_name=data.get('education_officer_name', 'Education Officer'),
-            portfolio='Education Officer', email=data.get('email', ''), face_url=data['education_officer_face_url']
+            portfolio='Education Officer', email=data.get('email', ''), face_url=data['education_officer_face_url'], face_encorded_json=officer_enc
         )
         TactsoCommitteeMember.objects.create(
             branch=branch, full_name=data.get('chairperson_name', 'Chairperson'),
-            portfolio='Chairperson', email=data.get('email', ''), face_url=chair_url
+            portfolio='Chairperson', email=data.get('email', ''), face_url=chair_url, face_encorded_json=chair_enc
         )
-        return Response(serializer.data, status=201)  
- 
+        return Response(serializer.data, status=201)
 class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
     queryset = District.objects.select_related('overseer').prefetch_related('communities').all()
     serializer_class = DistrictSerializer
@@ -1093,11 +1175,14 @@ class OverseerCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
             if current_count >= 30: return Response({"error": "Maximum limit of 30 committee members reached."}, status=status.HTTP_400_BAD_REQUEST)
         data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
         face_file = request.FILES.get('face_image')
+        
         if face_file:
+            data['face_encorded_json'] = generate_face_encoding(face_file)
             secure_url = encrypt_and_upload_to_firebase(face_file, 'secure_faces')
             if secure_url: data['face_url'] = secure_url
             else: return Response({"error": "Failed to encrypt and upload face."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else: return Response({"error": "Face image is strictly required."}, status=status.HTTP_400_BAD_REQUEST)
+        
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -1160,6 +1245,7 @@ class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         face_file = request.FILES.get('face_image')
         
         if face_file:
+            data['face_encorded_json'] = generate_face_encoding(face_file)
             secure_url = encrypt_and_upload_to_firebase(face_file, 'secure_faces')
             if secure_url: 
                 data['face_url'] = secure_url
@@ -1173,7 +1259,8 @@ class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
+    
+    
 # ⭐️ OPTIMIZED
 class ApplicationRequestViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]

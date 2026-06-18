@@ -248,6 +248,7 @@ class OverseerCommitteeMember(models.Model):
     portfolio = models.CharField(max_length=255, verbose_name="Portfolio")
     signature_base64 = models.TextField(blank=True, null=True, verbose_name="Signature Data")
     face_url = models.TextField(blank=True, verbose_name="Face URL")
+    face_encorded_json = models.TextField(blank=True, default="[]", verbose_name="Face Encoded JSON")
     added_at = models.TextField(blank=True, verbose_name="Added At")
 
     def __str__(self):
@@ -436,6 +437,7 @@ class TactsoCommitteeMember(models.Model):
     portfolio = models.CharField(max_length=255, verbose_name="Portfolio")
     accepted_ts_and_cs = models.BooleanField(default=False)
     face_url = models.TextField(blank=True, verbose_name="Face URL")
+    face_encorded_json = models.TextField(blank=True, default="[]", verbose_name="Face Encoded JSON")
     added_at = models.TextField(blank=True, verbose_name="Added At",auto_created=True)
 
     def __str__(self):
@@ -458,6 +460,7 @@ class AdminStaffMember(models.Model):
     portfolio = models.CharField(max_length=255, blank=True, verbose_name="Portfolio")
     province = models.CharField(max_length=255, blank=True, verbose_name="Province")
     face_url = models.TextField(blank=True, verbose_name="Face URL")
+    face_encorded_json = models.TextField(blank=True, default="[]", verbose_name="Face Encoded JSON")
     is_active = models.BooleanField(default=True, verbose_name="Is Active")
     created_at = models.TextField(blank=True, verbose_name="Created At")
 

@@ -30,6 +30,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
     "192.168.19.151",
+    "172.20.10.8",
     "mktechcloud.co.za",
     ".railway.app",  # <--- REQUIRED FOR RAILWAY
     "*",             # CAUTION: Remove this '*' when fully live for better security
@@ -49,6 +50,7 @@ CSRF_TRUSTED_ORIGINS = [
     'https://*.up.railway.app',
     'https://mktechcloud.co.za',
     'https://www.mktechcloud.co.za',
+    'http://172.20.10.8:8000',
     
 ]
 
@@ -202,7 +204,7 @@ import os
 # ==========================================
 # CACHE CONFIGURATION (Using Redis Database 1)
 # ==========================================
-REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:8000/1")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/1")
 
 CACHES = {
     "default": {
@@ -226,8 +228,8 @@ CACHES = {
 # CELERY CONFIGURATION (Using Redis Database 0)
 # ==========================================
 # We use database 0 for the message broker to prevent conflicts with the cache
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:8000/0")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:8000/0")
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -235,6 +237,7 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minute hard limit to kill stuck tasks
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
