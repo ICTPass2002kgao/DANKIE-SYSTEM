@@ -14,6 +14,7 @@ import 'package:ttact/Pages/tactso_pages/commitees.dart';
 import 'package:ttact/Pages/tactso_pages/dashboard.dart';
 import 'package:ttact/Pages/tactso_pages/spiritual_leading.dart';
 import 'package:ttact/Components/NeuDesign.dart';
+import 'package:ttact/Pages/tactso_pages/tactso_contitution.dart';
 
 const double _desktopBreakpoint = 1100.0;
 const Color _neumorphicBaseColor = Color(0xFFF0F2F5);
@@ -545,6 +546,8 @@ class _TactsoBranchesApplicationsState
           loggedMemberRole: _activeMemberRole,
           universityLogoUrl: _universityLogoUrl,
         );
+      case 4:
+        return TactsoContitution();
       default:
         return Center(child: Text("Tab not found"));
     }

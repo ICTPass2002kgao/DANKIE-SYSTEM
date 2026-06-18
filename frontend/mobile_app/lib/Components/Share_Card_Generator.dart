@@ -17,8 +17,7 @@ class ShareCardGenerator extends StatelessWidget {
   }) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context) { 
 
     // ⭐️ ENHANCED COLOR PALETTE
     final Color baseColor = Color(0xFFE0E5EC); // Classic Neumorphic Base

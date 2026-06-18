@@ -167,6 +167,7 @@ class _Login_PageState extends State<Login_Page>
                 'portfolio': m['portfolio'] ?? 'Committee',
                 'faceUrl': m['face_url'] ?? '',
                 'email': m['email'] ?? email,
+                'face_encorded_json': m['face_encorded_json'] ?? '[]',
               },
             )
             .toList();
@@ -236,6 +237,7 @@ class _Login_PageState extends State<Login_Page>
                 'portfolio': m['portfolio'] ?? 'Branch Staff',
                 'faceUrl': m['face_url'] ?? '',
                 'email': m['email'] ?? email,
+                'face_encorded_json': m['face_encorded_json'] ?? '[]',
               },
             )
             .toList();
@@ -264,6 +266,7 @@ class _Login_PageState extends State<Login_Page>
                 'portfolio': m['portfolio'] ?? 'Management',
                 'faceUrl': m['face_url'] ?? '',
                 'email': m['personal_email'] ?? email,
+                'face_encorded_json': m['face_encorded_json'] ?? '[]',
               },
             )
             .toList();

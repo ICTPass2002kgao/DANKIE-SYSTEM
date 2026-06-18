@@ -148,6 +148,10 @@ flutter:
   assets:
     - assets/
     - assets/MiniFASNetV2.tflite
+    - assets/tactso_constitution.pdf
+    - assets/tactyo_constitution.pdf
+    - assets/tact_logo.PNG
+    
     
   #   - images/a_dot_ham.jpeg
 

@@ -18,8 +18,13 @@
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6759693957212853" crossorigin="anonymous"></script>
   
   <title>DANKIE | TACT</title>
-  <link rel="manifest" href="manifest.json">
-
+  <link rel="manifest" href="manifest.json"> 
+  
+  <!-- Syncfusion PDF Viewer Requirements -->
+  <script src="//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+  <script type="text/javascript">
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js";
+  </script> 
   <style>
     /* NEUMORPHISM PALETTE 
       Base Color: #e0e5ec
@@ -118,18 +123,28 @@
       <div class="dot"></div>
     </div>
     <h6 class="brand-text bg-blue">DANKIE</h6>
-    </div>
+  </div>
 
   <script>
-     window.addEventListener("flutter-first-frame", function () {
-        var loader = document.getElementById("loader");
-        if (loader) {
-           loader.style.opacity = "0";
-           // Small delay to allow the fade-out transition to finish
-           setTimeout(() => loader.remove(), 300);
-        }
-     });
+    window.addEventListener("flutter-first-frame", function () {
+      var loader = document.getElementById("loader");
+      if (loader) {
+        loader.style.opacity = "0";
+        setTimeout(() => loader.remove(), 300);
+      }
+    });
   </script>
-  <script src="flutter_bootstrap.js" async></script>
+
+  <!-- Modern Flutter 3.22+ Inline Bootstrapper -->
+  <script>
+    {{flutter_js}}
+    {{flutter_build_config}}
+
+    _flutter.loader.load({
+      config: {
+        renderer: "canvaskit"
+      }
+    });
+  </script>
 </body>
 </html>

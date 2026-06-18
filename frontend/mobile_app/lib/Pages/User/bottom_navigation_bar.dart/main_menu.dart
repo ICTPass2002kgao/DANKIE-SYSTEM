@@ -2199,7 +2199,7 @@ class _MotherPageState extends State<MotherPage>
                   Icons.description_outlined,
                   "Terms & Conditions",
                   () => _launchLegalUrl(
-                    "https://dankie.netlify.app/terms-and-conditions",
+                    "https://dankiemobile.org.za/terms-and-conditions",
                   ),
                 ),
                 SizedBox(height: 10),
@@ -2209,7 +2209,7 @@ class _MotherPageState extends State<MotherPage>
                   Icons.privacy_tip_outlined,
                   "Privacy Policy",
                   () => _launchLegalUrl(
-                    "https://dankie.netlify.app/policy-privacy",
+                    "https://dankiemobile.org.za/policy-privacy",
                   ),
                 ),
                 SizedBox(height: 10),
@@ -2338,7 +2338,7 @@ class _MotherPageState extends State<MotherPage>
                   Icons.description_outlined,
                   "Terms & Conditions",
                   () => _launchLegalUrl(
-                    "https://dankie.netlify.app/terms-and-conditions",
+                    "https://dankiemobile.org.za/terms-and-conditions",
                   ),
                 ),
                 _buildDrawerTile(
@@ -2347,7 +2347,7 @@ class _MotherPageState extends State<MotherPage>
                   Icons.shield_outlined,
                   "Privacy Policy",
                   () => _launchLegalUrl(
-                    "https://dankie.netlify.app/policy-privacy",
+                    "https://dankiemobile.org.za/policy-privacy",
                   ),
                 ),
                 _buildDrawerTile(
@@ -2355,10 +2355,9 @@ class _MotherPageState extends State<MotherPage>
                   neumoBaseColor,
                   Icons.help_outline,
                   "Report Issue",
-                  () {
-                    Navigator.pop(context);
-                    _showHelpBottomSheet();
-                  },
+                  () =>_launchLegalUrl(
+                    "https://dankiemobile.org.za/contact-us",
+                  ),
                 ),
               ],
             ),

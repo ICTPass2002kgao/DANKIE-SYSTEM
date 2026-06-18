@@ -28,6 +28,7 @@ class _InitialRouteWrapperState extends State<InitialRouteWrapper>
     with SingleTickerProviderStateMixin {
   bool _isLoading = true;
   String _initialRoute = '/login'; // Default fallback
+  dynamic _routeArguments; // Holds profile data to pass to the target screen if needed
   late AnimationController _animationController;
   late Animation<double> _scaleAnimation;
 
@@ -66,7 +67,8 @@ class _InitialRouteWrapperState extends State<InitialRouteWrapper>
     // 2. Wait for Firebase Auth to initialize (The Guard)
     User? user = await FirebaseAuth.instance.authStateChanges().first;
 
-    String targetRoute;
+    String targetRoute = '/login';
+    dynamic arguments;
 
     if (user == null) {
       // --- User is NOT logged in ---
@@ -99,13 +101,26 @@ class _InitialRouteWrapperState extends State<InitialRouteWrapper>
           final List results = json.decode(response.body);
 
           if (results.isNotEmpty) {
-            // User exists in Django DB
-            targetRoute = '/main-menu';
+            // User exists in Django DB! Extract profile and determine role routing
+            final userProfile = results[0];
+            final String role = userProfile['role'] ?? userProfile['portfolio'] ?? 'User';
+            arguments = userProfile; // Save profile details to pass to named route if required
+
+            // 👑 DYNAMIC ROLE-BASED ROUTING
+            if (role == 'Admin') {
+              targetRoute = '/admin-portal';
+            } else if (role == 'Overseer') {
+              targetRoute = '/overseer-page';
+            } else if (role == 'Tactso') {
+              targetRoute = '/tactso-page';
+            } else {
+              targetRoute = '/main-menu';
+            }
           } else {
             // User authenticated in Firebase but no Django profile.
-            // Sign out to reset state.
+            // Sign out to reset state securely.
             await FirebaseAuth.instance.signOut();
-            targetRoute = '/main-menu';
+            targetRoute = '/login';
           }
         } else if (response.statusCode == 401 || response.statusCode == 403) {
           // SECURE FIX: Only sign out if the server actively rejects the token
@@ -114,13 +129,11 @@ class _InitialRouteWrapperState extends State<InitialRouteWrapper>
           targetRoute = '/login';
         } else {
           // SECURE FIX: If server is 500 or down, do NOT log them out.
-          // Allow them into the app so offline features still work.
           print("Django Server Error: ${response.statusCode}");
           targetRoute = '/main-menu'; 
         }
       } catch (e) {
         // SECURE FIX: Handle network timeouts (e.g. offline)
-        // Safe fallback allows app to open even if API is down or user has no internet
         print("Error checking user backend or no internet: $e");
         targetRoute = '/main-menu';
       }
@@ -130,6 +143,7 @@ class _InitialRouteWrapperState extends State<InitialRouteWrapper>
     if (mounted) {
       setState(() {
         _initialRoute = targetRoute;
+        _routeArguments = arguments;
         _isLoading = false;
       });
     }
@@ -248,10 +262,13 @@ class _InitialRouteWrapperState extends State<InitialRouteWrapper>
       );
     }
 
-    // Navigation Logic
+    // Navigation Logic executed instantly after layout build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed(_initialRoute);
+        Navigator.of(context).pushReplacementNamed(
+          _initialRoute,
+          arguments: _routeArguments,
+        );
       }
     });
 

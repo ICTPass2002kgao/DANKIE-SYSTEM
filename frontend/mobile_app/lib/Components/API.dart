@@ -34,17 +34,16 @@ class Api {
         defaultTargetPlatform == TargetPlatform.fuchsia;
   }
 
-  String BACKEND_BASE_URL_DEBUG = "https://dankie.up.railway.app/api";
+  // String BACKEND_BASE_URL_DEBUG = "https://dankie.up.railway.app/api";
   // ---String BACKEND_BASE_URL_DEBUG =  CONFIGURATION ---
   // If you are on Android Emulator use 'http://10.0.2.2:8000/api'
   // If you are on Real Device use your PC IP 'http://192.168.x.x:8000/api'
 
-  // String BACKEND_BASE_URL_DEBUG = kIsWeb
-  //     ? 'http://127.0.0.1:8000/api'
-  //     : 'http://127.0.0.1:8000/api';
+  String BACKEND_BASE_URL_DEBUG = kIsWeb
+      ? 'http://127.0.0.1:8000/api'
+      : 'http://172.20.10.8:8000/api';
 
   String BACKEND_NODE_JS = 'https://api-7gbt42tr6q-uc.a.run.app';
-  
 
   Future<bool> sendEmail(
     String email,
@@ -95,11 +94,21 @@ class Api {
       return false;
     }
   }
-final _auth = FirebaseAuth.instance;
+
+  Color neumoBaseColor(BuildContext context) {
+    final theme = Theme.of(context);
+    return Color.alphaBlend(
+      theme.primaryColor.withOpacity(0.08),
+      theme.scaffoldBackgroundColor,
+    );
+  }
+
+  final _auth = FirebaseAuth.instance;
   String generateVerificationCode() {
     final random = Random();
     return (random.nextInt(900000) + 100000).toString();
   }
+
   Future<String?> createSellerSubaccount({
     required String uid,
     required String businessName,

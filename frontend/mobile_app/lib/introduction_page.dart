@@ -163,8 +163,7 @@ class _IntroductionpageState extends State<Introductionpage>
   ];
 
   @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+  Widget build(BuildContext context) { 
     const double contentMaxWidth = 500;
 
     return Scaffold(

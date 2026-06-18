@@ -6,11 +6,12 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart'; 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
+import 'package:ttact/Pages/Overseer/constitution.dart';
 import 'package:ttact/Pages/Overseer/dashboard_tab.dart';
 import 'package:ttact/Pages/Overseer/music_contract.dart';
 import 'package:ttact/Pages/Overseer/overseer_audit_page.dart';
@@ -94,7 +95,7 @@ class _OverseerPageState extends State<OverseerPage>
   }
 
   void _initTabController() {
-    int tabCount = 7; // Base tabs
+    int tabCount = 8; // Base tabs
     if (_isChairperson) tabCount++; // Songs Agreement
     if (_isSignatory) tabCount++; // Signatures
     tabCount += 2; // Audit, Billing
@@ -183,6 +184,7 @@ class _OverseerPageState extends State<OverseerPage>
           faceUrl: secureFaceUrl,
         ),
       ),
+      _TabDefinition("Constitution", Icons.receipt_long, Constitution()),
     ];
 
     if (_isChairperson) {

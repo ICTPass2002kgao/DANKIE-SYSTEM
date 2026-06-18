@@ -4,15 +4,16 @@ import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // ⭐️ Added to allow asset extraction
 import 'package:flutter_ionicons/flutter_ionicons.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:ttact/Components/MusicPlayerSheet.dart';
-import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/music_tab.dart';
-import 'package:ttact/main.dart'; // To access audioHandler
-import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/home_page.dart'; // ⭐️ IMPORT THIS to access MusicPlayerSheet
+import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/music_player.dart';
 
-// ⭐️ IMPORT YOUR NEUMORPHIC COMPONENT
+// ⭐️ MAKE SURE THIS POINTS TO YOUR ACTUAL MusicPlayerPage FILE
+// import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/music_player_page.dart';
+
+import 'package:ttact/main.dart'; // To access audioHandler
 import 'package:ttact/Components/NeuDesign.dart';
 
 // --- PLATFORM UTILITIES ---
@@ -70,9 +71,26 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
     }
   }
 
-  /// Builds the full playlist and opens the Player Sheet
+  /// Builds the full playlist and opens the Player UI
   Future<void> _playLocalSong(int index) async {
     try {
+      // 1. EXTRACT ASSET TO A PHYSICAL FILE
+      // This stops the "No host specified" crash by giving the OS a real file URL
+      Uri? validArtUri;
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final file = File('${dir.path}/dankie_logo_art.png');
+
+        if (!await file.exists()) {
+          final byteData = await rootBundle.load('assets/dankie_logo.PNG');
+          await file.writeAsBytes(byteData.buffer.asUint8List());
+        }
+        validArtUri = file.uri; // Safely generates a file:// URI
+      } catch (e) {
+        debugPrint("Error parsing artwork: $e");
+      }
+
+      // 2. BUILD THE PLAYLIST
       List<MediaItem> playlist = _files.map((file) {
         final path = file.path;
         String filename = path.split('/').last.replaceAll('.mp3', '');
@@ -88,25 +106,27 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
         }
 
         return MediaItem(
-          id: path, 
+          id: path,
           title: title,
           artist: artist,
           album: 'Downloaded Songs',
-          artUri: Uri.parse("asset:///assets/dankie_logo.PNG"),
+          artUri: validArtUri, // ✅ Now uses the crash-free local file URI
         );
       }).toList();
 
       await audioHandler?.loadPlaylist(playlist, index);
 
+      // 3. NAVIGATE TO THE PREMIUM UI
       if (mounted) {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true, 
-          useSafeArea: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => MusicPlayerSheet(
-            themeColor: Theme.of(context), 
-            onDownload: (String url, String title, String artist) {},
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MusicPlayerPage(
+              themeColor: Theme.of(context),
+              onDownload: (String url, String title, String artist) {
+                // Ignore download click since it's already a downloaded file
+              },
+            ),
           ),
         );
       }
@@ -133,7 +153,10 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
           ? CupertinoNavigationBar(
               middle: Text(
                 'Downloaded Songs',
-                style: TextStyle(color: color.primaryColor, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: color.primaryColor,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               backgroundColor: Colors.transparent,
               border: null,
@@ -178,14 +201,20 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
                     SizedBox(height: 20),
                     Text(
                       "No downloaded songs",
-                      style: TextStyle(color: color.hintColor, fontSize: 16, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: color.hintColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
               )
             : Center(
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: isDesktop ? 800 : double.infinity),
+                  constraints: BoxConstraints(
+                    maxWidth: isDesktop ? 800 : double.infinity,
+                  ),
                   child: ListView.builder(
                     itemCount: _files.length,
                     padding: EdgeInsets.symmetric(horizontal: 15, vertical: 20),
@@ -193,7 +222,10 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
                     itemBuilder: (context, index) {
                       final file = _files[index];
                       final path = file.path;
-                      final filename = path.split('/').last.replaceAll('.mp3', '');
+                      final filename = path
+                          .split('/')
+                          .last
+                          .replaceAll('.mp3', '');
 
                       String displayTitle = filename;
                       String displayArtist = "Offline Music";
@@ -213,7 +245,10 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
                           padding: EdgeInsets.zero,
                           child: Container(
                             decoration: BoxDecoration(
-                              border: Border.all(color: color.primaryColor, width: 1.0),
+                              border: Border.all(
+                                color: color.primaryColor,
+                                width: 1.0,
+                              ),
                               borderRadius: BorderRadius.circular(15),
                             ),
                             child: ListTile(
@@ -249,7 +284,10 @@ class _DownloadedSongsState extends State<DownloadedSongs> {
                                 displayArtist,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(color: color.hintColor, fontSize: isDesktop ? 13 : 11),
+                                style: TextStyle(
+                                  color: color.hintColor,
+                                  fontSize: isDesktop ? 13 : 11,
+                                ),
                               ),
                               trailing: IconButton(
                                 icon: Icon(

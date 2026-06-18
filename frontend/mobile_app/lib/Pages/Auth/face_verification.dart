@@ -2,7 +2,7 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:io'; // Added for safe image extraction fallback
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -13,10 +13,6 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
-
-import 'liveness_wrapper.dart'
-    if (dart.library.io) 'liveness_wrapper_mobile.dart'
-    if (dart.library.html) 'liveness_wrapper_web.dart';
 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
@@ -57,7 +53,6 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
   late AudioPlayer _audioPlayer;
   final Api _api = Api();
 
-  bool _isVerifyingLiveness = false;
   bool _isVerifyingBackend = false;
 
   String _processStatus = "Initializing...";
@@ -120,30 +115,8 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     }
   }
 
-  // --- Mobile Secure Flow ---
-  Future<void> _startLivenessCapture() async {
-    if (widget.identities.isEmpty) {
-      _api.showMessage(
-        context,
-        'No authorized members found.',
-        'Security Error',
-        Colors.red,
-      );
-      return;
-    }
-
-    await _cameraController?.dispose();
-    _cameraController = null;
-
-    setState(() {
-      _isCameraInitialized = false;
-      _isVerifyingLiveness = true;
-      _processStatus = 'Follow on-screen instructions...';
-    });
-  }
-
-  // --- Web Fallback Flow ---
-  Future<void> _captureWebAndVerify() async {
+  // --- Unified Capture & Verify Flow ---
+  Future<void> _captureAndVerify() async {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
       return;
     }
@@ -170,7 +143,7 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
 
       await _processBackendMatch(capturedBytes);
     } catch (e) {
-      _handleFailure(reason: "Web Camera Capture Error");
+      _handleFailure(reason: "Camera Capture Error");
     }
   }
 
@@ -182,7 +155,6 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
 
     try {
       // --- 🟢 APPLE APP STORE REVIEW EXCEPTION ---
-      // Transparent bypass mechanism on physical match algorithm for test accounts.
       List<String> testAccounts = [
         'test.admin@dankie.co.za',
         'test.overseer@dankie.co.za',
@@ -193,11 +165,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
       bool isTestAccount = testAccounts.contains(typedEmail);
       Map<String, String>? testIdentity;
 
-      // Find the specific identity corresponding to the test account ONLY if logged in as a test account
       if (isTestAccount) {
         for (var identity in widget.identities) {
           String? identityEmail = identity['email']?.trim().toLowerCase();
-
           if (identityEmail == typedEmail) {
             testIdentity = identity;
             break;
@@ -205,13 +175,10 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
         }
       }
 
-      // If it IS a test account, skip the API and let them in immediately!
       if (isTestAccount) {
         print(
           "Apple Test account confirmed. Bypassing strict face matching layers.",
         );
-
-        // Fallback to first if email mapping wasn't found, otherwise use the specific test identity
         Map<String, String>? identityToUse = testIdentity;
         if (identityToUse == null && widget.identities.isNotEmpty) {
           identityToUse = widget.identities.first;
@@ -221,51 +188,52 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
           setState(() {
             _processStatus = "Test Account Verified...";
           });
-          await Future.delayed(
-            const Duration(milliseconds: 800),
-          ); // Simulate processing time
-          await _finalizeLogin(
-            identityToUse,
-          ); // Log them in using the REAL database data
-          return; // 🛑 EXIT HERE: Do not run InsightFace
+          await Future.delayed(const Duration(milliseconds: 800));
+          await _finalizeLogin(identityToUse);
+          return;
         }
       }
       // --- END OF EXCEPTION ---
 
-      // --- NORMAL USER FLOW (STRICT FACE MATCHING) ---
-      Map<String, String>? matchedIdentity;
+      // --- NORMAL USER FLOW (STRICT BULK FACE MATCHING) ---
+      setState(() {
+        _processStatus = "Analyzing Face against Database...";
+      });
 
-      for (var identity in widget.identities) {
-        if (!mounted) break;
-        String refUrl = identity['faceUrl'] ?? '';
-        if (refUrl.isEmpty) continue;
+      // We now make ONLY ONE API CALL to check the face against ALL members simultaneously
+      final result = await _compareFaces(capturedBytes);
 
-        setState(() {
-          _processStatus = "Verifying ${identity['name']}...";
-        });
+      if (result['matched'] == true && result['matched_id'] != null) {
+        String exactMatchedEmail = result['matched_id'];
+        Map<String, String>? strictlyMatchedIdentity;
 
-        final result = await _compareFaces(capturedBytes, refUrl);
-
-        if (result['matched'] == true) {
-          matchedIdentity = identity;
-          break;
+        // Find the EXACT member the backend identified
+        for (var identity in widget.identities) {
+          if (identity['email'] == exactMatchedEmail) {
+            strictlyMatchedIdentity = identity;
+            break;
+          }
         }
-      }
 
-      if (matchedIdentity != null) {
-        await _finalizeLogin(matchedIdentity);
+        if (strictlyMatchedIdentity != null) {
+          await _finalizeLogin(strictlyMatchedIdentity);
+        } else {
+          _handleFailure(
+            reason:
+                "Face matched, but profile data could not be securely linked.",
+          );
+        }
       } else {
-        _handleFailure(reason: "Face not recognized for ${widget.branchName}");
+        _handleFailure(
+          reason: "Unrecognized face. Access denied for ${widget.branchName}",
+        );
       }
     } catch (e) {
       _handleFailure(reason: "Identification Error");
     }
   }
 
-  Future<Map<String, dynamic>> _compareFaces(
-    Uint8List capturedBytes,
-    String referenceImageUrl,
-  ) async {
+  Future<Map<String, dynamic>> _compareFaces(Uint8List capturedBytes) async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
       String? token = await user?.getIdToken();
@@ -275,7 +243,20 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/verify_faces/'),
       );
       request.headers['Authorization'] = 'Bearer $token';
-      request.fields['reference_url'] = referenceImageUrl;
+
+      // Send ALL encodings to the backend simultaneously
+      request.fields['candidates'] = jsonEncode(
+        widget.identities
+            .map(
+              (identity) => {
+                'id':
+                    identity['email'], // We use email as the strict identifier
+                'encoding': identity['face_encorded_json'] ?? '[]',
+              },
+            )
+            .toList(),
+      );
+
       request.files.add(
         http.MultipartFile.fromBytes(
           'live_image',
@@ -288,8 +269,16 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
       final respString = await response.stream.bytesToString();
       final json = jsonDecode(respString);
 
-      return {'matched': response.statusCode == 200 && json['matched'] == true};
+      if (response.statusCode == 200 && json['matched'] == true) {
+        return {
+          'matched': true,
+          'matched_id':
+              json['matched_id'], // Backend tells us EXACTLY who it is
+        };
+      }
+      return {'matched': false};
     } catch (e) {
+      print("Face Match Error: $e");
       return {'matched': false};
     }
   }
@@ -348,12 +337,10 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     await playSound(false);
 
     setState(() {
-      _isVerifyingLiveness = false;
       _isVerifyingBackend = false;
       _processStatus = "Ready";
     });
 
-    await FirebaseAuth.instance.signOut();
     _api.showMessage(context, reason, 'Denied', Colors.red);
 
     _initializeCamera();
@@ -389,7 +376,11 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
         leading: Padding(
           padding: const EdgeInsets.all(8),
           child: GestureDetector(
-            onTap: () => Navigator.pop(context),
+            onTap: () async {
+              // ✅ ADDED: Securely sign them out if they cancel the verification
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) Navigator.pop(context);
+            },
             child: NeumorphicContainer(
               color: neumoBaseColor,
               borderRadius: 12,
@@ -510,11 +501,9 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
           _sectionTitle('Live Scan', primaryColor, textColor),
           const SizedBox(height: 10),
           Text(
-            _isVerifyingLiveness
-                ? 'Follow instructions within the frame.'
-                : (_isCameraInitialized
-                      ? 'Align your face within the frame.'
-                      : 'Initializing...'),
+            _isCameraInitialized
+                ? 'Align your face within the frame.'
+                : 'Initializing...',
             textAlign: TextAlign.center,
             style: GoogleFonts.poppins(
               fontSize: 12,
@@ -547,125 +536,17 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
                   width: 220,
                   height: 300,
                   color: Colors.black,
-                  child: (!kIsWeb && _isVerifyingLiveness)
-                      ? getLivenessWidget(
-                          onSuccess: (result) async {
-                            setState(() {
-                              _isVerifyingLiveness = false;
-                              _isVerifyingBackend = true;
-                              _processStatus = 'Capturing secure image...';
-                            });
-
-                            try {
-                              Uint8List? capturedBytes;
-                              dynamic res = result;
-
-                              if (res is Uint8List) {
-                                capturedBytes = res;
-                              } else {
-                                try {
-                                  capturedBytes ??= res.imageBytes;
-                                } catch (_) {}
-                                try {
-                                  capturedBytes ??= res.capturedImage;
-                                } catch (_) {}
-                                try {
-                                  capturedBytes ??= res.jpegBytes;
-                                } catch (_) {}
-                                try {
-                                  capturedBytes ??= res.image;
-                                } catch (_) {}
-
-                                if (capturedBytes == null) {
-                                  String? path;
-                                  try {
-                                    path ??= res.imagePath;
-                                  } catch (_) {}
-                                  try {
-                                    path ??= res.path;
-                                  } catch (_) {}
-
-                                  if (path != null && path.isNotEmpty) {
-                                    final file = File(path);
-                                    capturedBytes = await file.readAsBytes();
-                                  }
-                                }
-                              }
-
-                              // ⭐️ THE FIX: The Hardware Un-Lock Delay
-                              if (capturedBytes == null) {
-                                print(
-                                  "Package didn't provide an image. Waiting for hardware release...",
-                                );
-
-                                await Future.delayed(
-                                  const Duration(milliseconds: 600),
-                                );
-
-                                if (_cameraController == null ||
-                                    !_cameraController!.value.isInitialized) {
-                                  final cameras = await availableCameras();
-                                  CameraDescription targetCamera = cameras
-                                      .firstWhere(
-                                        (camera) =>
-                                            camera.lensDirection ==
-                                            CameraLensDirection.front,
-                                        orElse: () => cameras.first,
-                                      );
-
-                                  _cameraController = CameraController(
-                                    targetCamera,
-                                    ResolutionPreset.medium,
-                                    enableAudio: false,
-                                  );
-                                  await _cameraController!.initialize();
-                                }
-
-                                await Future.delayed(
-                                  const Duration(milliseconds: 200),
-                                );
-
-                                final XFile capturedFile =
-                                    await _cameraController!.takePicture();
-                                capturedBytes = await capturedFile
-                                    .readAsBytes();
-                              }
-
-                              if (capturedBytes != null) {
-                                await _processBackendMatch(capturedBytes);
-                              } else {
-                                _handleFailure(
-                                  reason:
-                                      "Camera hardware failed to capture image.",
-                                );
-                              }
-                            } catch (e) {
-                              print("CRITICAL ERROR: $e");
-                              _handleFailure(
-                                reason: "Secure capture failed: $e",
-                              );
-                            }
-                          },
-                          onFailed: (reason) {
-                            _handleFailure(
-                              reason: "Spoofing Detected: $reason",
-                            );
-                          },
+                  child: _isCameraInitialized
+                      ? AspectRatio(
+                          aspectRatio: _cameraController!.value.aspectRatio,
+                          child: CameraPreview(_cameraController!),
                         )
-                      : (_isCameraInitialized
-                            ? AspectRatio(
-                                aspectRatio:
-                                    _cameraController!.value.aspectRatio,
-                                child: CameraPreview(_cameraController!),
-                              )
-                            : Center(
-                                child: CircularProgressIndicator(
-                                  color: primaryColor,
-                                ),
-                              )),
+                      : Center(
+                          child: CircularProgressIndicator(color: primaryColor),
+                        ),
                 ),
               ),
-              if (_isCameraInitialized && !_isVerifyingLiveness)
+              if (_isCameraInitialized)
                 Positioned.fill(
                   child: ClipOval(
                     child: AnimatedBuilder(
@@ -702,25 +583,24 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
             ],
           ),
           const SizedBox(height: 40),
-          if (!_isVerifyingLiveness)
-            GestureDetector(
-              onTap: kIsWeb ? _captureWebAndVerify : _startLivenessCapture,
-              child: NeumorphicContainer(
-                color: primaryColor,
-                borderRadius: 16,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                child: Center(
-                  child: Text(
-                    'Start Face Match',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
+          GestureDetector(
+            onTap: _captureAndVerify,
+            child: NeumorphicContainer(
+              color: primaryColor,
+              borderRadius: 16,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: Text(
+                  'Start Face Match',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
                   ),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
