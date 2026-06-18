@@ -132,7 +132,7 @@ export default function Page() {
 
             {/* Web App */}
             <motion.div whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.95 }}>
-              <Link href="/" className="flex items-center gap-4 px-8 py-4 rounded-2xl bg-[var(--theme-primary)]/90 backdrop-blur-xl border border-[var(--theme-primary)] text-white transition-all shadow-[0_8px_30px_rgba(37,99,235,0.2)] hover:bg-[var(--theme-primary)]">
+              <Link href="https://tact-3c612.web.app" className="flex items-center gap-4 px-8 py-4 rounded-2xl bg-[var(--theme-primary)]/90 backdrop-blur-xl border border-[var(--theme-primary)] text-white transition-all shadow-[0_8px_30px_rgba(37,99,235,0.2)] hover:bg-[var(--theme-primary)]">
                 <i className="fa-solid fa-globe text-3xl"></i>
                 <div className="text-left flex flex-col">
                   <span className="text-xs leading-none font-medium text-blue-200">ACCESS ONLINE</span>
