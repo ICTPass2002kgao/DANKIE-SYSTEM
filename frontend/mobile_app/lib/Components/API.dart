@@ -607,12 +607,12 @@ class Api {
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.15),
-                offset: const Offset(8, 8),
+                offset: const Offset(3, 3),
                 blurRadius: 15,
               ),
               BoxShadow(
                 color: Colors.white.withOpacity(0.9),
-                offset: const Offset(-8, -8),
+                offset: const Offset(-3, -3),
                 blurRadius: 15,
               ),
             ],
@@ -620,7 +620,7 @@ class Api {
           child: Center(
             child: CircularProgressIndicator(
               color: color.primaryColor,
-              strokeWidth: 3,
+              strokeWidth: 1,
             ),
           ),
         ),

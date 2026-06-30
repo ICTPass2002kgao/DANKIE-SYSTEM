@@ -105,7 +105,7 @@ class _AddMemberTabState extends State<AddMemberTab> {
         isPressed: true,
         borderRadius: 12,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        color: theme.scaffoldBackgroundColor,
+        color: Api().neumoBaseColor(context),
         child: TextField(
           controller: controller,
           keyboardType: keyboardType,
@@ -125,7 +125,7 @@ class _AddMemberTabState extends State<AddMemberTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final baseColor = theme.scaffoldBackgroundColor;
+    final baseColor = Api().neumoBaseColor(context);
     final primaryColor = theme.primaryColor;
 
     return SingleChildScrollView(

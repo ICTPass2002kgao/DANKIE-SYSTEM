@@ -536,6 +536,8 @@ class _TactsoBranchesApplicationsState
           universityLogoUrl: _universityLogoUrl,
         );
       case 3:
+        return TactsoContitution();
+      case 4:
         return SpiritualManagementTab(
           branchId: _branchId!,
           overseerId: _overseerId,
@@ -545,9 +547,7 @@ class _TactsoBranchesApplicationsState
           loggedMemberName: _activeMemberName,
           loggedMemberRole: _activeMemberRole,
           universityLogoUrl: _universityLogoUrl,
-        );
-      case 4:
-        return TactsoContitution();
+        ); 
       default:
         return Center(child: Text("Tab not found"));
     }
@@ -669,7 +669,8 @@ class _TactsoBranchesApplicationsState
         _drawerItem(Icons.dashboard_rounded, "Dashboard", 0, color),
         _drawerItem(Icons.table_chart_rounded, "Applications", 1, color),
         _drawerItem(Icons.groups_rounded, "Committee", 2, color),
-        _drawerItem(Icons.church_rounded, "Spiritual Management", 3, color),
+        _drawerItem(Icons.receipt_rounded, "Constitution", 3, color),
+        _drawerItem(Icons.church_rounded, "Spiritual Management", 4, color),
         Spacer(),
         ListTile(
           leading: Icon(Icons.logout_rounded, color: Colors.redAccent),
@@ -736,6 +737,11 @@ class _TactsoBranchesApplicationsState
             icon: Icon(Icons.people_outlined),
             selectedIcon: Icon(Icons.people),
             label: 'Team',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outlined),
+            selectedIcon: Icon(Icons.receipt_rounded),
+            label: 'Constitution',
           ),
           NavigationDestination(
             icon: Icon(Icons.church_outlined),

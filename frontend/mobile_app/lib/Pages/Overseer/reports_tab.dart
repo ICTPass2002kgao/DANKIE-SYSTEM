@@ -76,7 +76,6 @@ class _ReportsTabState extends State<ReportsTab> {
 
   final String baseUrl = Api().BACKEND_BASE_URL_DEBUG;
 
-  final Color _baseColor = const Color(0xFFE0E5EC);
   final Color _shadowLight = Colors.white;
   final Color _shadowDark = const Color(0xFFA3B1C6);
   final Color _textColor = const Color(0xFF4A5568);
@@ -91,7 +90,7 @@ class _ReportsTabState extends State<ReportsTab> {
 
   BoxDecoration _neuDecoration({double radius = 16, bool isPressed = false}) {
     return BoxDecoration(
-      color: _baseColor,
+      color: Api().neumoBaseColor(context),
       borderRadius: BorderRadius.circular(radius),
       boxShadow: isPressed
           ? []
@@ -446,7 +445,7 @@ class _ReportsTabState extends State<ReportsTab> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          backgroundColor: _baseColor,
+          backgroundColor: Api().neumoBaseColor(context),
           title: const Text(
             "Missing Dates",
             style: TextStyle(
@@ -569,7 +568,7 @@ class _ReportsTabState extends State<ReportsTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: _baseColor,
+        backgroundColor: Api().neumoBaseColor(context),
         title: const Text(
           "Missing Signatures",
           style: TextStyle(
@@ -695,13 +694,13 @@ class _ReportsTabState extends State<ReportsTab> {
                   ? "Archived Balance Sheet"
                   : "Report Generated",
             ),
-            backgroundColor: _baseColor,
+            backgroundColor: Api().neumoBaseColor(context),
             foregroundColor: _textColor,
             elevation: 0,
             iconTheme: IconThemeData(color: _textColor),
           ),
           body: Container(
-            color: _baseColor,
+            color: Api().neumoBaseColor(context),
             child: PdfPreview(
               build: (format) =>
                   PdfGeneratorService.generatePdfDocument(format, data),
@@ -739,7 +738,7 @@ class _ReportsTabState extends State<ReportsTab> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: _baseColor,
+        backgroundColor: Api().neumoBaseColor(context),
         title: const Text(
           "⚠ Finalize & Archive?",
           style: TextStyle(fontWeight: FontWeight.bold),
@@ -899,7 +898,7 @@ class _ReportsTabState extends State<ReportsTab> {
           data: ThemeData.light().copyWith(
             primaryColor: Colors.blueAccent,
             colorScheme: ColorScheme.light(primary: Colors.blueAccent),
-            dialogBackgroundColor: _baseColor,
+            dialogBackgroundColor: Api().neumoBaseColor(context),
           ),
           child: child!,
         );
@@ -913,7 +912,7 @@ class _ReportsTabState extends State<ReportsTab> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: _baseColor,
+      color: Api().neumoBaseColor(context),
       child: Center(
         child: SingleChildScrollView(
           child: Container(
@@ -966,7 +965,7 @@ class _ReportsTabState extends State<ReportsTab> {
                       margin: const EdgeInsets.only(bottom: 25),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: _baseColor,
+                        color: Api().neumoBaseColor(context),
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
@@ -1030,7 +1029,7 @@ class _ReportsTabState extends State<ReportsTab> {
                           _openPdfPreviewScreen(data);
                         },
                         text: "Preview Draft (Does not Archive)",
-                        backgroundColor: _baseColor,
+                        backgroundColor: Api().neumoBaseColor(context),
                         foregroundColor: _textColor,
                         width: double.infinity,
                       ),
@@ -1092,7 +1091,7 @@ class _ReportsTabState extends State<ReportsTab> {
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
               value: _selectedMonth,
-              dropdownColor: _baseColor,
+              dropdownColor: Api().neumoBaseColor(context),
               icon: Icon(Icons.keyboard_arrow_down, color: _textColor),
               style: TextStyle(color: _textColor, fontWeight: FontWeight.bold),
               items: List.generate(
@@ -1118,7 +1117,7 @@ class _ReportsTabState extends State<ReportsTab> {
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
               value: _selectedYear,
-              dropdownColor: _baseColor,
+              dropdownColor: Api().neumoBaseColor(context),
               icon: Icon(Icons.keyboard_arrow_down, color: _textColor),
               style: TextStyle(color: _textColor, fontWeight: FontWeight.bold),
               items: List.generate(
@@ -1192,7 +1191,7 @@ class _ReportsTabState extends State<ReportsTab> {
             style: TextStyle(color: Colors.grey.shade600),
           ),
           isExpanded: true,
-          dropdownColor: _baseColor,
+          dropdownColor: Api().neumoBaseColor(context),
           icon: Icon(Icons.arrow_drop_down, color: _textColor),
           style: TextStyle(
             color: _textColor,
@@ -1224,7 +1223,7 @@ class _ReportsTabState extends State<ReportsTab> {
             style: TextStyle(color: Colors.grey.shade600),
           ),
           isExpanded: true,
-          dropdownColor: _baseColor,
+          dropdownColor: Api().neumoBaseColor(context),
           icon: Icon(Icons.arrow_drop_down, color: _textColor),
           style: TextStyle(
             color: _textColor,
@@ -1538,7 +1537,7 @@ class _ReportsTabState extends State<ReportsTab> {
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _baseColor,
+                      color: Api().neumoBaseColor(context),
                       borderRadius: BorderRadius.circular(6),
                       boxShadow: [
                         BoxShadow(
@@ -1628,7 +1627,7 @@ class _ReportsTabState extends State<ReportsTab> {
                 child: Container(
                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _baseColor,
+                    color: Api().neumoBaseColor(context),
                     borderRadius: BorderRadius.circular(6),
                     boxShadow: [
                       BoxShadow(

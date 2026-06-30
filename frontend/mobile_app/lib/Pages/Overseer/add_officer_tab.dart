@@ -30,8 +30,8 @@ class AddOfficerTab extends StatefulWidget {
 class _AddOfficerTabState extends State<AddOfficerTab> {
   // --- CONTROLLERS ---
   final TextEditingController officerNameController = TextEditingController();
-  final TextEditingController communityOfficerController =
-      TextEditingController();
+  // Community fields - list of controllers
+  List<TextEditingController> communityControllers = [TextEditingController()];
 
   // --- STATE VARIABLES ---
   bool _isReassignMode = false;
@@ -55,7 +55,9 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
   @override
   void dispose() {
     officerNameController.dispose();
-    communityOfficerController.dispose();
+    for (var c in communityControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -116,6 +118,21 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
     }
   }
 
+  // --- ADD / REMOVE COMMUNITY FIELD ---
+  void _addCommunityField() {
+    setState(() {
+      communityControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeCommunityField(int index) {
+    if (communityControllers.length <= 1) return; // keep at least one
+    setState(() {
+      communityControllers[index].dispose();
+      communityControllers.removeAt(index);
+    });
+  }
+
   // --- NEUMORPHIC INPUT HELPER ---
   Widget _buildNeumorphicTextField(
     BuildContext context, {
@@ -129,7 +146,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
         isPressed: true,
         borderRadius: 12,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        color: theme.scaffoldBackgroundColor,
+        color: Api().neumoBaseColor(context),
         child: TextField(
           controller: controller,
           style: TextStyle(color: Colors.black87),
@@ -160,12 +177,12 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
         isPressed: true,
         borderRadius: 12,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        color: theme.scaffoldBackgroundColor,
+        color: Api().neumoBaseColor(context),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
             value: value,
             isExpanded: true,
-            dropdownColor: theme.scaffoldBackgroundColor,
+            dropdownColor: Api().neumoBaseColor(context),
             hint: Text(placeholder, style: TextStyle(color: theme.hintColor)),
             items: items.map((item) {
               return DropdownMenuItem<String>(
@@ -186,7 +203,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final baseColor = theme.scaffoldBackgroundColor;
+    final baseColor = Api().neumoBaseColor(context);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -249,10 +266,10 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
     return GestureDetector(
       onTap: onTap,
       child: NeumorphicContainer(
-        isPressed: isActive, // Sunken if active, popped if inactive
+        isPressed: isActive,
         borderRadius: 20,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        color: theme.scaffoldBackgroundColor,
+        color: Api().neumoBaseColor(context),
         child: Text(
           title,
           style: TextStyle(
@@ -264,14 +281,14 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
     );
   }
 
-  // --- FORM 1: ADD NEW (With auto-reassign logic) ---
+  // --- FORM 1: ADD NEW (With dynamic community fields) ---
   Widget _buildAddNewForm() {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          "Create a new officer or assign an existing community to a typed name.",
+          "Create a new district elder. Optionally assign communities.",
           style: TextStyle(color: Colors.grey[600], fontSize: 13),
           textAlign: TextAlign.center,
         ),
@@ -279,21 +296,63 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
         _buildNeumorphicTextField(
           context,
           controller: officerNameController,
-          placeholder: "District Elder Name",
+          placeholder: "District Elder Name *",
         ),
-        _buildNeumorphicTextField(
-          context,
-          controller: communityOfficerController,
-          placeholder: "Community Name",
+        // Community Fields Section
+        Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Communities (optional)",
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    Icons.add_circle_outline,
+                    color: theme.primaryColor,
+                  ),
+                  onPressed: _addCommunityField,
+                  tooltip: "Add another community",
+                ),
+              ],
+            ),
+            ...List.generate(communityControllers.length, (index) {
+              return Row(
+                children: [
+                  Expanded(
+                    child: _buildNeumorphicTextField(
+                      context,
+                      controller: communityControllers[index],
+                      placeholder: "Community ${index + 1} name",
+                    ),
+                  ),
+                  if (communityControllers.length > 1)
+                    IconButton(
+                      icon: Icon(
+                        Icons.remove_circle_outline,
+                        color: Colors.red[400],
+                      ),
+                      onPressed: () => _removeCommunityField(index),
+                      tooltip: "Remove this community",
+                    ),
+                ],
+              );
+            }),
+          ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 20),
         GestureDetector(
           onTap: _saveOrReassignOfficerByName,
           child: NeumorphicContainer(
             isPressed: false,
             borderRadius: 12,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            color: theme.scaffoldBackgroundColor,
+            color: Api().neumoBaseColor(context),
             child: Center(
               child: Text(
                 "Save",
@@ -310,7 +369,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
     );
   }
 
-  // --- FORM 2: REASSIGN EXISTING ---
+  // --- FORM 2: REASSIGN EXISTING (unchanged) ---
   Widget _buildReassignForm() {
     final theme = Theme.of(context);
     return Column(
@@ -343,7 +402,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
             isPressed: false,
             borderRadius: 12,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            color: theme.scaffoldBackgroundColor,
+            color: Api().neumoBaseColor(context),
             child: Center(
               child: Text(
                 "Reassign Community",
@@ -365,13 +424,28 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
   // ===========================================================================
   Future<void> _saveOrReassignOfficerByName() async {
     final districtName = officerNameController.text.trim();
-    final communityName = communityOfficerController.text.trim();
-
-    if (districtName.isEmpty || communityName.isEmpty) {
+    if (districtName.isEmpty) {
       Api().showMessage(
         context,
-        "Please fill in both fields.",
+        "Please enter the District Elder name.",
         "Missing Info",
+        Colors.red,
+      );
+      return;
+    }
+
+    // Collect all non-empty community names
+    List<String> communityNames = communityControllers
+        .map((c) => c.text.trim())
+        .where((name) => name.isNotEmpty)
+        .toList();
+
+    // Validate community names (duplicates handled later)
+    if (communityNames.toSet().length != communityNames.length) {
+      Api().showMessage(
+        context,
+        "Duplicate community names are not allowed.",
+        "Error",
         Colors.red,
       );
       return;
@@ -398,7 +472,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
       if (existingDist.isNotEmpty) {
         targetDistrictId = existingDist[0]['id'];
       } else {
-        // Create New District
+        // Create New District (officer)
         final createDistResp = await http.post(
           Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/districts/'),
           headers: {
@@ -413,53 +487,63 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
         if (createDistResp.statusCode == 201) {
           targetDistrictId = json.decode(createDistResp.body)['id'].toString();
         } else {
-          throw Exception("Failed to create district");
+          throw Exception(
+            "Failed to create district elder. Check backend response.",
+          );
         }
       }
 
-      // 2. Check if the typed Community already exists anywhere for this overseer
-      var existingComm = _communitiesList
-          .where(
-            (c) =>
-                c['name'].toString().toLowerCase() ==
-                communityName.toLowerCase(),
-          )
-          .toList();
+      // 2. Process each community name
+      for (String communityName in communityNames) {
+        var existingComm = _communitiesList
+            .where(
+              (c) =>
+                  c['name'].toString().toLowerCase() ==
+                  communityName.toLowerCase(),
+            )
+            .toList();
 
-      if (existingComm.isNotEmpty) {
-        // COMMUNITY EXISTS -> REASSIGN IT
-        String communityId = existingComm[0]['id'];
-        await _executeReassignment(
-          token: token!,
-          communityId: communityId,
-          communityName: communityName,
-          newDistrictId: targetDistrictId!,
-          newDistrictName: districtName,
-          userUid: user.uid,
-        );
-      } else {
-        // COMMUNITY DOES NOT EXIST -> CREATE IT
-        final createCommResp = await http.post(
-          Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/communities/'),
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer $token",
-          },
-          body: jsonEncode({
-            'district': targetDistrictId,
-            'community_name': communityName,
-            'district_elder_name': districtName,
-          }),
-        );
-        if (createCommResp.statusCode != 201)
-          throw Exception("Failed to create community");
+        if (existingComm.isNotEmpty) {
+          // COMMUNITY EXISTS -> REASSIGN IT
+          String communityId = existingComm[0]['id'];
+          await _executeReassignment(
+            token: token!,
+            communityId: communityId,
+            communityName: communityName,
+            newDistrictId: targetDistrictId!,
+            newDistrictName: districtName,
+            userUid: user.uid,
+          );
+        } else {
+          // COMMUNITY DOES NOT EXIST -> CREATE IT
+          final createCommResp = await http.post(
+            Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/communities/'),
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer $token",
+            },
+            body: jsonEncode({
+              'district': targetDistrictId,
+              'community_name': communityName,
+              'district_elder_name': districtName,
+            }),
+          );
+          if (createCommResp.statusCode != 201) {
+            throw Exception(
+              "Failed to create community '$communityName'. Please check your input.",
+            );
+          }
+        }
       }
+
+      // If no communities were specified, we just created the officer alone – that's allowed.
 
       if (mounted) Navigator.pop(context); // Close loading
 
       OverseerAuditLogs.logAction(
         action: "CREATED/ASSIGNED",
-        details: "Assigned community $communityName to district $districtName",
+        details:
+            "Officer: $districtName, Communities: ${communityNames.isNotEmpty ? communityNames.join(', ') : 'none'}",
         committeeMemberName: widget.committeeMemberName,
         committeeMemberRole: widget.committeeMemberRole,
         universityCommitteeFace: widget.faceUrl,
@@ -467,12 +551,26 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
 
       Api().showMessage(
         context,
-        "Saved Successfully!",
+        communityNames.isEmpty
+            ? "Officer created successfully without communities."
+            : "Officer and communities saved successfully!",
         "Success",
         Colors.green,
       );
+
+      // Clear form
       officerNameController.clear();
-      communityOfficerController.clear();
+      for (var c in communityControllers) {
+        c.clear();
+      }
+      // Reset to one empty field
+      setState(() {
+        communityControllers
+            .where((c) => c != communityControllers.first)
+            .forEach((c) => c.dispose());
+        communityControllers = [TextEditingController()];
+      });
+
       _loadHierarchy(); // Refresh Dropdowns
     } catch (e) {
       if (mounted) Navigator.pop(context);
@@ -481,7 +579,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
   }
 
   // ===========================================================================
-  // CORE LOGIC 2: REASSIGN FROM DROPDOWNS
+  // CORE LOGIC 2: REASSIGN FROM DROPDOWNS (unchanged)
   // ===========================================================================
   Future<void> _reassignCommunityByDropdown() async {
     if (_selectedCommunityId == null || _selectedDistrictId == null) {
@@ -501,7 +599,6 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
       if (user == null) throw Exception("User not logged in");
       final String? token = await user.getIdToken();
 
-      // Find names for the logs and user updates
       final commData = _communitiesList.firstWhere(
         (c) => c['id'] == _selectedCommunityId,
       );
@@ -574,7 +671,6 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
       throw Exception("Failed to update Community record");
 
     // 2. Fetch all users belonging to this community
-    // Because communityName could have spaces, encode it for the URL
     final String encCommName = Uri.encodeComponent(communityName);
     final usersResp = await http.get(
       Uri.parse(
@@ -601,8 +697,6 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
           ),
         );
       }
-
-      // Wait for all users to be updated simultaneously
       await Future.wait(patchTasks);
     }
   }

@@ -4,9 +4,10 @@ import 'dart:convert'; // Added for JSON decoding
 import 'package:http/http.dart' as http; // Added for API calls
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
+import 'package:ttact/Pages/Admin/GlobalAttendanceReportScreen.dart';
 import 'package:ttact/Pages/Admin/Overseer_BalanceSheet_Global.dart';
 
 // --- IMPORT YOUR EXISTING PAGES ---
@@ -64,7 +65,7 @@ class _AdminPortalState extends State<AdminPortal> {
   String province = '';
 
   // --- BADGE STATE VARIABLES ---
-  int _pendingSellersCount = 0; 
+  int _pendingSellersCount = 0;
 
   @override
   void initState() {
@@ -131,6 +132,12 @@ class _AdminPortalState extends State<AdminPortal> {
           portfolio: portfolio,
           province: province,
         ),
+      },
+      {
+        'label': 'Global Attendance',
+        'icon': Icons.people_alt_outlined,
+        'badge': 0,
+        'page': const GlobalAttendanceReportScreen(),
       },
       {
         'label': 'Overseers',
@@ -297,7 +304,7 @@ class _AdminPortalState extends State<AdminPortal> {
   }
 
   // ⭐️ SECURED AUTHORIZATION CHECK (UPDATED) ⭐️
-  
+
   Future<void> _checkAuthorization() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -305,10 +312,10 @@ class _AdminPortalState extends State<AdminPortal> {
       return;
     }
 
-    try { 
+    try {
       String? token = await user.getIdToken();
       if (token == null) throw Exception("Token retrieval failed");
- 
+
       final uri = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/staff/?uid=${user.uid}',
       );
@@ -324,7 +331,7 @@ class _AdminPortalState extends State<AdminPortal> {
       if (response.statusCode == 200) {
         final List<dynamic> results = json.decode(response.body);
 
-        if (results.isNotEmpty) { 
+        if (results.isNotEmpty) {
           Map<String, dynamic>? currentStaffMember;
 
           for (var staff in results) {
@@ -333,13 +340,13 @@ class _AdminPortalState extends State<AdminPortal> {
               break;
             }
           }
- 
+
           currentStaffMember ??= results[0];
 
           final String role = currentStaffMember?['role'] ?? '';
 
           if (mounted) {
-            setState(() { 
+            setState(() {
               faceUrl = widget.faceUrl?.isNotEmpty == true
                   ? widget.faceUrl!
                   : (currentStaffMember?['face_url'] ?? '');
@@ -358,11 +365,11 @@ class _AdminPortalState extends State<AdminPortal> {
 
             if (!_isAuthorized) {
               Navigator.of(context).pushReplacementNamed('/main-menu');
-            } else { 
+            } else {
               _fetchBadgeCounts();
             }
           }
-        } else { 
+        } else {
           if (mounted) setState(() => _isAuthorized = false);
         }
       } else {
@@ -370,7 +377,7 @@ class _AdminPortalState extends State<AdminPortal> {
         if (mounted) setState(() => _isAuthorized = false);
       }
     } catch (e) {
-      print("System Auth Error: $e"); 
+      print("System Auth Error: $e");
       if (mounted) {
         setState(() => _isAuthorized = false);
         Navigator.of(context).pushReplacementNamed('/main-menu');

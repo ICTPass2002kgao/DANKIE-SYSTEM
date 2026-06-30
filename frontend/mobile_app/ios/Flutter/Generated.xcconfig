@@ -5,7 +5,7 @@ FLUTTER_FRAMEWORK_SWIFT_PACKAGE_PATH=/Users/kgaogelomthimkhulu/Desktop/DANKIE SY
 COCOAPODS_PARALLEL_CODE_SIGN=true
 FLUTTER_TARGET=/Users/kgaogelomthimkhulu/Desktop/DANKIE SYSTEM/frontend/mobile_app/lib/main.dart
 FLUTTER_BUILD_DIR=build
-FLUTTER_BUILD_NAME=1.0.0
+FLUTTER_BUILD_NAME=1.1.6
 FLUTTER_BUILD_NUMBER=1
 EXCLUDED_ARCHS[sdk=iphonesimulator*]=i386 arm64
 EXCLUDED_ARCHS[sdk=iphoneos*]=armv7

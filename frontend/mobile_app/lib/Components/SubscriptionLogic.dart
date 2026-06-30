@@ -65,7 +65,7 @@
 //   static Future<int> _getTotalOverseerMemberCount(String uid) async {
 //     final snapshot = await FirebaseFirestore.instance
 //         .collection('users')
-//         .where('overseerUid', isEqualTo: uid)
+        // .where('overseerUid', isEqualTo: uid)
 //         .get();
 //     return snapshot.docs.length;
 //   }

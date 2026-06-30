@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 import 'package:ttact/Pages/Overseer/components/overseer_dialog.dart';
+import 'package:ttact/Pages/Overseer/components/overseer_reports_full_page.dart';
 import 'package:ttact/Pages/Overseer/components/overseer_utilities.dart';
 import 'package:ttact/Pages/Overseer/components/pdf_generator_register.dart';
 
@@ -47,19 +48,37 @@ class _OverseerDigitalRegisterTabState
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
 
+  // Filters & Date States
+  DateTime _selectedDate = DateTime.now();
+  String _selectedDistrict = 'All';
+  String _selectedCommunity = 'All';
+
   int _currentPage = 0;
   final int _rowsPerPage = 50;
 
   Color get _primaryColor => Theme.of(context).primaryColor;
 
-  int get totalMembers => _usersList.length;
+  // Editable Date Check
+  bool get _isEditableDay {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selected = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    );
+    return !selected.isBefore(today);
+  }
+
+  // Stats now use _filteredUsers to ensure dynamic dashboard updates
+  int get totalMembers => _filteredUsers.length;
   int get presentMembers =>
-      _usersList.where((u) => u['isPresent'] == true).length;
+      _filteredUsers.where((u) => u['isPresent'] == true).length;
   int get absentMembers => totalMembers - presentMembers;
   double get attendancePercentage =>
       totalMembers == 0 ? 0.0 : presentMembers / totalMembers;
 
-  int get totalTestifies => _usersList
+  int get totalTestifies => _filteredUsers
       .where(
         (u) =>
             (u['isVisitor'] == true || u['is_visitor'] == true) &&
@@ -68,7 +87,7 @@ class _OverseerDigitalRegisterTabState
       )
       .length;
 
-  int get readyTestifies => _usersList
+  int get readyTestifies => _filteredUsers
       .where(
         (u) =>
             (u['isVisitor'] == true || u['is_visitor'] == true) &&
@@ -79,10 +98,10 @@ class _OverseerDigitalRegisterTabState
       )
       .length;
 
-  int get brothersTotal => _usersList
+  int get brothersTotal => _filteredUsers
       .where((u) => u['gender']?.toString().toLowerCase() == 'male')
       .length;
-  int get brothersPresent => _usersList
+  int get brothersPresent => _filteredUsers
       .where(
         (u) =>
             u['isPresent'] == true &&
@@ -90,10 +109,10 @@ class _OverseerDigitalRegisterTabState
       )
       .length;
 
-  int get sistersTotal => _usersList
+  int get sistersTotal => _filteredUsers
       .where((u) => u['gender']?.toString().toLowerCase() == 'female')
       .length;
-  int get sistersPresent => _usersList
+  int get sistersPresent => _filteredUsers
       .where(
         (u) =>
             u['isPresent'] == true &&
@@ -104,8 +123,29 @@ class _OverseerDigitalRegisterTabState
   List<dynamic> get _filteredUsers {
     List<dynamic> baseList = _usersList;
 
+    // Apply District Filter
+    if (_selectedDistrict != 'All') {
+      baseList = baseList.where((u) {
+        String d =
+            u['district_elder_name'] ??
+            u['districtElderName'] ??
+            'Unassigned District';
+        return d == _selectedDistrict;
+      }).toList();
+    }
+
+    // Apply Community Filter
+    if (_selectedCommunity != 'All') {
+      baseList = baseList.where((u) {
+        String c =
+            u['community_name'] ?? u['communityName'] ?? 'Unassigned Community';
+        return c == _selectedCommunity;
+      }).toList();
+    }
+
+    // Apply Search Query
     if (_searchQuery.isNotEmpty) {
-      baseList = _usersList.where((user) {
+      baseList = baseList.where((user) {
         final name = "${user['name'] ?? ''} ${user['surname'] ?? ''}"
             .toLowerCase();
         final email = (user['email'] ?? '').toLowerCase();
@@ -169,13 +209,6 @@ class _OverseerDigitalRegisterTabState
   Future<void> _fetchOverseerDataAndMembers() async {
     setState(() => _isLoading = true);
 
-    Map<String, bool> previousAttendanceState = {};
-    for (var user in _usersList) {
-      if (user['ui_id'] != null) {
-        previousAttendanceState[user['ui_id']] = user['isPresent'] ?? false;
-      }
-    }
-
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
@@ -190,7 +223,7 @@ class _OverseerDigitalRegisterTabState
         'Content-Type': 'application/json',
       };
 
-      // 1. Fetch Overseer
+      // 1. Fetch Overseer Hierarchy
       final oRes = await http.get(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/overseers/?uid=$uid'),
         headers: headers,
@@ -233,12 +266,11 @@ class _OverseerDigitalRegisterTabState
           final map = Map<String, dynamic>.from(m as Map);
           String mOverseer = (map['overseer_uid'] ?? '').toString();
 
-          // EXACT MATCH ONLY - No more matching by names!
           if (mOverseer == uid) {
             map['isVisitor'] = false;
             map['visitor_category'] = 'Registered';
             map['ui_id'] = map['uid'];
-            map['isPresent'] = previousAttendanceState[map['uid']] ?? false;
+            map['isPresent'] = false; // Default, will override below
             members.add(map);
           }
         }
@@ -262,12 +294,11 @@ class _OverseerDigitalRegisterTabState
           final map = Map<String, dynamic>.from(v as Map);
           String vOverseer = (map['overseer_uid'] ?? '').toString();
 
-          // EXACT MATCH ONLY
           if (vOverseer == uid) {
             map['isVisitor'] = true;
             map['visitor_category'] = map['visitor_category'] ?? 'Testify';
             map['ui_id'] = map['id'];
-            map['isPresent'] = previousAttendanceState[map['id']] ?? false;
+            map['isPresent'] = false; // Default, will override below
             visitors.add(map);
           }
         }
@@ -275,7 +306,7 @@ class _OverseerDigitalRegisterTabState
 
       _usersList = [...members, ...visitors];
 
-      // Re-map communities just in case new ones were added
+      // Re-map communities just in case new ones were added outside hierarchy
       for (var u in _usersList) {
         String dName =
             u['district_elder_name'] ??
@@ -293,6 +324,9 @@ class _OverseerDigitalRegisterTabState
           }
         }
       }
+
+      // Fetch historical attendance for the selected date
+      await _fetchAttendanceForSelectedDate(token);
     } catch (e) {
       print("Network error fetching spiritual data: $e");
     } finally {
@@ -300,11 +334,78 @@ class _OverseerDigitalRegisterTabState
     }
   }
 
+  // Uses Monthly Report to accurately extract attendance for the _selectedDate
+  Future<void> _fetchAttendanceForSelectedDate(String token) async {
+    try {
+      // 1. Reset all local states to absent (Critical for new days to reset naturally)
+      for (var u in _usersList) {
+        u['isPresent'] = false;
+      }
+
+      // 2. Gather unique communities
+      Set<String> allCommunities = {};
+      for (var comms in _officialHierarchy.values) {
+        allCommunities.addAll(comms);
+      }
+
+      // 3. Batch process requests in parallel
+      List<Future<http.Response>> requests = [];
+      for (String comm in allCommunities) {
+        final url = Uri.parse(
+          '${Api().BACKEND_BASE_URL_DEBUG}/monthly_attendance_report/?community_name=$comm&month=${_selectedDate.month}&year=${_selectedDate.year}',
+        );
+        requests.add(
+          http.get(url, headers: {'Authorization': 'Bearer $token'}),
+        );
+      }
+
+      final responses = await Future.wait(requests);
+
+      // 4. Map true/false statuses based on selected day
+      for (var res in responses) {
+        if (res.statusCode == 200) {
+          final decoded = json.decode(res.body);
+          List data = decoded['data'] ?? [];
+          for (var item in data) {
+            String uiId = item['ui_id'].toString();
+            Map<String, dynamic> attMap = item['attendance'] ?? {};
+
+            bool isPresentOnDay = attMap[_selectedDate.day.toString()] == true;
+
+            int idx = _usersList.indexWhere(
+              (u) => u['ui_id'].toString() == uiId,
+            );
+            if (idx != -1) {
+              _usersList[idx]['isPresent'] = isPresentOnDay;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print("Error fetching daily historical attendance: $e");
+    }
+  }
+
+  Future<void> _onDateChanged(DateTime newDate) async {
+    setState(() {
+      _selectedDate = newDate;
+      _isLoading = true;
+    });
+    final user = FirebaseAuth.instance.currentUser;
+    String token = user != null ? await user.getIdToken() ?? "" : "";
+
+    await _fetchAttendanceForSelectedDate(token);
+
+    if (mounted) setState(() => _isLoading = false);
+  }
+
   Future<void> _toggleUserAttendance(
     String uiId,
     bool isPresent,
     bool isVisitor,
   ) async {
+    if (!_isEditableDay) return; // Failsafe for past days
+
     final index = _usersList.indexWhere((u) => u['ui_id'] == uiId);
     if (index == -1) return;
 
@@ -318,6 +419,9 @@ class _OverseerDigitalRegisterTabState
 
       final endpoint = isVisitor ? '/visitors/$uiId/' : '/users/$uiId/';
 
+      String formattedDate =
+          "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}";
+
       await http.patch(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}$endpoint'),
         headers: {
@@ -326,6 +430,7 @@ class _OverseerDigitalRegisterTabState
         },
         body: jsonEncode({
           'attendance_status': isPresent ? 'Present' : 'Absent',
+          'date': formattedDate,
         }),
       );
     } catch (e) {
@@ -448,141 +553,222 @@ class _OverseerDigitalRegisterTabState
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'testifyBtn',
-            onPressed: () {
-              showAddVisitorDialog(
-                context,
-                widget.neumoColor,
-                _primaryColor,
-                _officialHierarchy,
-                _submitNewVisitor,
-              );
-            },
-            backgroundColor: Colors.orange,
-            icon: Icon(
-              CupertinoIcons.person_badge_plus,
-              color: Colors.white,
-              size: 18,
-            ),
-            label: Text(
-              "Add Testify",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'guestBtn',
-            onPressed: () {
-              showAddVisitingMemberDialog(
-                context,
-                widget.neumoColor,
-                _primaryColor,
-                _officialHierarchy,
-                _submitNewVisitor,
-              );
-            },
-            backgroundColor: _primaryColor,
-            icon: Icon(
-              CupertinoIcons.person_3_fill,
-              color: Colors.white,
-              size: 18,
-            ),
-            label: Text(
-              "Add Guest Member",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      buildSectionHeader(
-                        "Spiritual Leadership",
-                        CupertinoIcons.person_3_fill,
-                        _primaryColor,
-                      ),
-                      const SizedBox(height: 16),
-                      buildResponsiveLeadershipCards(
-                        constraints.maxWidth,
+      floatingActionButton: _isEditableDay
+          ? Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  FloatingActionButton.extended(
+                    heroTag: 'testifyBtn',
+                    onPressed: () {
+                      showAddVisitorDialog(
+                        context,
                         widget.neumoColor,
                         _primaryColor,
-                        _overseerData?['overseer_initials_surname'] ??
-                            widget.loggerName ??
-                            'Unassigned',
-                        _overseerData?['region'] ??
-                            widget.regionName ??
-                            'Unassigned',
+                        _officialHierarchy,
+                        _submitNewVisitor,
+                      );
+                    },
+                    backgroundColor: Colors.orange,
+                    icon: Icon(
+                      CupertinoIcons.person_badge_plus,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    label: Text(
+                      "Add Testify",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
-                      const SizedBox(height: 32),
-                      buildSectionHeader(
-                        "Attendance Overview",
-                        CupertinoIcons.chart_pie_fill,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  FloatingActionButton.extended(
+                    heroTag: 'guestBtn',
+                    onPressed: () {
+                      showAddVisitingMemberDialog(
+                        context,
+                        widget.neumoColor,
                         _primaryColor,
+                        _officialHierarchy,
+                        _submitNewVisitor,
+                      );
+                    },
+                    backgroundColor: _primaryColor,
+                    icon: Icon(
+                      CupertinoIcons.person_3_fill,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                    label: Text(
+                      "Add Guest Member",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
-                      const SizedBox(height: 16),
-                      _buildDashboardChart(),
-                      const SizedBox(height: 32),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: buildSectionHeader(
-                              "Digital Register",
-                              CupertinoIcons.list_bullet,
-                              _primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : const SizedBox.shrink(),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        buildSectionHeader(
+                          "Spiritual Leadership",
+                          CupertinoIcons.person_3_fill,
+                          _primaryColor,
+                        ),
+                        const SizedBox(height: 16),
+                        buildResponsiveLeadershipCards(
+                          constraints.maxWidth,
+                          widget.neumoColor,
+                          _primaryColor,
+                          _overseerData?['overseer_initials_surname'] ??
+                              widget.loggerName ??
+                              'Unassigned',
+                          _overseerData?['region'] ??
+                              widget.regionName ??
+                              'Unassigned',
+                        ),
+                        const SizedBox(height: 32),
+
+                        // --- DYNAMIC FILTER SECTION ---
+                        _buildFilterSection(),
+                        const SizedBox(height: 16),
+
+                        if (!_isEditableDay)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 16,
                             ),
-                          ),
-                          _buildDownloadMenu(),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      _buildSearchBar(),
-                      const SizedBox(height: 24),
-                      _filteredUsers.isEmpty
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(32.0),
-                                child: Text(
-                                  _searchQuery.isEmpty
-                                      ? "No members registered."
-                                      : "No matching results.",
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  CupertinoIcons.lock_fill,
+                                  color: Colors.red.shade700,
+                                  size: 20,
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    "Archived Record (Read-Only): You are viewing attendance for a past date. Changes are locked.",
+                                    style: TextStyle(
+                                      color: Colors.red.shade700,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
+                              ],
+                            ),
+                          ),
+
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            buildSectionHeader(
+                              "Attendance Overview",
+                              CupertinoIcons.chart_pie_fill,
+                              _primaryColor,
+                            ),
+                            TextButton.icon(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        OverseerFullReportsPage(
+                                          usersList: _usersList,
+                                          hierarchy: _officialHierarchy,
+                                          selectedDate: _selectedDate,
+                                          neumoColor: widget.neumoColor,
+                                          primaryColor: _primaryColor,
+                                        ),
+                                  ),
+                                );
+                              },
+                              icon: Icon(
+                                CupertinoIcons.graph_square,
+                                color: _primaryColor,
                               ),
-                            )
-                          : _buildPaginatedTable(),
-                    ],
+                              label: Text(
+                                "View Full",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: _primaryColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _buildDashboardChart(),
+                        const SizedBox(height: 32),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: buildSectionHeader(
+                                "Digital Register",
+                                CupertinoIcons.list_bullet,
+                                _primaryColor,
+                              ),
+                            ),
+                            _buildDownloadMenu(),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _buildSearchBar(),
+                        const SizedBox(height: 24),
+                        _filteredUsers.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(32.0),
+                                  child: Text(
+                                    _searchQuery.isEmpty
+                                        ? "No members found for this criteria."
+                                        : "No matching results.",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : _buildPaginatedTable(),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 150)),
-            ],
+                const SliverToBoxAdapter(child: SizedBox(height: 150)),
+              ],
+            ),
           );
         },
       ),
@@ -590,6 +776,184 @@ class _OverseerDigitalRegisterTabState
   }
 
   // --- UI WIDGETS BOUND TO STATE ---
+
+  Widget _buildFilterSection() {
+    List<String> distOptions = ['All', ..._officialHierarchy.keys];
+    List<String> commOptions = ['All'];
+
+    if (_selectedDistrict != 'All' &&
+        _officialHierarchy.containsKey(_selectedDistrict)) {
+      commOptions.addAll(_officialHierarchy[_selectedDistrict]!);
+    } else {
+      Set<String> allComms = {};
+      for (var list in _officialHierarchy.values) {
+        allComms.addAll(list);
+      }
+      commOptions.addAll(allComms);
+    }
+
+    return NeumorphicContainer(
+      color: widget.neumoColor,
+      borderRadius: 16,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(CupertinoIcons.calendar, color: _primaryColor, size: 20),
+              SizedBox(width: 8),
+              Text(
+                "Filter & Date Selection",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.blueGrey[800],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          Row(
+            children: [
+              // Date Picker
+              Expanded(
+                flex: 2,
+                child: InkWell(
+                  onTap: () async {
+                    DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: _selectedDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now().add(Duration(days: 365)),
+                      builder: (context, child) {
+                        return Theme(
+                          data: Theme.of(context).copyWith(
+                            colorScheme: ColorScheme.light(
+                              primary: _primaryColor,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (picked != null && picked != _selectedDate) {
+                      _onDateChanged(picked);
+                    }
+                  },
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          "${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.blueGrey[800],
+                          ),
+                        ),
+                        Icon(
+                          CupertinoIcons.chevron_down,
+                          size: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              // District Dropdown
+              Expanded(
+                flex: 3,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: _selectedDistrict,
+                      icon: Icon(CupertinoIcons.chevron_down, size: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blueGrey[800],
+                        fontSize: 13,
+                      ),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedDistrict = newValue!;
+                          _selectedCommunity =
+                              'All'; // Reset community on district change
+                          _currentPage = 0;
+                        });
+                      },
+                      items: distOptions.map<DropdownMenuItem<String>>((
+                        String value,
+                      ) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 12),
+              // Community Dropdown
+              Expanded(
+                flex: 3,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: _selectedCommunity,
+                      icon: Icon(CupertinoIcons.chevron_down, size: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blueGrey[800],
+                        fontSize: 13,
+                      ),
+                      onChanged: (String? newValue) {
+                        setState(() {
+                          _selectedCommunity = newValue!;
+                          _currentPage = 0;
+                        });
+                      },
+                      items: commOptions.map<DropdownMenuItem<String>>((
+                        String value,
+                      ) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildDownloadMenu() {
     return PopupMenuButton<String>(
@@ -607,7 +971,7 @@ class _OverseerDigitalRegisterTabState
                 month: month,
                 year: year,
                 officialHierarchy: _officialHierarchy,
-                usersList: _usersList,
+                usersList: _filteredUsers, // Passes filtered data to generator
                 overseerName:
                     _overseerData?['overseer_initials_surname'] ??
                     'Unknown Overseer',
@@ -1093,204 +1457,225 @@ class _OverseerDigitalRegisterTabState
       );
     }
 
-    return Container(
-      decoration: rowDecoration,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            flex: 3,
-            child: Row(
-              children: [
-                Container(
-                  height: 40,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: isParent
-                        ? Colors.purple.withOpacity(0.15)
-                        : (isVisitor
-                              ? Colors.orange.withOpacity(0.1)
-                              : _primaryColor.withOpacity(0.1)),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isParent
-                          ? Colors.purple.withOpacity(0.5)
-                          : Colors.transparent,
-                    ),
-                  ),
-                  child: Center(
-                    child: isParent
-                        ? Icon(
-                            CupertinoIcons.star_fill,
-                            color: Colors.purple,
-                            size: 18,
-                          )
-                        : Text(
-                            fullName.isNotEmpty
-                                ? fullName[0].toUpperCase()
-                                : "?",
-                            style: TextStyle(
-                              color: isVisitor ? Colors.orange : _primaryColor,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
-                            ),
-                          ),
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              fullName,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: Colors.blueGrey[900],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _isEditableDay
+            ? () => _toggleUserAttendance(user['ui_id'], !isPresent, isVisitor)
+            : null,
+        splashColor: _primaryColor.withOpacity(0.1),
+        highlightColor: _primaryColor.withOpacity(0.05),
+        child: Container(
+          decoration: rowDecoration,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: 3,
+                child: Row(
+                  children: [
+                    Container(
+                      height: 40,
+                      width: 40,
+                      decoration: BoxDecoration(
+                        color: isParent
+                            ? Colors.purple.withOpacity(0.15)
+                            : (isVisitor
+                                  ? Colors.orange.withOpacity(0.1)
+                                  : _primaryColor.withOpacity(0.1)),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isParent
+                              ? Colors.purple.withOpacity(0.5)
+                              : Colors.transparent,
+                        ),
+                      ),
+                      child: Center(
+                        child: isParent
+                            ? Icon(
+                                CupertinoIcons.star_fill,
+                                color: Colors.purple,
+                                size: 18,
+                              )
+                            : Text(
+                                fullName.isNotEmpty
+                                    ? fullName[0].toUpperCase()
+                                    : "?",
+                                style: TextStyle(
+                                  color: isVisitor
+                                      ? Colors.orange
+                                      : _primaryColor,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 16,
+                                ),
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  fullName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.blueGrey[900],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (isVisitor && isReady) ...[
+                                SizedBox(width: 6),
+                                Icon(
+                                  CupertinoIcons.checkmark_seal_fill,
+                                  color: Colors.green,
+                                  size: 14,
+                                ),
+                              ],
+                            ],
                           ),
-                          if (isVisitor && isReady) ...[
-                            SizedBox(width: 6),
-                            Icon(
-                              CupertinoIcons.checkmark_seal_fill,
-                              color: Colors.green,
-                              size: 14,
+                          if (tagLabel.isNotEmpty) ...[
+                            SizedBox(height: 4),
+                            Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: tagColor,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                tagLabel,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ],
+                          SizedBox(height: 4),
+                          Text(
+                            "$commName | Elder: $elderName",
+                            style: TextStyle(
+                              color: Colors.blueGrey.shade600,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ],
                       ),
-                      if (tagLabel.isNotEmpty) ...[
-                        SizedBox(height: 4),
-                        Container(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: tagColor,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            tagLabel,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                      SizedBox(height: 4),
-                      Text(
-                        "$commName | Elder: $elderName",
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Row(
+                  children: [
+                    Icon(
+                      CupertinoIcons.phone_fill,
+                      size: 14,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        user['phone'] ?? user['email'] ?? 'N/A',
                         style: TextStyle(
-                          color: Colors.blueGrey.shade600,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 2,
-            child: Row(
-              children: [
-                Icon(
-                  CupertinoIcons.phone_fill,
-                  size: 14,
-                  color: Colors.grey.shade400,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    user['phone'] ?? user['email'] ?? 'N/A',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  isPresent ? "PRESENT" : "ABSENT",
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.5,
-                    color: isPresent
-                        ? _primaryColor
-                        : Colors.redAccent.shade200,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                SizedBox(
-                  height: 20,
-                  child: Transform.scale(
-                    scale: 0.8,
-                    alignment: Alignment.center,
-                    child: CupertinoSwitch(
-                      value: isPresent,
-                      activeColor: _primaryColor,
-                      trackColor: Colors.grey.shade300,
-                      onChanged: (val) =>
-                          _toggleUserAttendance(user['ui_id'], val, isVisitor),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: canEdit
-                  ? IconButton(
-                      icon: Icon(
-                        CupertinoIcons.pencil_ellipsis_rectangle,
-                        color: Colors.grey.shade600,
-                        size: 20,
+              ),
+              Expanded(
+                flex: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      isPresent ? "PRESENT" : "ABSENT",
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                        color: isPresent
+                            ? _primaryColor
+                            : Colors.redAccent.shade200,
                       ),
-                      onPressed: () {
-                        showEditMemberDialog(
-                          context,
-                          user,
-                          isVisitor,
-                          widget.neumoColor,
-                          _primaryColor,
-                          _updateMemberDetails,
-                        );
-                      },
-                      tooltip: "Update Record",
-                    )
-                  : const SizedBox.shrink(),
-            ),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 20,
+                      child: Transform.scale(
+                        scale: 0.8,
+                        alignment: Alignment.center,
+                        child: CupertinoSwitch(
+                          value: isPresent,
+                          activeColor: _primaryColor,
+                          trackColor: Colors.grey.shade300,
+                          onChanged: _isEditableDay
+                              ? (val) => _toggleUserAttendance(
+                                  user['ui_id'],
+                                  val,
+                                  isVisitor,
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 1,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: canEdit
+                      ? IconButton(
+                          icon: Icon(
+                            CupertinoIcons.pencil_ellipsis_rectangle,
+                            color: Colors.grey.shade600,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            showEditMemberDialog(
+                              context,
+                              user,
+                              isVisitor,
+                              widget.neumoColor,
+                              _primaryColor,
+                              _updateMemberDetails,
+                            );
+                          },
+                          tooltip: "Update Record",
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
+
+// =========================================================================
+// NEW PAGE: FULL REPORTS VIEW WITH NATIVE FLUTTER GRAPHS & FILTERS
+// =========================================================================

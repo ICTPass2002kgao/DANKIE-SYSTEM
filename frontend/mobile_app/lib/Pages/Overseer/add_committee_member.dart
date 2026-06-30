@@ -365,7 +365,7 @@ The Leadership Team
     final theme = Theme.of(context);
     final Color primaryColor = theme.primaryColor;
     final Color hintColor = theme.hintColor;
-    final Color baseColor = theme.scaffoldBackgroundColor;
+    final Color baseColor = Api().neumoBaseColor(context);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
@@ -401,12 +401,13 @@ The Leadership Team
                           style: TextStyle(fontSize: 12, color: hintColor),
                         ),
                         Text(
-                          "${widget.currentUserName} (${widget.currentUserPortfolio ?? 'Member'})",
+                          "${widget.currentUserName}\n${widget.currentUserPortfolio ?? 'Member'}",
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             color: primaryColor,
                           ),
+                          maxLines: 2,
                         ),
                       ],
                     ),
@@ -438,6 +439,7 @@ The Leadership Team
                       child: NeumorphicContainer(
                         isPressed: true,
                         borderRadius: 12,
+                        color: baseColor,
                         padding: EdgeInsets.zero,
                         child: SizedBox(
                           width: 80,

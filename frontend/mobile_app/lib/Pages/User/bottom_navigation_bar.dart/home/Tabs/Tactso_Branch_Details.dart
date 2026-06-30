@@ -116,10 +116,7 @@ class TactsoBranchDetails extends StatelessWidget {
     final theme = Theme.of(context);
 
     // TINT CALCULATION
-    final Color neumoBaseColor = Color.alphaBlend(
-      theme.primaryColor.withOpacity(0.08),
-      theme.scaffoldBackgroundColor,
-    );
+    final Color neumoBaseColor = Api().neumoBaseColor(context);
 
     final bool hasMultipleCampuses =
         universityDetails['has_multiple_campuses'] ?? false;
@@ -155,8 +152,9 @@ class TactsoBranchDetails extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(15),
                   child: Container(
-                    color:
-                        Colors.white, // Forces a clean background for the logo
+                    color: Api().neumoBaseColor(
+                      context,
+                    ), // Forces a clean background for the logo
                     width: double.infinity,
                     height: 200,
                     padding: EdgeInsets.all(
@@ -397,9 +395,9 @@ class TactsoBranchDetails extends StatelessWidget {
                   }
                 },
                 text: 'Apply for yourself',
-                baseColor: neumoBaseColor,
-                textColor: Colors.white,
-                isPrimary: true, // Colored Button
+                baseColor: Api().neumoBaseColor(context),
+                textColor: theme.primaryColor,
+                isPrimary: false, // Colored Button
               ),
               const SizedBox(height: 15),
               // ASK FOR HELP BUTTON
@@ -442,7 +440,7 @@ class TactsoBranchDetails extends StatelessWidget {
                 text: 'Request for help!',
                 baseColor: neumoBaseColor,
                 textColor: theme.primaryColor,
-                isPrimary: false,
+                isPrimary: true,
               ),
             ] else ...[
               // COMPLETELY DISABLED STATE FOR ALL BUTTONS

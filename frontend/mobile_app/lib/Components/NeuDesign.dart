@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:ttact/Components/API.dart';
 
 class NeumorphicContainer extends StatelessWidget {
   final Widget child;
@@ -22,7 +23,7 @@ class NeumorphicContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseColor = color ?? Theme.of(context).scaffoldBackgroundColor;
+    final baseColor = color ?? Api().neumoBaseColor(context);
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     Color lightShadow = isDark

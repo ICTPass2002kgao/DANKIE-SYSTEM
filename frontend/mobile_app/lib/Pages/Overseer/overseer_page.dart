@@ -8,9 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ttact/Pages/Overseer/subscription_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
+import 'package:ttact/Components/paystack_service.dart';
+import 'package:ttact/Components/PaystackWebView.dart';
+
 import 'package:ttact/Pages/Overseer/constitution.dart';
 import 'package:ttact/Pages/Overseer/dashboard_tab.dart';
 import 'package:ttact/Pages/Overseer/music_contract.dart';
@@ -26,7 +31,6 @@ import 'add_officer_tab.dart';
 import 'reports_tab.dart';
 
 const double _desktopBreakpoint = 1100.0;
-const Color _neumorphicBaseColor = Color(0xFFF0F2F5);
 
 class OverseerPage extends StatefulWidget {
   final String? loggedMemberName;
@@ -113,12 +117,19 @@ class _OverseerPageState extends State<OverseerPage>
       _TabDefinition(
         "Dashboard",
         Icons.dashboard,
-        DashboardTab(
-          isLargeScreen: isLargeScreen,
-          committeeMemberName: committeeMemberName,
-          committeeMemberRole: committeeMemberRole,
-          faceUrl: secureFaceUrl,
-        ),
+        // Inside _getTabs() method, where DashboardTab is created:
+DashboardTab(
+  isLargeScreen: isLargeScreen,
+  committeeMemberName: committeeMemberName,
+  committeeMemberRole: committeeMemberRole,
+  faceUrl: secureFaceUrl,
+  onNavigateToTab: (int tabIndex) {
+    setState(() {
+      _selectedIndex = tabIndex;
+      _tabController.animateTo(tabIndex);
+    });
+  },
+),
       ),
       _TabDefinition(
         "Add Member",
@@ -148,7 +159,7 @@ class _OverseerPageState extends State<OverseerPage>
           loggerName: committeeMemberName,
           loggerRole: committeeMemberRole,
           faceUrl: secureFaceUrl,
-          neumoColor: _neumorphicBaseColor,
+          neumoColor: Api().neumoBaseColor(context),
         ),
       ),
       _TabDefinition(
@@ -245,7 +256,7 @@ class _OverseerPageState extends State<OverseerPage>
               child: Container(
                 padding: const EdgeInsets.all(32.0),
                 decoration: BoxDecoration(
-                  color: _neumorphicBaseColor,
+                  color: Api().neumoBaseColor(context),
                   borderRadius: BorderRadius.circular(24.0),
                   boxShadow: [
                     BoxShadow(
@@ -264,7 +275,7 @@ class _OverseerPageState extends State<OverseerPage>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     NeumorphicContainer(
-                      color: _neumorphicBaseColor,
+                      color: Api().neumoBaseColor(context),
                       borderRadius: 50,
                       padding: const EdgeInsets.all(20),
                       child: Icon(
@@ -306,7 +317,7 @@ class _OverseerPageState extends State<OverseerPage>
                           child: GestureDetector(
                             onTap: () => Navigator.of(context).pop(false),
                             child: NeumorphicContainer(
-                              color: _neumorphicBaseColor,
+                              color: Api().neumoBaseColor(context),
                               borderRadius: 12,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               child: Center(
@@ -440,7 +451,7 @@ class _OverseerPageState extends State<OverseerPage>
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _neumorphicBaseColor,
+        backgroundColor: Api().neumoBaseColor(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: const [
@@ -456,7 +467,7 @@ class _OverseerPageState extends State<OverseerPage>
           ],
         ),
         content: Text(
-          "We noticed you haven't set up your digital signature yet.\n\nPlease navigate to the Signatures tab to enter it now so you can authorize official documents and reports.\nIn simple terms a balancesheet needs you signature as a ${committeeMemberRole} to be valid and official.",
+          "We noticed you haven't set up your digital signature yet.\n\nPlease navigate to the Signatures tab to enter it now so you can authorize official documents and reports.\nIn simple terms a balance sheet needs your signature as a $committeeMemberRole to be valid and official.",
           style: TextStyle(
             color: Colors.grey.shade800,
             height: 1.5,
@@ -466,7 +477,7 @@ class _OverseerPageState extends State<OverseerPage>
         actions: [
           Container(
             decoration: BoxDecoration(
-              color: _neumorphicBaseColor,
+              color: Api().neumoBaseColor(context),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
@@ -513,6 +524,112 @@ class _OverseerPageState extends State<OverseerPage>
     );
   }
 
+  // --- SUBSCRIPTION LOGIC ---
+  Future<int> _getTotalOverseerMemberCount(String overseerUid) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final String? token = await user?.getIdToken();
+      final url = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/users/?overseer_uid=$overseerUid',
+      );
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final List data = json.decode(response.body);
+        return data.length;
+      }
+    } catch (e) {
+      print("Error fetching member count: $e");
+    }
+    return 0;
+  }
+
+  Future<void> _processSubscriptionPayment(
+    String planCode,
+    String overseerId,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.email == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => const Center(child: CircularProgressIndicator()),
+    );
+    try {
+      int memberCount = await _getTotalOverseerMemberCount(overseerId);
+
+      String? authUrl = await PaystackService.initializeSubscription(
+        email: user.email!,
+        planCode: planCode,
+        memberCount: memberCount,
+      );
+
+      if (mounted) Navigator.pop(context); // Close loading
+
+      if (authUrl != null && mounted) {
+        if (kIsWeb) {
+          final Uri url = Uri.parse(authUrl);
+          if (await canLaunchUrl(url)) {
+            await launchUrl(url, mode: LaunchMode.externalApplication);
+          }
+        } else {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PaystackWebView(
+                authUrl: authUrl,
+                onSuccess: () async {
+                  await _handlePaymentSuccess(planCode, overseerId);
+                  if (mounted) Navigator.pop(context); // Close webview
+                  if (mounted)
+                    Navigator.pop(context); // Close Subscription Dialog
+                },
+              ),
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Failed to initialize payment. Please try again."),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      print("Payment Init Error: $e");
+    }
+  }
+
+  Future<void> _handlePaymentSuccess(String planCode, String overseerId) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final String? token = await user?.getIdToken();
+
+      final url = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/overseers/$overseerId/',
+      );
+
+      await http.patch(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode({
+          'subscription_status': 'active',
+          'current_plan': planCode,
+          'last_payment_date': DateTime.now().toIso8601String(),
+        }),
+      );
+    } catch (e) {
+      print("Payment Update Error: $e");
+    }
+  }
+
   Future<void> _initializeProfileData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -551,9 +668,31 @@ class _OverseerPageState extends State<OverseerPage>
         has_agreed_to_privacy = overseerData['has_agreed_to_privacy'] ?? false;
       });
 
+      // ⭐️ CHECK SUBSCRIPTION COMPLIANCE
+      int currentMemberCount = await _getTotalOverseerMemberCount(user.uid);
+      String? requiredPlan = PaystackService.getRequiredPlan(
+        currentMemberCount,
+      );
+      String currentPlan =
+          overseerData['current_plan'] ??
+          overseerData['currentPlan'] ??
+          'free_tier';
+      String status =
+          overseerData['subscription_status'] ??
+          overseerData['subscriptionStatus'] ??
+          'inactive';
+
+      bool isSubscriptionCompliant = true;
+      if (requiredPlan != null) {
+        // if null, it means they are within Free Tier limits
+        if (currentPlan != requiredPlan || status != 'active') {
+          isSubscriptionCompliant = false;
+        }
+      }
+
+      bool isCommitteeMember = false;
       String? faceUrlToCheck =
           widget.faceUrl ?? prefs.getString('session_faceUrl');
-      bool isCommitteeMember = false;
 
       if (faceUrlToCheck != null) {
         final committeeUrl = Uri.parse(
@@ -600,16 +739,25 @@ class _OverseerPageState extends State<OverseerPage>
                 _isLoadingProfile = false;
               });
 
-              // ⭐️ 1. Check if logged-in Committee Member needs to sign
-              bool needsSignature = false;
-              if (_isSignatory) {
-                final sig = memberData['signature_base64'];
-                if (sig == null || sig.toString().trim().isEmpty) {
-                  needsSignature = true;
+              // Show Subscription Enforcement if needed
+              if (!isSubscriptionCompliant) {
+                _triggerSubscriptionEnforcement(
+                  requiredPlan,
+                  currentPlan,
+                  overseerId.toString(),
+                );
+              } else {
+                // Only check signature if subscription is compliant
+                bool needsSignature = false;
+                if (_isSignatory) {
+                  final sig = memberData['signature_base64'];
+                  if (sig == null || sig.toString().trim().isEmpty) {
+                    needsSignature = true;
+                  }
                 }
-              }
-              if (needsSignature && mounted) {
-                _showMissingSignatureAlert();
+                if (needsSignature && mounted) {
+                  _showMissingSignatureAlert();
+                }
               }
             }
           }
@@ -643,36 +791,45 @@ class _OverseerPageState extends State<OverseerPage>
             _isLoadingProfile = false;
           });
 
-          // ⭐️ 2. Check if logged-in Main Overseer needs to sign
-          bool needsSignature = false;
-          if (_isSignatory) {
-            final comRes = await http.get(
-              Uri.parse(
-                '${Api().BACKEND_BASE_URL_DEBUG}/committee_members/?overseer=$overseerId',
-              ),
-              headers: {'Authorization': 'Bearer $token'},
+          // Show Subscription Enforcement if needed
+          if (!isSubscriptionCompliant) {
+            _triggerSubscriptionEnforcement(
+              requiredPlan,
+              currentPlan,
+              overseerId.toString(),
             );
-            if (comRes.statusCode == 200) {
-              final List comData = jsonDecode(comRes.body);
-              bool foundSig = false;
-              for (var m in comData) {
-                if (m['portfolio'] == 'Overseer' ||
-                    m['portfolio'] == 'Main Overseer') {
-                  final sig = m['signature_base64'];
-                  if (sig != null && sig.toString().trim().isNotEmpty) {
-                    foundSig = true;
+          } else {
+            // Only check signature if subscription is compliant
+            bool needsSignature = false;
+            if (_isSignatory) {
+              final comRes = await http.get(
+                Uri.parse(
+                  '${Api().BACKEND_BASE_URL_DEBUG}/committee_members/?overseer=$overseerId',
+                ),
+                headers: {'Authorization': 'Bearer $token'},
+              );
+              if (comRes.statusCode == 200) {
+                final List comData = jsonDecode(comRes.body);
+                bool foundSig = false;
+                for (var m in comData) {
+                  if (m['portfolio'] == 'Overseer' ||
+                      m['portfolio'] == 'Main Overseer') {
+                    final sig = m['signature_base64'];
+                    if (sig != null && sig.toString().trim().isNotEmpty) {
+                      foundSig = true;
+                    }
+                    break;
                   }
-                  break;
                 }
+                needsSignature = !foundSig;
+              } else {
+                needsSignature = true;
               }
-              needsSignature = !foundSig;
-            } else {
-              needsSignature = true;
             }
-          }
 
-          if (needsSignature && mounted) {
-            _showMissingSignatureAlert();
+            if (needsSignature && mounted) {
+              _showMissingSignatureAlert();
+            }
           }
         }
       }
@@ -680,6 +837,39 @@ class _OverseerPageState extends State<OverseerPage>
       print("❌ Error initializing profile: $e");
       if (mounted) setState(() => _isLoadingProfile = false);
     }
+  }
+
+  void _triggerSubscriptionEnforcement(
+    String? requiredPlan,
+    String currentPlan,
+    String overseerId,
+  ) {
+    final now = DateTime.now();
+    bool allowPayLater = true;
+
+    // Check if the free trial month (June 2026) has passed.
+    // If we are in July 2026 or later, standard billing enforcement applies.
+    if (now.year > 2026 || (now.year == 2026 && now.month > 6)) {
+      allowPayLater = now.day <= 5;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: allowPayLater, // Block dismiss if past grace period
+        builder: (context) => SubscriptionPlansScreen(
+          requiredPlanCode: requiredPlan,
+          currentActivePlanCode: currentPlan,
+          allowPayLater: allowPayLater,
+          onPayLater: () {
+            Navigator.pop(context);
+          },
+          onSubscribe: (planCode) {
+            _processSubscriptionPayment(planCode, overseerId);
+          },
+        ),
+      );
+    });
   }
 
   Future<void> _handleLogout() async {
@@ -704,8 +894,8 @@ class _OverseerPageState extends State<OverseerPage>
     final isLargeScreen = width >= _desktopBreakpoint;
 
     if (_isLoadingProfile) {
-      return const Scaffold(
-        backgroundColor: _neumorphicBaseColor,
+      return Scaffold(
+        backgroundColor: Api().neumoBaseColor(context),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -727,7 +917,7 @@ class _OverseerPageState extends State<OverseerPage>
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: _neumorphicBaseColor,
+      backgroundColor: Api().neumoBaseColor(context),
       drawer: !isLargeScreen ? _buildMobileDrawer(context) : null,
       body: SafeArea(
         child: isLargeScreen
@@ -743,7 +933,7 @@ class _OverseerPageState extends State<OverseerPage>
         _buildSidebar(context),
         Expanded(
           child: Container(
-            color: _neumorphicBaseColor,
+            color: Api().neumoBaseColor(context),
             padding: const EdgeInsets.all(24),
             child: _buildBodyContent(true),
           ),
@@ -786,7 +976,7 @@ class _OverseerPageState extends State<OverseerPage>
                 borderRadius: 30,
                 child: CircleAvatar(
                   radius: 18,
-                  backgroundColor: _neumorphicBaseColor,
+                  backgroundColor: Api().neumoBaseColor(context),
                   backgroundImage: secureFaceUrl != null
                       ? NetworkImage(secureFaceUrl)
                       : null,
@@ -811,7 +1001,7 @@ class _OverseerPageState extends State<OverseerPage>
         ),
         Expanded(
           child: Container(
-            color: _neumorphicBaseColor,
+            color: Api().neumoBaseColor(context),
             child: TabBarView(
               controller: _tabController,
               children: tabs.map((t) => t.widget).toList(),
@@ -838,7 +1028,7 @@ class _OverseerPageState extends State<OverseerPage>
           isPressed: isSelected,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           borderRadius: 20,
-          color: _neumorphicBaseColor,
+          color: Api().neumoBaseColor(context),
           child: Center(
             child: Text(
               title,
@@ -875,7 +1065,7 @@ class _OverseerPageState extends State<OverseerPage>
 
     return Container(
       width: 280,
-      color: _neumorphicBaseColor,
+      color: Api().neumoBaseColor(context),
       child: Column(
         children: [
           const SizedBox(height: 20),
@@ -902,7 +1092,7 @@ class _OverseerPageState extends State<OverseerPage>
                     ),
                     child: CircleAvatar(
                       radius: 35,
-                      backgroundColor: _neumorphicBaseColor,
+                      backgroundColor: Api().neumoBaseColor(context),
                       backgroundImage: secureFaceUrl != null
                           ? NetworkImage(secureFaceUrl)
                           : null,
@@ -1002,7 +1192,9 @@ class _OverseerPageState extends State<OverseerPage>
           isPressed: isSelected,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           borderRadius: 12,
-          color: isSelected ? _neumorphicBaseColor : _neumorphicBaseColor,
+          color: isSelected
+              ? Api().neumoBaseColor(context)
+              : Api().neumoBaseColor(context),
           child: Row(
             children: [
               Icon(
@@ -1031,7 +1223,7 @@ class _OverseerPageState extends State<OverseerPage>
         ? _getSecureImageUrl(faceUrl!)
         : null;
     return Drawer(
-      backgroundColor: _neumorphicBaseColor,
+      backgroundColor: Api().neumoBaseColor(context),
       child: ListView(
         padding: EdgeInsets.zero,
         children: [

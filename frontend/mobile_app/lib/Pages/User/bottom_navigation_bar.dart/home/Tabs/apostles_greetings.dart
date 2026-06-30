@@ -83,9 +83,26 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings>
     if (_searchQuery.isEmpty) return _allGreetings;
     final query = _searchQuery.toLowerCase().trim();
     return _allGreetings.where((greeting) {
+      // Search by apostle and year
       final apostle = greeting['apostle'].toString().toLowerCase();
       final year = greeting['year'].toString().toLowerCase();
-      return apostle.contains(query) || year.contains(query);
+      if (apostle.contains(query) || year.contains(query)) return true;
+
+      // Search in all language content (title and message)
+      final contentMap = greeting['content_json'] is String
+          ? jsonDecode(greeting['content_json'])
+          : greeting['content_json'];
+      if (contentMap is Map) {
+        for (final langContent in contentMap.values) {
+          if (langContent is Map) {
+            final title = langContent['title']?.toString().toLowerCase() ?? '';
+            final message =
+                langContent['message']?.toString().toLowerCase() ?? '';
+            if (title.contains(query) || message.contains(query)) return true;
+          }
+        }
+      }
+      return false;
     }).toList();
   }
 
@@ -142,7 +159,7 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings>
                         ),
                         decoration: InputDecoration(
                           border: InputBorder.none,
-                          hintText: 'Search by Apostle or Year...',
+                          hintText: 'Search by Apostle, Year, or Message...',
                           hintStyle: TextStyle(
                             color: theme.hintColor.withOpacity(0.5),
                             fontSize: 14,
@@ -321,23 +338,27 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
   bool _hasLiked = false;
   bool _hasViewed = false;
   bool _isFavorite = false;
+  String _greetingId = '';
 
   @override
   void initState() {
     super.initState();
+    _greetingId = widget.greetingData['id'].toString(); // Ensure string
     _likes = widget.greetingData['likes'] ?? 0;
     _views = widget.greetingData['views'] ?? 0;
-    _checkFavoriteStatus();
+    _loadStatus();
   }
 
-  Future<void> _checkFavoriteStatus() async {
+  Future<void> _loadStatus() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> favs = prefs.getStringList('favorite_greetings') ?? [];
     List<String> liked = prefs.getStringList('liked_greetings') ?? [];
+    List<String> viewed = prefs.getStringList('viewed_greetings') ?? [];
     if (mounted) {
       setState(() {
-        _isFavorite = favs.contains(widget.greetingData['id']);
-        _hasLiked = liked.contains(widget.greetingData['id']);
+        _isFavorite = favs.contains(_greetingId);
+        _hasLiked = liked.contains(_greetingId);
+        _hasViewed = viewed.contains(_greetingId);
       });
     }
   }
@@ -348,22 +369,34 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
     setState(() {
       _isFavorite = !_isFavorite;
       if (_isFavorite) {
-        favs.add(widget.greetingData['id']);
+        favs.add(_greetingId);
       } else {
-        favs.remove(widget.greetingData['id']);
+        favs.remove(_greetingId);
       }
     });
     await prefs.setStringList('favorite_greetings', favs);
   }
 
   Future<void> _registerView() async {
-    if (_hasViewed) return;
-    _hasViewed = true;
+    // Prevent multiple views
+    final prefs = await SharedPreferences.getInstance();
+    List<String> viewed = prefs.getStringList('viewed_greetings') ?? [];
+    if (viewed.contains(_greetingId)) return; // already viewed
+
+    // Update local state
+    setState(() {
+      _hasViewed = true;
+      _views++;
+    });
+    viewed.add(_greetingId);
+    await prefs.setStringList('viewed_greetings', viewed);
+
+    // Send to backend
     try {
       final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken();
       final url = Uri.parse(
-        '${Api().BACKEND_BASE_URL_DEBUG}/apostolic_greetings/${widget.greetingData['id']}/view_greeting/',
+        '${Api().BACKEND_BASE_URL_DEBUG}/apostolic_greetings/${_greetingId}/view_greeting/',
       );
       final response = await http.post(
         url,
@@ -379,20 +412,25 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
   }
 
   Future<void> _toggleLike() async {
+    // Prevent multiple likes
     if (_hasLiked) return;
+
+    // Update local state
     setState(() {
       _hasLiked = true;
       _likes++;
     });
     final prefs = await SharedPreferences.getInstance();
     List<String> liked = prefs.getStringList('liked_greetings') ?? [];
-    liked.add(widget.greetingData['id']);
+    liked.add(_greetingId);
     await prefs.setStringList('liked_greetings', liked);
+
+    // Send like to backend
     try {
       final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken();
       final url = Uri.parse(
-        '${Api().BACKEND_BASE_URL_DEBUG}/apostolic_greetings/${widget.greetingData['id']}/like/',
+        '${Api().BACKEND_BASE_URL_DEBUG}/apostolic_greetings/${_greetingId}/like/',
       );
       final response = await http.post(
         url,
@@ -431,7 +469,7 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
             behavior: HitTestBehavior.opaque,
             onTap: () {
               setState(() => _isExpanded = !_isExpanded);
-              if (_isExpanded) _registerView();
+              if (_isExpanded && !_hasViewed) _registerView();
             },
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,

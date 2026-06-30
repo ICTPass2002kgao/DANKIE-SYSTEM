@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'package:ttact/Pages/Overseer/communities_screen.dart';
+import 'package:ttact/Pages/Overseer/districts_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:ttact/Components/API.dart';
@@ -18,6 +20,7 @@ class DashboardTab extends StatefulWidget {
   final String? committeeMemberName;
   final String? committeeMemberRole;
   final String? faceUrl;
+  final void Function(int tabIndex)? onNavigateToTab; // NEW
 
   const DashboardTab({
     super.key,
@@ -25,8 +28,8 @@ class DashboardTab extends StatefulWidget {
     required this.committeeMemberName,
     required this.committeeMemberRole,
     required this.faceUrl,
+    this.onNavigateToTab, // NEW
   });
-
   @override
   State<DashboardTab> createState() => _DashboardTabState();
 }
@@ -252,7 +255,7 @@ class _DashboardTabState extends State<DashboardTab>
             {
               "price": amount,
               "quantity": 1,
-              "subaccount": "ACCT_1ccy6yrutt98s2j",
+              "subaccount": "ACCT_hvj7wvps74catuq",
             },
           ],
         }),
@@ -278,7 +281,6 @@ class _DashboardTabState extends State<DashboardTab>
           }),
         );
 
-        // ⭐️ Stop loader before redirecting to browser
         Navigator.pop(context);
 
         if (await canLaunchUrl(Uri.parse(paymentUrl))) {
@@ -830,6 +832,9 @@ class _DashboardTabState extends State<DashboardTab>
                       theme.primaryColorLight,
                       _getTotalOverseerMemberCount,
                       width: cardWidth,
+                      onTap: () => widget.onNavigateToTab?.call(
+                        2,
+                      ), // index of AllMembersTab
                     ),
                     _buildStatCard(
                       "Total Districts",
@@ -838,6 +843,18 @@ class _DashboardTabState extends State<DashboardTab>
                       theme.splashColor,
                       _getTotalOverseerDistrictCount,
                       width: cardWidth,
+                     onTap: () {
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => DistrictsScreen(
+        committeeMemberName: widget.committeeMemberName,
+        committeeMemberRole: widget.committeeMemberRole,
+        faceUrl: widget.faceUrl,
+      ),
+    ),
+  );
+},
                     ),
                     _buildStatCard(
                       "Total Branches",
@@ -846,6 +863,14 @@ class _DashboardTabState extends State<DashboardTab>
                       theme.primaryColorDark,
                       _getTotalOverseerBranchCount,
                       width: cardWidth,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CommunitiesScreen(),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 );
@@ -882,8 +907,6 @@ class _DashboardTabState extends State<DashboardTab>
     );
   }
 
-  // --- HELPER WIDGETS ---
-
   Widget _buildStatCard(
     String title,
     IconData icon,
@@ -891,63 +914,67 @@ class _DashboardTabState extends State<DashboardTab>
     Color cardColor,
     Future<int> Function() future, {
     double? width,
+    VoidCallback? onTap, // NEW parameter
   }) {
     return SizedBox(
       width: width,
-      child: FutureBuilder<int>(
-        future: future(),
-        builder: (context, snapshot) {
-          return NeumorphicContainer(
-            borderRadius: 16,
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                NeumorphicContainer(
-                  isPressed: true,
-                  borderRadius: 50,
-                  padding: const EdgeInsets.all(12),
-                  child: Icon(icon, color: iconColor, size: 28),
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+      child: GestureDetector(
+        // NEW wrapper
+        onTap: onTap,
+        child: FutureBuilder<int>(
+          future: future(),
+          builder: (context, snapshot) {
+            return NeumorphicContainer(
+              borderRadius: 16,
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  NeumorphicContainer(
+                    isPressed: true,
+                    borderRadius: 50,
+                    padding: const EdgeInsets.all(12),
+                    child: Icon(icon, color: iconColor, size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    snapshot.connectionState == ConnectionState.waiting
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: iconColor,
+                      const SizedBox(height: 4),
+                      snapshot.connectionState == ConnectionState.waiting
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: iconColor,
+                              ),
+                            )
+                          : Text(
+                              "${snapshot.data ?? 0}",
+                              style: TextStyle(
+                                color: Colors.grey[800],
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          )
-                        : Text(
-                            "${snapshot.data ?? 0}",
-                            style: TextStyle(
-                              color: Colors.grey[800],
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        },
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
-
   // --- CHART BUILDERS ---
 
   Widget _buildTitheBarChart(BuildContext context) {

@@ -4,11 +4,10 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:ttact/Components/LiabraryHelper.dart';
-import 'package:ttact/Components/MusicPlayerSheet.dart';
-import 'package:ttact/main.dart';  
+import 'package:ttact/Components/LiabraryHelper.dart'; 
+import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/music_player.dart';
+import 'package:ttact/main.dart';
 import 'package:ttact/Components/NeuDesign.dart';
-
 
 bool get isIOSPlatform {
   return defaultTargetPlatform == TargetPlatform.iOS ||
@@ -75,7 +74,7 @@ class _LibrarySongsState extends State<LibrarySongs> {
         isScrollControlled: true,
         useSafeArea: true,
         backgroundColor: Colors.transparent,
-        builder: (context) => MusicPlayerSheet(
+        builder: (context) => MusicPlayerPage(
           themeColor: color,
           onDownload: (url, title, artist) {
             print("Download from library: $title");

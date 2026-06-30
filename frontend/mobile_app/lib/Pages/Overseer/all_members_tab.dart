@@ -151,7 +151,7 @@ class _AllMembersTabState extends State<AllMembersTab> {
       isPressed: true,
       borderRadius: 12,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      color: theme.scaffoldBackgroundColor,
+      color: Api().neumoBaseColor(context),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
@@ -173,7 +173,7 @@ class _AllMembersTabState extends State<AllMembersTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final baseColor = theme.scaffoldBackgroundColor;
+    final baseColor = Api().neumoBaseColor(context);
 
     return Column(
       children: [
@@ -577,7 +577,7 @@ class _AllMembersTabState extends State<AllMembersTab> {
 
   Widget _buildFilterSection() {
     final theme = Theme.of(context);
-    final baseColor = theme.scaffoldBackgroundColor;
+    final baseColor = Api().neumoBaseColor(context);
 
     return FutureBuilder<Map<String, dynamic>?>(
       future: _overseerDataFuture,
@@ -794,7 +794,7 @@ class _AllMembersTabState extends State<AllMembersTab> {
                   );
                 } else {
                   if (mounted) Navigator.pop(context);
-                  Api().showMessage( 
+                  Api().showMessage(
                     context,
                     "Update Failed: ${response.statusCode}",
                     "Error",

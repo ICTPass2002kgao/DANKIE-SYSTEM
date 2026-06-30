@@ -32,7 +32,9 @@
         <meta-data 
             android:name="com.google.android.gms.ads.APPLICATION_ID" 
             android:value="ca-app-pub-6759693957212853~5704923982"/>
-
+   <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="AIzaSyDAigV-EJXPZq41U1-K6930yVIvuCv_P9o"/>
         <!-- [FIX 3] Switched back to relative path '.MainActivity' 
              This is safer. Ensure your Kotlin MainActivity extends AudioServiceActivity instead. -->
              <meta-data
@@ -61,8 +63,8 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="dankie.netlify.app" android:pathPrefix="/song" />
-                <data android:scheme="https" android:host="dankie.netlify.app" android:pathPrefix="/career" />
+                <data android:scheme="https" android:host="dankiemobile.org.za" android:pathPrefix="/song" />
+                <data android:scheme="https" android:host="dankiemobile.org.za" android:pathPrefix="/career" />
             </intent-filter>
 
             <intent-filter>

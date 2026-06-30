@@ -548,7 +548,261 @@ class OverseerPdfGenerator {
       Api().showMessage(context, "Export Error: $e", "Error", Colors.red);
     }
   }
+static Future<void> generateGlobalAttendanceReportPDF({
+  required BuildContext context,
+  required DateTime selectedDate,
+  required List<Map<String, dynamic>> overseerDataList,
+  required int overallTotal,
+  required int overallBrothers,
+  required int overallSisters,
+  required int overallParents,
+  required int overallVisitors,
+  required int overallTestifies,
+  required int overallReadyTestifies,
+  Uint8List? signatureBytes,
+  String loggerName = '',
+  String loggerRole = '',
+}) async {
+  try {
+    pw.MemoryImage? localLogoImage;
+    try {
+      final ByteData bytes = await rootBundle.load('assets/tact_logo.PNG');
+      localLogoImage = pw.MemoryImage(bytes.buffer.asUint8List());
+    } catch (_) {}
 
+    final pdf = pw.Document();
+
+    // Group data by province
+    Map<String, List<Map<String, dynamic>>> groupedByProvince = {};
+    for (var entry in overseerDataList) {
+      String province = entry['province'] ?? 'Unknown Province';
+      groupedByProvince.putIfAbsent(province, () => []).add(entry);
+    }
+
+    // Sort provinces alphabetically
+    List<String> provinces = groupedByProvince.keys.toList()..sort();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: pw.EdgeInsets.all(24),
+        build: (pw.Context pdfContext) {
+          List<pw.Widget> pdfContent = [];
+
+          // ---- HEADER ----
+          pdfContent.add(
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                if (localLogoImage != null) pw.Image(localLogoImage, width: 45, height: 45),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Text("TACT GLOBAL ATTENDANCE REPORT",
+                        style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 4),
+                    pw.Text(
+                      "Date: ${DateFormat('dd MMMM yyyy').format(selectedDate)}",
+                      style: pw.TextStyle(fontSize: 12, color: PdfColors.blueGrey700),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(width: 45), // balance space
+              ],
+            ),
+          );
+
+          pdfContent.add(pw.SizedBox(height: 12));
+          pdfContent.add(pw.Divider(thickness: 1, color: PdfColors.grey300));
+          pdfContent.add(pw.SizedBox(height: 6));
+
+          // ---- OVERALL METRICS ----
+          pdfContent.add(
+            pw.Text("OVERALL ATTENDANCE SUMMARY",
+                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+          );
+          pdfContent.add(pw.SizedBox(height: 6));
+
+          // Reuse the dashboard widget to show overall counts
+          pdfContent.add(
+            buildPDFDashboardWidget(
+              totalMembers: overallTotal,
+              presentMembers: overallTotal,  // for present we can show total present (all are present since we filter by attendance)
+              absentMembers: 0,               // not applicable globally
+              totalTestifies: overallTestifies,
+              readyTestifies: overallReadyTestifies,
+              brothersPresent: overallBrothers,
+              brothersTotal: overallBrothers,
+              sistersPresent: overallSisters,
+              sistersTotal: overallSisters,
+            ),
+          );
+
+          // For a global report, we don't have absent numbers, so we'll display brothers/sisters/parents/visitors/testifies totals.
+          // We'll add a small table with the breakdown
+          pdfContent.add(pw.SizedBox(height: 8));
+          pdfContent.add(
+            pw.TableHelper.fromTextArray(
+              border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+              headerDecoration: pw.BoxDecoration(color: PdfColors.blueGrey800),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: PdfColors.white),
+              cellStyle: pw.TextStyle(fontSize: 9),
+              columnWidths: {
+                0: pw.FlexColumnWidth(2),
+                1: pw.FlexColumnWidth(1),
+                2: pw.FlexColumnWidth(1),
+                3: pw.FlexColumnWidth(1),
+                4: pw.FlexColumnWidth(1),
+                5: pw.FlexColumnWidth(1),
+                6: pw.FlexColumnWidth(1),
+              },
+              headers: ['Category', 'Total', 'Brothers', 'Sisters', 'Parents', 'Visitors', 'Testifies (Ready)'],
+              data: [
+                [
+                  'All Attended',
+                  overallTotal.toString(),
+                  overallBrothers.toString(),
+                  overallSisters.toString(),
+                  overallParents.toString(),
+                  overallVisitors.toString(),
+                  '$overallTestifies ($overallReadyTestifies ready)',
+                ],
+              ],
+            ),
+          );
+
+          pdfContent.add(pw.SizedBox(height: 16));
+
+          // ---- DETAILS BY PROVINCE AND OVERSEER ----
+          for (String province in provinces) {
+            List<Map<String, dynamic>> overseersInProvince = groupedByProvince[province]!;
+            // Province totals
+            int provTotal = 0, provBrothers = 0, provSisters = 0, provParents = 0, provVisitors = 0,
+                provTestifies = 0, provReady = 0;
+            for (var o in overseersInProvince) {
+              provTotal += (o['total_present'] as int?) ?? 0;
+              provBrothers += (o['brothers_present'] as int?) ?? 0;
+              provSisters += (o['sisters_present'] as int?) ?? 0;
+              provParents += (o['parents_present'] as int?) ?? 0;
+              provVisitors += (o['visitors_present'] as int?) ?? 0;
+              provTestifies += (o['testifies_present'] as int?) ?? 0;
+              provReady += (o['ready_testifies'] as int?) ?? 0;
+            }
+
+            pdfContent.add(
+              pw.Container(
+                margin: pw.EdgeInsets.only(top: 15, bottom: 5),
+                padding: pw.EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                decoration: pw.BoxDecoration(
+                    color: PdfColors.blueGrey50,
+                    border: pw.Border(left: pw.BorderSide(color: PdfColors.blueGrey800, width: 3))),
+                child: pw.Text(
+                  "${province.toUpperCase()} (${overseersInProvince.length} Overseers)",
+                  style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey900),
+                ),
+              ),
+            );
+
+            // Province summary row
+            pdfContent.add(
+              pw.TableHelper.fromTextArray(
+                border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                headerDecoration: pw.BoxDecoration(color: PdfColors.blueGrey200),
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7, color: PdfColors.black),
+                cellStyle: pw.TextStyle(fontSize: 8),
+                columnWidths: {
+                  0: pw.FlexColumnWidth(2),
+                  1: pw.FlexColumnWidth(1),
+                  2: pw.FlexColumnWidth(1),
+                  3: pw.FlexColumnWidth(1),
+                  4: pw.FlexColumnWidth(1),
+                  5: pw.FlexColumnWidth(1),
+                  6: pw.FlexColumnWidth(1),
+                  7: pw.FlexColumnWidth(1),
+                },
+                headers: [
+                  'Overseer',
+                  'Region',
+                  'Total',
+                  'Brothers',
+                  'Sisters',
+                  'Parents',
+                  'Visitors',
+                  'Testifies (Ready)'
+                ],
+                data: [
+                  // Province totals row
+                  [
+                    'TOTAL',
+                    '',
+                    provTotal.toString(),
+                    provBrothers.toString(),
+                    provSisters.toString(),
+                    provParents.toString(),
+                    provVisitors.toString(),
+                    '$provTestifies ($provReady ready)',
+                  ],
+                  ...overseersInProvince.map((o) {
+                    return [
+                      o['overseer_name'] ?? 'Unknown',
+                      o['region'] ?? 'N/A',
+                      (o['total_present']).toString(),
+                      (o['brothers_present']).toString(),
+                      (o['sisters_present']).toString(),
+                      (o['parents_present']).toString(),
+                      (o['visitors_present']).toString(),
+                      '${o['testifies_present']} (${o['ready_testifies']} ready)',
+                    ];
+                  }).toList(),
+                ],
+              ),
+            );
+            pdfContent.add(pw.SizedBox(height: 10));
+          }
+
+          // ---- FOOTER / SIGNATURE ----
+          pdfContent.add(pw.SizedBox(height: 30));
+          if (signatureBytes != null && loggerName.isNotEmpty) {
+            pdfContent.add(
+              pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Image(pw.MemoryImage(signatureBytes), width: 100, height: 40),
+                    pw.Container(
+                        width: 150, decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(width: 1)))),
+                    pw.SizedBox(height: 4),
+                    pw.Text(loggerName,
+                        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                    pw.SizedBox(height: 2),
+                    pw.Text(loggerRole, style: pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          pdfContent.add(pw.SizedBox(height: 10));
+          pdfContent.add(
+            pw.Text(
+              "Report generated on ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}",
+              style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+            ),
+          );
+
+          return pdfContent;
+        },
+      ),
+    );
+
+    final Uint8List bytes = await pdf.save();
+    final String fileName = 'TACT_GLOBAL_ATTENDANCE_${DateFormat('yyyyMMdd').format(selectedDate)}.pdf';
+    await Printing.sharePdf(bytes: bytes, filename: fileName);
+  } catch (e) {
+    Api().showMessage(context, "Export Error: $e", "Error", Colors.red);
+  }
+}
   static Future<void> exportRegisterToPDF({
     required BuildContext context,
     required String filterType,

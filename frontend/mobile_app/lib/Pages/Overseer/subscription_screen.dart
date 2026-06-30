@@ -7,12 +7,16 @@ import 'package:ttact/Components/NeuDesign.dart';
 class SubscriptionPlansScreen extends StatelessWidget {
   final String? requiredPlanCode; // The plan user MUST have (based on count)
   final String? currentActivePlanCode; // The plan the user CURRENTLY has
+  final bool allowPayLater;
+  final VoidCallback? onPayLater;
   final Function(String planCode) onSubscribe;
 
   const SubscriptionPlansScreen({
     super.key,
     required this.requiredPlanCode,
-    this.currentActivePlanCode, // Make sure to pass this from parent!
+    this.currentActivePlanCode,
+    this.allowPayLater = true,
+    this.onPayLater,
     required this.onSubscribe,
   });
 
@@ -30,152 +34,235 @@ class SubscriptionPlansScreen extends StatelessWidget {
     final String activePlan =
         currentActivePlanCode ?? (isFreeTierActive ? 'free_tier' : '');
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(16),
-      child: NeumorphicContainer(
-        borderRadius: 20,
-        padding: EdgeInsets.zero,
-        color: baseColor,
-        child: Container(
-          width: isDesktop ? 1200 : double.infinity,
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.9,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // --- Header ---
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
-                ),
-                decoration: BoxDecoration(
-                  color: baseColor,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
+    return PopScope(
+      canPop: allowPayLater, // Block device back button if grace period ended
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: NeumorphicContainer(
+          borderRadius: 20,
+          padding: EdgeInsets.zero,
+          color: baseColor,
+          child: Container(
+            width: isDesktop ? 1200 : double.infinity,
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.95,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // --- Header ---
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 20,
                   ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Subscription Plans',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey[800],
-                      ),
+                  decoration: BoxDecoration(
+                    color: baseColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
                     ),
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: NeumorphicContainer(
-                        isPressed: false,
-                        borderRadius: 30,
-                        padding: const EdgeInsets.all(8),
-                        child: const Icon(
-                          Icons.close,
-                          color: Colors.red,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // --- Body ---
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Choose Your Plan',
+                        'Subscription & Billing',
                         style: TextStyle(
-                          fontSize: 24,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: primaryColor,
+                          color: Colors.grey[800],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        requiredPlanCode != null
-                            ? 'You have exceeded the limit of your current plan.'
-                            : 'Select a plan below.',
-                        style: TextStyle(fontSize: 14, color: theme.hintColor),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 30),
-
-                      Wrap(
-                        spacing: 24,
-                        runSpacing: 24,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          _buildPlanCard(
-                            context: context,
-                            planCode: 'free_tier',
-                            title: 'Free Tier',
-                            memberRange: '0 - 49 Members',
-                            price: 'Free',
-                            features: ['Standard generation of balance sheet'],
-                            isRecommended: isFreeTierActive,
-                            isActive: activePlan == 'free_tier',
-                            isDisabled: !isFreeTierActive,
-                            accentColor: Colors.grey,
+                      if (allowPayLater)
+                        GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: NeumorphicContainer(
+                            isPressed: false,
+                            borderRadius: 30,
+                            padding: const EdgeInsets.all(8),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.red,
+                              size: 20,
+                            ),
                           ),
-                          _buildPlanCard(
-                            context: context,
-                            planCode: PaystackService.planTier1,
-                            title: 'Tier 1',
-                            memberRange: '50 - 299 Members',
-                            price: 'R289',
-                            features: [
-                              'Generate a balance sheet of 50-299 members',
-                            ],
-                            isRecommended:
-                                requiredPlanCode == PaystackService.planTier1,
-                            isActive: activePlan == PaystackService.planTier1,
-                            accentColor: const Color(0xFF00C853),
-                          ),
-                          _buildPlanCard(
-                            context: context,
-                            planCode: PaystackService.planTier2,
-                            title: 'Tier 2',
-                            memberRange: '300 - 499 Members',
-                            price: 'R499',
-                            features: [
-                              'Generate a balance sheet of 300-499 members',
-                            ],
-                            isRecommended:
-                                requiredPlanCode == PaystackService.planTier2,
-                            isActive: activePlan == PaystackService.planTier2,
-                            accentColor: const Color(0xFF2962FF),
-                          ),
-                          _buildPlanCard(
-                            context: context,
-                            planCode: PaystackService.planTier3,
-                            title: 'Tier 3',
-                            memberRange: '500+ Members',
-                            price: 'R889',
-                            features: [
-                              'Generate a balance sheet of 500+ members',
-                            ],
-                            isRecommended:
-                                requiredPlanCode == PaystackService.planTier3,
-                            isActive: activePlan == PaystackService.planTier3,
-                            accentColor: const Color(0xFF6200EA),
-                          ),
-                        ],
-                      ),
+                        )
+                      else
+                        // If blocked, show a lock icon instead of close
+                        const Icon(Icons.lock, color: Colors.red, size: 24),
                     ],
                   ),
                 ),
-              ),
-            ],
+
+                // --- Body ---
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      children: [
+                        // Professional Policy Banner
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 24),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: allowPayLater
+                                ? Colors.blue.withOpacity(0.1)
+                                : Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: allowPayLater
+                                  ? Colors.blue.withOpacity(0.3)
+                                  : Colors.red.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                allowPayLater
+                                    ? Icons.info_outline
+                                    : Icons.warning_amber_rounded,
+                                color: allowPayLater
+                                    ? Colors.blue[800]
+                                    : Colors.red[800],
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  allowPayLater
+                                      ? "Trial & Billing Notice: Please note that your official billing cycle commences at month-end. To ensure uninterrupted access to your organizational tools, please activate your required plan by the 5th. Accounts with pending requirements after the 5th will experience restricted access."
+                                      : "Access Restricted: The grace period for your free trial has expired (past the 5th). Please select and activate your required subscription plan below to restore full access to your organizational tools.",
+                                  style: TextStyle(
+                                    color: allowPayLater
+                                        ? Colors.blue[900]
+                                        : Colors.red[900],
+                                    fontSize: 13,
+                                    height: 1.4,
+                                    fontWeight: allowPayLater
+                                        ? FontWeight.w500
+                                        : FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        Text(
+                          'Choose Your Plan',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: primaryColor,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          requiredPlanCode != null
+                              ? 'Your organizational size requires an upgrade to continue.'
+                              : 'Select a plan below.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: theme.hintColor,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 30),
+
+                        Wrap(
+                          spacing: 24,
+                          runSpacing: 24,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            _buildPlanCard(
+                              context: context,
+                              planCode: 'free_tier',
+                              title: 'Free Tier',
+                              memberRange: '0 - 49 Members',
+                              price: 'Free',
+                              features: [
+                                'Standard generation of balance sheet',
+                              ],
+                              isRecommended: isFreeTierActive,
+                              isActive: activePlan == 'free_tier',
+                              isDisabled: !isFreeTierActive,
+                              accentColor: Colors.grey,
+                            ),
+                            _buildPlanCard(
+                              context: context,
+                              planCode: PaystackService.planTier1,
+                              title: 'Tier 1',
+                              memberRange: '50 - 299 Members',
+                              price: 'R289',
+                              features: [
+                                'Generate a balance sheet of 50-299 members',
+                              ],
+                              isRecommended:
+                                  requiredPlanCode == PaystackService.planTier1,
+                              isActive: activePlan == PaystackService.planTier1,
+                              accentColor: const Color(0xFF00C853),
+                            ),
+                            _buildPlanCard(
+                              context: context,
+                              planCode: PaystackService.planTier2,
+                              title: 'Tier 2',
+                              memberRange: '300 - 499 Members',
+                              price: 'R499',
+                              features: [
+                                'Generate a balance sheet of 300-499 members',
+                              ],
+                              isRecommended:
+                                  requiredPlanCode == PaystackService.planTier2,
+                              isActive: activePlan == PaystackService.planTier2,
+                              accentColor: const Color(0xFF2962FF),
+                            ),
+                            _buildPlanCard(
+                              context: context,
+                              planCode: PaystackService.planTier3,
+                              title: 'Tier 3',
+                              memberRange: '500+ Members',
+                              price: 'R889',
+                              features: [
+                                'Generate a balance sheet of 500+ members',
+                              ],
+                              isRecommended:
+                                  requiredPlanCode == PaystackService.planTier3,
+                              isActive: activePlan == PaystackService.planTier3,
+                              accentColor: const Color(0xFF6200EA),
+                            ),
+                          ],
+                        ),
+
+                        // Pay Later Button (Only if within grace period)
+                        if (allowPayLater) ...[
+                          const SizedBox(height: 40),
+                          TextButton(
+                            onPressed: onPayLater,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 16,
+                              ),
+                            ),
+                            child: Text(
+                              "I'll handle this later",
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.bold,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

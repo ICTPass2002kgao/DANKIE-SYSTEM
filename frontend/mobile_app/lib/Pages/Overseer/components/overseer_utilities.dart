@@ -23,6 +23,8 @@ Widget buildSectionHeader(String title, IconData icon, Color primaryColor) {
           letterSpacing: 0.5,
           color: Colors.blueGrey[900],
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     ],
   );
@@ -226,9 +228,7 @@ Widget buildNeuInput(
         decoration: InputDecoration(
           border: InputBorder.none,
           hintText: hint,
-          icon: icon != null
-              ? Icon(icon, color: primaryColor, size: 20)
-              : null,
+          icon: icon != null ? Icon(icon, color: primaryColor, size: 20) : null,
           hintStyle: TextStyle(
             color: Colors.grey.shade500,
             fontWeight: FontWeight.normal,

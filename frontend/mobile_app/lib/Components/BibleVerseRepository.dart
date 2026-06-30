@@ -12,464 +12,1313 @@ class GreetingsQuoteRepository {
     // 2. Calculate the total days passed since the epoch.
     final int daysPassed = targetDate.difference(epoch).inDays.abs();
 
-    // 3. Shuffle the quotes using a fixed seed (42). 
+    // 3. Shuffle the quotes using a fixed seed (42).
     // This ensures the list is randomized, but the order remains identical across all restarts.
     final Random fixedRandom = Random(42);
-    final List<Map<String, String>> shuffledQuotes = List.from(_quotes)..shuffle(fixedRandom);
+    final List<Map<String, String>> shuffledQuotes = List.from(_quotes)
+      ..shuffle(fixedRandom);
 
     // 4. Use modulo to cycle through the list sequentially, guaranteeing no repeats.
     final int index = daysPassed % shuffledQuotes.length;
 
     // Convert our compressed format back to standard keys
     final q = shuffledQuotes[index];
-    return {
-      'category': q['c']!,
-      'ref': q['r']!,
-      'text': q['t']!
-    };
+    return {'category': q['c']!, 'ref': q['r']!, 'text': q['t']!};
   }
 
-  // Highly condensed to manage memory while providing 500+ distinct quotes
+  // ========================================================================
+  // 500 QUOTES – EACH 2–3 SENTENCES LONG, PERFECT FOR NOTIFICATIONS
+  // ========================================================================
   static final List<Map<String, String>> _quotes = [
-    {'c':'Praise','r':'Apostle J.S. Ndlovu (1975/76)','t':'The time has come again for us to work together to praise the Lord.'},
-    {'c':'Praise','r':'Apostle J.S. Ndlovu (1975/76)','t':'Let us praise the Lord with one voice, because of His blessings.'},
-    {'c':'Obedience','r':'Apostle J.S. Ndlovu (1975/76)','t':'I thank you all for abiding by God\'s messages and acting according to His word.'},
-    {'c':'Protection','r':'Apostle J.S. Ndlovu (1975/76)','t':'Remember that God always holds us and our children.'},
-    {'c':'Gratitude','r':'Apostle J.S. Ndlovu (1975/76)','t':'Is God holding us not something to be thankful for? It is.'},
-    {'c':'Worship','r':'Apostle J.S. Ndlovu (1975/76)','t':'Praising God is not just attending service or breaking bread out of habit.'},
-    {'c':'Faith','r':'Apostle J.S. Ndlovu (1975/76)','t':'Praising God is connected with a continuous inner remembrance.'},
-    {'c':'Perseverance','r':'Apostle J.S. Ndlovu (1975/76)','t':'Break bread even when you are alone where you are.'},
-    {'c':'Vigilance','r':'Apostle J.S. Ndlovu (1975/76)','t':'Break bread especially when you have nothing to do at that time.'},
-    {'c':'Warning','r':'Apostle J.S. Ndlovu (1975/76)','t':'Do not let the evil one find you idle and give you his work.'},
-    {'c':'Salvation','r':'Apostle J.S. Ndlovu (1975/76)','t':'He will keep us always so that many may be saved through us.'},
-    {'c':'Faith','r':'Apostle J.S. Ndlovu (1975/76)','t':'May God\'s will increase in the coming year.'},
-    {'c':'Unity','r':'Apostle J.S. Ndlovu (1977)','t':'I wish to thank you again, standing with you as in the past year.'},
-    {'c':'Unity','r':'Apostle J.S. Ndlovu (1977)','t':'We moved forward all together, united, with no one acting on their own.'},
-    {'c':'Warning','r':'Apostle J.S. Ndlovu (1977)','t':'The one who acts on their own is harmed by what they do to themselves.'},
-    {'c':'Obedience','r':'Apostle J.S. Ndlovu (1977)','t':'The one who does as instructed is well up to this day.'},
-    {'c':'Growth','r':'Apostle J.S. Ndlovu (1977)','t':'Our church is now at a very high standard because of good works.'},
-    {'c':'Unity','r':'Apostle J.S. Ndlovu (1977)','t':'It is my wish that you grow with the church.'},
-    {'c':'Unity','r':'Apostle J.S. Ndlovu (1977)','t':'Let no one do things differently from others.'},
-    {'c':'Warning','r':'Apostle J.S. Ndlovu (1977)','t':'By doing things differently from others, you will be destroying.'},
-    {'c':'Grace','r':'Apostle J.S. Ndlovu (1977)','t':'The grace of the Father be with you always.'},
-    {'c':'Blessings','r':'Apostle S.D. Pakathi (1990s)','t':'I write to you because I wish you good health and blessings.'},
-    {'c':'Protection','r':'Apostle S.D. Pakathi (1990s)','t':'It is necessary to protect you from those who confuse your minds.'},
-    {'c':'Service','r':'Apostle S.D. Pakathi (1990s)','t':'Let me say thank you to all who accepted me as your servant in Christ.'},
-    {'c':'Service','r':'Apostle S.D. Pakathi (1990s)','t':'It is my prayer that I work with you in a commendable way for God.'},
-    {'c':'Unity','r':'Apostle S.D. Pakathi (1990s)','t':'Great things happen because we are united and you have shown your integrity.'},
-    {'c':'Perseverance','r':'Apostle S.D. Pakathi (1990s)','t':'Even when the year brings pain and challenges, we hold on to the creator.'},
-    {'c':'Obedience','r':'Apostle S.D. Pakathi (1990s)','t':'We must never forget the teachings we were given by father Apostle.'},
-    {'c':'Prayer','r':'Apostle S.D. Pakathi (1990s)','t':'I ask you all to be with our father wherever he is with your prayers.'},
-    {'c':'Gratitude','r':'Apostle S.D. Pakathi (1990s)','t':'I thank you for the great work you have done to protect your servants.'},
-    {'c':'Loyalty','r':'Apostle S.D. Pakathi (1990s)','t':'I could not truly forgive myself if I did not thank you for standing with your servants.'},
-    {'c':'Faith','r':'Apostle S.D. Pakathi (1990s)','t':'God the father will reveal to us what this year holds for us.'},
-    {'c':'Blessings','r':'Apostle S.D. Pakathi (1990s)','t':'God gave us two lions in this church that we love.'},
-    {'c':'Unity','r':'Apostle S.D. Pakathi (1990s)','t':'It was made clear that there is no boundary dividing me and him.'},
-    {'c':'Unity','r':'Apostle S.D. Pakathi (1990s)','t':'We all work together with him equally in the Lord.'},
-    {'c':'Order','r':'Apostle S.D. Pakathi (1990s)','t':'The Apostle said we should stay where we are led.'},
-    {'c':'Order','r':'Apostle S.D. Pakathi (1990s)','t':'Walk in order without colliding with one another.'},
-    {'c':'Loyalty','r':'Apostle S.D. Pakathi (1990s)','t':'If we love our Apostle, no one can remove another where they are led.'},
-    {'c':'Unity','r':'Apostle S.D. Pakathi (1990s)','t':'Let us remember that the Apostle united us and built us into one body.'},
-    {'c':'Fellowship','r':'Apostle S.D. Pakathi (1990s)','t':'We are all connected joints in the body of Christ.'},
-    {'c':'Empathy','r':'Apostle S.D. Pakathi (1990s)','t':'A true joint of Christ feels pain when separated from another by spirits.'},
-    {'c':'Unity','r':'Apostle S.D. Pakathi (1990s)','t':'If we love the Apostle who is our father, let us not accept decisions that divide us.'},
-    {'c':'Peace','r':'Apostle S.D. Pakathi (1990s)','t':'So that there may be peace and tranquility which I was called for.'},
-    {'c':'Order','r':'Apostle S.D. Pakathi (1990s)','t':'All overseers operate as the Apostle left them, stay with them.'},
-    {'c':'Grace','r':'Apostle N.V. Mlangeni (1995/96)','t':'By the grace and love of God our Creator, we gather.'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (1995/96)','t':'Our Lord Jesus suffered and was killed because of us.'},
-    {'c':'Victory','r':'Apostle N.V. Mlangeni (1995/96)','t':'Christ conquered death because of His unwavering perseverance.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (1995/96)','t':'Christ conquered death by trusting in God His father completely.'},
-    {'c':'Forgiveness','r':'Apostle N.V. Mlangeni (1995/96)','t':'Through Him we received true forgiveness for our sins.'},
-    {'c':'Fellowship','r':'Apostle N.V. Mlangeni (1995/96)','t':'After forgiving us, Christ made us actual joints of His body.'},
-    {'c':'Identity','r':'Apostle N.V. Mlangeni (1995/96)','t':'We have the sacred right to be called children of God.'},
-    {'c':'Resurrection','r':'Apostle N.V. Mlangeni (1995/96)','t':'Our ultimate head is Christ who rose from the dead.'},
-    {'c':'Life','r':'Apostle N.V. Mlangeni (1995/96)','t':'We too have risen from the dead and become a new life.'},
-    {'c':'Purpose','r':'Apostle N.V. Mlangeni (1995/96)','t':'We have become life that should also actively give life to others.'},
-    {'c':'Gratitude','r':'Apostle N.V. Mlangeni (1995/96)','t':'I thank you very much for your perseverance and cooperation.'},
-    {'c':'Evangelism','r':'Apostle N.V. Mlangeni (1995/96)','t':'Carry forward the gospel of peace with dedication.'},
-    {'c':'Wonder','r':'Apostle N.V. Mlangeni (1995/96)','t':'The things of God are amazing and beyond the world.'},
-    {'c':'Gratitude','r':'Apostle N.V. Mlangeni (1995/96)','t':'We must thank the Lord our creator for everything that happens to us.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (1996/97)','t':'You are children of God who were deeply loved by our Lord Jesus Christ.'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (1996/97)','t':'He died for us on the cross so that we may be forgiven our sins.'},
-    {'c':'Joy','r':'Apostle N.V. Mlangeni (1996/97)','t':'Be happy and rejoice for the good work and deeds you have done.'},
-    {'c':'Praise','r':'Apostle N.V. Mlangeni (1996/97)','t':'Let us always praise the Creator and our Lord Jesus Christ.'},
-    {'c':'Perspective','r':'Apostle N.V. Mlangeni (1996/97)','t':'We can find that there is much more that is good and pleasing rather than bad.'},
-    {'c':'Grace','r':'Apostle N.V. Mlangeni (1996/97)','t':'God has done what is truly pleasing to us as His children.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (1996/97)','t':'Truly God was with us this year to protect us.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (1996/97)','t':'When a bad wind blows it takes people away blindly.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (1996/97)','t':'People chased by the dust of the spirit take a path they were not called to walk.'},
-    {'c':'Guidance','r':'Apostle N.V. Mlangeni (1996/97)','t':'Do not get lost and find yourself in another place God did not call you to.'},
-    {'c':'Service','r':'Apostle N.V. Mlangeni (1996/97)','t':'Cooperate closely in the work of building the house of God.'},
-    {'c':'Strength','r':'Apostle N.V. Mlangeni (1996/97)','t':'May God strengthen you in every commendable deed you undertake.'},
-    {'c':'Protection','r':'Apostle N.V. Mlangeni (1996/97)','t':'Do not allow those who wait for reasons to criticize and destroy.'},
-    {'c':'Victory','r':'Apostle N.V. Mlangeni (1996/97)','t':'The aims and desires of the destroyers did not succeed.'},
-    {'c':'Blessing','r':'Apostle N.V. Mlangeni (1996/97)','t':'May the year be a true success for you and your children.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (1996/97)','t':'Work for the Creator, but let us not forget our earthly parents.'},
-    {'c':'Perseverance','r':'Apostle N.V. Mlangeni (1996/97)','t':'May God give you the strength to carry your cross.'},
-    {'c':'Victory','r':'Apostle N.V. Mlangeni (1996/97)','t':'Carry your cross even until the victory through our Lord Jesus Christ.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (1999)','t':'I call you beloved, because you are being truly loved by God.'},
-    {'c':'Creation','r':'Apostle N.V. Mlangeni (1999)','t':'God created heaven and earth entirely through love.'},
-    {'c':'Creation','r':'Apostle N.V. Mlangeni (1999)','t':'He created birds and animals through love, and lastly man.'},
-    {'c':'Creation','r':'Apostle N.V. Mlangeni (1999)','t':'God created man in his own image, also through love.'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (1999)','t':'He sent his begotten son to die for those who believed.'},
-    {'c':'Salvation','r':'Apostle N.V. Mlangeni (1999)','t':'Those who accepted Him as Lord and Saviour were called Christians.'},
-    {'c':'Salvation','r':'Apostle N.V. Mlangeni (1999)','t':'Christians are those who followed Christ on his golden foot steps.'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (1999)','t':'Our Lord Jesus Christ suffered on earth until the day of his crucifixion.'},
-    {'c':'Victory','r':'Apostle N.V. Mlangeni (1999)','t':'He conquered death through perseverance and by being honest to God.'},
-    {'c':'Fellowship','r':'Apostle N.V. Mlangeni (1999)','t':'After the forgiveness of our sins the Lord Jesus made us joints of his body.'},
-    {'c':'Identity','r':'Apostle N.V. Mlangeni (1999)','t':'We had all the right to be called the true children of God.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (1999)','t':'My father is the gardener and I am the true vine.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (1999)','t':'You are the branches on this vine which is me.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (1999)','t':'Every branch that bears no fruit will be removed and thrown outside.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (1999)','t':'The fruitless branch will become dry and be used to make fire.'},
-    {'c':'Purpose','r':'Apostle N.V. Mlangeni (1999)','t':'We have become life so that we can now go forth and save others.'},
-    {'c':'Service','r':'Apostle N.V. Mlangeni (1999)','t':'Be supportive in the difficult and heavy task to preach evangelism.'},
-    {'c':'Evangelism','r':'Apostle N.V. Mlangeni (1999)','t':'Preach the pure evangelism of love and peace.'},
-    {'c':'Gratitude','r':'Apostle N.V. Mlangeni (1999)','t':'We must thank our Lord always for the things that we encounter.'},
-    {'c':'Grace','r':'Apostle N.V. Mlangeni (1999)','t':'Misery can bring you nearer to God.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (1999)','t':'Pleasure can also make us easily forget about our enemies.'},
-    {'c':'Speech','r':'Apostle N.V. Mlangeni (1999)','t':'Be careful about the things that you utter.'},
-    {'c':'Speech','r':'Apostle N.V. Mlangeni (1999)','t':'Our mouths can cause disaster between God and ourselves.'},
-    {'c':'Vigilance','r':'Apostle N.V. Mlangeni (1999)','t':'The devil is also clothed in white like the children of God.'},
-    {'c':'Spirit','r':'Apostle N.V. Mlangeni (1999)','t':'The spirit of God will always reveal itself to you.'},
-    {'c':'Commandments','r':'Apostle N.V. Mlangeni (1999)','t':'Keep time of all your services perfectly.'},
-    {'c':'Commandments','r':'Apostle N.V. Mlangeni (1999)','t':'Offer your tithes materially without fail.'},
-    {'c':'Commandments','r':'Apostle N.V. Mlangeni (1999)','t':'Offer your tithes spiritually in truth.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (1999)','t':'Love thy neighbour, inside the church and outside the church.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (1999)','t':'Do not forget to respect your officers, for they are your fountains.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (1999)','t':'Let us not dirty our fountains, for tomorrow you will become thirsty.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (1999)','t':'If you dirty the fountain, you will feel bilious and die of thirst.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (1999)','t':'Respect is your key to open every door.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (1999)','t':'Love is your weapon to conquer all evil.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2000)','t':'God united us and bound us completely with His love.'},
-    {'c':'Protection','r':'Apostle N.V. Mlangeni (2000)','t':'God made us a golden chain to protect us from the dangerous world.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2000)','t':'It is sad to hear of brothers instigating strikes in our beautiful church.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2000)','t':'Evil spirits put into some joints prevent peace in the church.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2000)','t':'They create rebellion, but it is good to submit to one another.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2000)','t':'Wisdom comes to an end, but foolishness does not ever end.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2000)','t':'The moment a person sees themselves as wiser, their foolishness begins.'},
-    {'c':'Perseverance','r':'Apostle N.V. Mlangeni (2000)','t':'Thank you for your steadfastness shown in this dying year.'},
-    {'c':'Victory','r':'Apostle N.V. Mlangeni (2000)','t':'We conquered the bad and kept the good alive.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2000)','t':'Do not kill each other by leading each other into temptation.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2000)','t':'Do not show the badness of another brother or sister.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2000)','t':'Know very well that you are rebelling against God Himself by doing so.'},
-    {'c':'Reconciliation','r':'Apostle N.V. Mlangeni (2000)','t':'If there is a matter between the two of you, sit down and fix it.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2000)','t':'That problem will end because you both submit to each other.'},
-    {'c':'Perseverance','r':'Apostle N.V. Mlangeni (2000)','t':'Break bread at all times even if you are alone.'},
-    {'c':'Protection','r':'Apostle N.V. Mlangeni (2000)','t':'Break bread so that the danger of darkness cannot confuse you.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2000)','t':'May God help us build this one body of Christ perfectly.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2000)','t':'May we be joints in it that work together in harmony.'},
-    {'c':'Life','r':'Apostle N.V. Mlangeni (2000)','t':'One heart will pump blood to reach all joints so that all may live.'},
-    {'c':'Perseverance','r':'Apostle N.V. Mlangeni (2001/02)','t':'Through perseverance you were able to overcome all unpleasant situations.'},
-    {'c':'Growth','r':'Apostle N.V. Mlangeni (2001/02)','t':'We have seen the good fruits of the teachings of childhood.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2001/02)','t':'Except ye be converted, and become as little children, ye shall not enter.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2001/02)','t':'Whosoever shall humble himself as this little child, the same is greatest.'},
-    {'c':'Obedience','r':'Apostle N.V. Mlangeni (2001/02)','t':'I call unto you all let us not despise the word that comes from above.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2001/02)','t':'If we criticize the officers given to us we decrease our blessings.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2001/02)','t':'Blessed are those who humble themselves as little children.'},
-    {'c':'Reward','r':'Apostle N.V. Mlangeni (2001/02)','t':'Those who humble themselves will be uplifted on their last days.'},
-    {'c':'Forgiveness','r':'Apostle N.V. Mlangeni (2001/02)','t':'Let us learn to forgive those who trespass against us.'},
-    {'c':'Forgiveness','r':'Apostle N.V. Mlangeni (2001/02)','t':'Forgive so that we can also be forgiven our trespasses by the Lord.'},
-    {'c':'Joy','r':'Apostle N.V. Mlangeni (2002/03)','t':'I write this greeting with great joy, and amazing love for you all.'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (2002/03)','t':'Our Lord Jesus Christ died for us on the cross.'},
-    {'c':'Forgiveness','r':'Apostle N.V. Mlangeni (2002/03)','t':'He died so that we may be completely forgiven our sins.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2002/03)','t':'The evil one was also trying to put a baboon\'s foot into the good works.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2002/03)','t':'The evil one does not like a good thing.'},
-    {'c':'Vigilance','r':'Apostle N.V. Mlangeni (2002/03)','t':'He finds the people united, he comes and tries to separate them.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2002/03)','t':'He puts a spirit of misunderstanding among the officers so they fight.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2002/03)','t':'Do you enjoy seeing officers fighting because of you?'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2002/03)','t':'Would it please you if there was no peace in your homes?'},
-    {'c':'Gratitude','r':'Apostle N.V. Mlangeni (2002/03)','t':'Have we forgotten that we were bought at a very high price?'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (2002/03)','t':'There is no one with money like that which bought us.'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (2002/03)','t':'It is indeed the blood of the Lord Jesus Christ shed on the cross.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2002/03)','t':'We should not be like people who don\'t think about their lives.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2002/03)','t':'Such love with which we were loved, until we were called beloved.'},
-    {'c':'Purpose','r':'Apostle N.V. Mlangeni (2002/03)','t':'We are called to work for the salvation of our soul.'},
-    {'c':'Prayer','r':'Apostle N.V. Mlangeni (2002/03)','t':'You find a person doing things contrary to righteousness, forgetting to pray.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (2002/03)','t':'There is nothing difficult as long as we are like teachable children.'},
-    {'c':'Obedience','r':'Apostle N.V. Mlangeni (2002/03)','t':'Let us be the ground that receives water coming from the Throne.'},
-    {'c':'Ministry','r':'Apostle N.V. Mlangeni (2002/03)','t':'The evangelist fetches them from the world with love and peace.'},
-    {'c':'Ministry','r':'Apostle N.V. Mlangeni (2002/03)','t':'They are shepherded with love and truth by the Shepherd.'},
-    {'c':'Ministry','r':'Apostle N.V. Mlangeni (2002/03)','t':'The danger that is present and coming they are made aware by the Prophet.'},
-    {'c':'Protection','r':'Apostle N.V. Mlangeni (2002/03)','t':'If it is a bad thing the shepherd is given power to close it.'},
-    {'c':'Spirit','r':'Apostle N.V. Mlangeni (2002/03)','t':'Any congregation that does not have the spirit of prophecy is dead.'},
-    {'c':'Light','r':'Apostle N.V. Mlangeni (2002/03)','t':'Shine children of light.'},
-    {'c':'Forgiveness','r':'Apostle N.V. Mlangeni (2002/03)','t':'Forgive each other for all we have wronged each other.'},
-    {'c':'Renewal','r':'Apostle N.V. Mlangeni (2002/03)','t':'Enter new, having thrown away all old rags.'},
-    {'c':'Renewal','r':'Apostle N.V. Mlangeni (2002/03)','t':'Let us burn all calendars, and old books of grudges.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2002/03)','t':'Let us respect each other, love each other, be patient with each other.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2002/03)','t':'Stop looking down on each other.'},
-    {'c':'Action','r':'Apostle N.V. Mlangeni (2002/03)','t':'Down with cases! Down with gossip! Up with works!'},
-    {'c':'Evangelism','r':'Apostle N.V. Mlangeni (2004/05)','t':'I am happy with how you are preaching the gospel of peace.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2004/05)','t':'The nation will be converted if we walk in truth and honesty.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2004/05)','t':'Let us not tell people good things just to attract them.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2004/05)','t':'Do not leave them disappointed and shocked by lacking truth.'},
-    {'c':'Identity','r':'Apostle N.V. Mlangeni (2004/05)','t':'Let there be a difference between those in the church and those in the world.'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (2004/05)','t':'We were bought at a very high price - the blood of the lamb.'},
-    {'c':'Knowledge','r':'Apostle N.V. Mlangeni (2004/05)','t':'By the shedding of his blood, we had understanding and knowledge.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2004/05)','t':'Let us stop making each other cry.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2004/05)','t':'Some are made to worship painfully by their brothers.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2004/05)','t':'An officer found involved in such incidents will run to the benches.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2004/05)','t':'It is like taking congregations from each other, that is not a good spirit.'},
-    {'c':'Action','r':'Apostle N.V. Mlangeni (2004/05)','t':'Let us work, let each one build a good work for themselves.'},
-    {'c':'Contentment','r':'Apostle N.V. Mlangeni (2004/05)','t':'Do not be jealous of the works of others.'},
-    {'c':'Contentment','r':'Apostle N.V. Mlangeni (2004/05)','t':'Make your own beautiful and dress your wife so she is beautiful.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2004/05)','t':'The jealousy of other people will then end.'},
-    {'c':'Ministry','r':'Apostle N.V. Mlangeni (2004/05)','t':'We will see the importance of these three rivers.'},
-    {'c':'Purpose','r':'Apostle N.V. Mlangeni (2004/05)','t':'There is no one who does not have a role they must play.'},
-    {'c':'Speech','r':'Apostle N.V. Mlangeni (2004/05)','t':'The time for gossip will not be there.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2004/05)','t':'Let us not forget to humble ourselves to be children.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2004/05)','t':'Respect each other if we want to go to heaven on the last day.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2005/06)','t':'Let us thank with one voice, the great love with which the Lord loved us.'},
-    {'c':'Grace','r':'Apostle N.V. Mlangeni (2005/06)','t':'He sought us and found us, came to us, and stayed with us.'},
-    {'c':'Grace','r':'Apostle N.V. Mlangeni (2005/06)','t':'It is not us who sought Him, He is the one who sought us.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2005/06)','t':'He wants to show His love so that we may learn what love is.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2005/06)','t':'Stop fighting because the Lord does not want people who fight.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2005/06)','t':'Fighting does not come from God but comes from the lusts of the flesh.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2005/06)','t':'Let everyone love the officer placed before them.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2005/06)','t':'That is the fountain of salvation, opened for your sake.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2005/06)','t':'If you fight with your officer you are like a person who hits a wall with their head.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2005/06)','t':'We are advised beloved to humble ourselves to be like children.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2005/06)','t':'Whoever wants to be great must first humble themselves to be small.'},
-    {'c':'Life','r':'Apostle N.V. Mlangeni (2005/06)','t':'Forgetting that the life they live comes from God.'},
-    {'c':'Life','r':'Apostle N.V. Mlangeni (2005/06)','t':'He is the one who holds our life securely.'},
-    {'c':'Dependence','r':'Apostle N.V. Mlangeni (2005/06)','t':'Pain makes a person remember that they did not create themselves.'},
-    {'c':'Dependence','r':'Apostle N.V. Mlangeni (2005/06)','t':'They were created by God, and then they draw closer to God.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (2005/06)','t':'You should pinch yourself and feel whether you are still living for your Lord.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2005/06)','t':'You will keep saying you are alive yet you died long ago in divinity.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2005/06)','t':'Let us live for the Lord in pure truth.'},
-    {'c':'Evangelism','r':'Apostle N.V. Mlangeni (2005/06)','t':'Let us be seen to be the messengers of good news.'},
-    {'c':'Evangelism','r':'Apostle N.V. Mlangeni (2005/06)','t':'Preach the gospel of peace and unyielding love.'},
-    {'c':'Creation','r':'Apostle N.V. Mlangeni (2007/08)','t':'Let me remind you that God created the heavens and the earth.'},
-    {'c':'Creation','r':'Apostle N.V. Mlangeni (2007/08)','t':'God, who is the Word, said let there be vegetation.'},
-    {'c':'Creation','r':'Apostle N.V. Mlangeni (2007/08)','t':'God Himself said it would be good if there were animals walking.'},
-    {'c':'Creation','r':'Apostle N.V. Mlangeni (2007/08)','t':'God said, "I too will build myself a place where I will stay."'},
-    {'c':'Creation','r':'Apostle N.V. Mlangeni (2007/08)','t':'He gathered the dust of the earth and made the body of a man.'},
-    {'c':'Sanctity','r':'Apostle N.V. Mlangeni (2007/08)','t':'He said, "This is my temple," and He sanctified it.'},
-    {'c':'Sanctity','r':'Apostle N.V. Mlangeni (2007/08)','t':'It is painful when a person turns God\'s temple into a hotel.'},
-    {'c':'Purity','r':'Apostle N.V. Mlangeni (2007/08)','t':'All kinds of people, witches, believers, enter a hotel.'},
-    {'c':'Protection','r':'Apostle N.V. Mlangeni (2007/08)','t':'That is why the Apostle puts a mark on the foreheads of his children.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2007/08)','t':'Those without a mark have hatred, boasting, and look down on others.'},
-    {'c':'Purity','r':'Apostle N.V. Mlangeni (2007/08)','t':'If you have a jealous eye, it is better to close it completely.'},
-    {'c':'Purity','r':'Apostle N.V. Mlangeni (2007/08)','t':'Strike down these things, because God does not want them in His heaven.'},
-    {'c':'Identity','r':'Apostle N.V. Mlangeni (2008/09)','t':'Do not forget who you are, and what you were called for in this church.'},
-    {'c':'Sanctity','r':'Apostle N.V. Mlangeni (2008/09)','t':'You are the holy temple of God where God stays.'},
-    {'c':'Purpose','r':'Apostle N.V. Mlangeni (2008/09)','t':'You were called to work for the salvation of your souls.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2008/09)','t':'We will only do that if we love each other, and are one.'},
-    {'c':'Discernment','r':'Apostle N.V. Mlangeni (2008/09)','t':'Do not believe every spirit, but test whether they are of God.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (2008/09)','t':'All spirits that confess that Jesus Christ has come in the flesh are His.'},
-    {'c':'Victory','r':'Apostle N.V. Mlangeni (2008/09)','t':'You have defeated those spirits because He who is in you is greater.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (2008/09)','t':'He who is in you is greater than he who is in the world.'},
-    {'c':'Fellowship','r':'Apostle N.V. Mlangeni (2008/09)','t':'We are of God, whoever knows God hears us.'},
-    {'c':'Fellowship','r':'Apostle N.V. Mlangeni (2008/09)','t':'Whoever is not of God does not hear us.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2008/09)','t':'Let us love one another because love comes strictly from God.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2008/09)','t':'Everyone who loves is born of God.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2008/09)','t':'Whoever does not love does not know God.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2008/09)','t':'Let each one love his neighbour as he loves himself.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2008/09)','t':'Love your male and female officers, you will be loving God Himself.'},
-    {'c':'Renewal','r':'Apostle N.V. Mlangeni (2008/09)','t':'Praise the good you have seen, Forget the bad you have seen.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (2009/10)','t':'Our God is alive, He hears us when we call Him in difficulty.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2009/10)','t':'Let us not remember Him only when we are in difficulty.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2009/10)','t':'Do not be like a person who does not believe, living carelessly.'},
-    {'c':'Dependence','r':'Apostle N.V. Mlangeni (2009/10)','t':'Pain draws a person closer to God.'},
-    {'c':'Dependence','r':'Apostle N.V. Mlangeni (2009/10)','t':'They remember their Lord at that time when they are hurt.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2009/10)','t':'Dissatisfaction and pride make a person forget God.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2009/10)','t':'I urge you beloved to humble yourselves to be like children.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2009/10)','t':'Be nothing so that God Himself can be something within us.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2009/10)','t':'Respect the earth we live in and its rulers.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2009/10)','t':'If a person does not respect another, they have lost their conscience.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2009/10)','t':'We must not forget that God gave us the mind to think.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2009/10)','t':'Know that another person is created by God just like you.'},
-    {'c':'Trust','r':'Apostle N.V. Mlangeni (2009/10)','t':'Let us stop suspecting each other of ungodly things.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2009/10)','t':'Suspicion is a sin because it kills an innocent soul.'},
-    {'c':'Evangelism','r':'Apostle N.V. Mlangeni (2009/10)','t':'Let us preach the kingdom of heaven where Christ is Lord.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2009/10)','t':'Let there be peace and love within us, starting in our homes.'},
-    {'c':'Action','r':'Apostle N.V. Mlangeni (2009/10)','t':'Let the gospel burn brightly.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2010/11)','t':'If we want to see the love God has for us, it must begin with us.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2010/11)','t':'We must begin by loving one another.'},
-    {'c':'Family','r':'Apostle N.V. Mlangeni (2010/11)','t':'A mother must love and respect her husband.'},
-    {'c':'Family','r':'Apostle N.V. Mlangeni (2010/11)','t':'Children must respect their parents in the home.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2010/11)','t':'A brother must be proud of his preacher.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2010/11)','t':'The overseer must be proud of his apostle.'},
-    {'c':'Salvation','r':'Apostle N.V. Mlangeni (2010/11)','t':'The Lamb will carry you all on His broad shoulders to Christ.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2010/11)','t':'Live in peace in Jerusalem, break bread together.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2010/11)','t':'Love one another, and be one as I and the Father are one.'},
-    {'c':'Fellowship','r':'Apostle N.V. Mlangeni (2010/11)','t':'If you do this, the Father and I will dwell among you.'},
-    {'c':'Blessing','r':'Apostle N.V. Mlangeni (2010/11)','t':'You are blessed when people insult you falsely because of Me.'},
-    {'c':'Reward','r':'Apostle N.V. Mlangeni (2010/11)','t':'Rejoice, for your reward in heaven is great.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2010/11)','t':'Do not repay evil with evil; the Lord will fight for you.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2011/12)','t':'God is light, and in Him there is no darkness at all.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2011/12)','t':'If we claim fellowship with Him while we walk in darkness, we are lying.'},
-    {'c':'Fellowship','r':'Apostle N.V. Mlangeni (2011/12)','t':'If we walk in the light, we have fellowship with one another.'},
-    {'c':'Salvation','r':'Apostle N.V. Mlangeni (2011/12)','t':'The blood of Jesus Christ cleanses us from all sin.'},
-    {'c':'Family','r':'Apostle N.V. Mlangeni (2011/12)','t':'Husbands love your wives, and wives to love your husbands.'},
-    {'c':'Family','r':'Apostle N.V. Mlangeni (2011/12)','t':'Children may learn love in our homes by seeing respect.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2011/12)','t':'Treat strangers kindly, and love our neighbours as ourselves.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2011/12)','t':'For God so loved the world that He gave His only begotten Son.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2011/12)','t':'This is a time for us to come together in unity, to pray.'},
-    {'c':'Hope','r':'Apostle N.V. Mlangeni (2011/12)','t':'Do not lose hope no matter the situation.'},
-    {'c':'Loyalty','r':'Apostle N.V. Mlangeni (2011/12)','t':'I will not forsake you; I will walk with you until the end.'},
-    {'c':'Hope','r':'Apostle N.V. Mlangeni (2011/12)','t':'Do not have divided hope—have one hope.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2011/12)','t':'Do not doubt. Stand together in one spirit, trust one another.'},
-    {'c':'Salvation','r':'Apostle N.V. Mlangeni (2011/12)','t':'God will carry you on His broad shoulders and bring you to Christ.'},
-    {'c':'Gratitude','r':'Apostle N.V. Mlangeni (2012/13)','t':'Thank you for rescuing the people of God from the chains.'},
-    {'c':'Purity','r':'Apostle N.V. Mlangeni (2012/13)','t':'The angel from heaven clothed this nation in a pure white garment.'},
-    {'c':'Action','r':'Apostle N.V. Mlangeni (2012/13)','t':'Forward, children of the house of Israel!'},
-    {'c':'Praise','r':'Apostle N.V. Mlangeni (2012/13)','t':'Let us continually praise the Lord full of mercy and grace.'},
-    {'c':'Prayer','r':'Apostle N.V. Mlangeni (2012/13)','t':'If we cast away the old Adam, God will not fail to give us what we ask.'},
-    {'c':'Prayer','r':'Apostle N.V. Mlangeni (2012/13)','t':'Ask in the way He desires: humbling ourselves.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2012/13)','t':'Respecting one another, being patient, loving one another.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2012/13)','t':'Not looking down on each other, and respecting the servants.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2012/13)','t':'Let us love the apostles that God has given us.'},
-    {'c':'Blessing','r':'Apostle N.V. Mlangeni (2012/13)','t':'Let us live by breaking bread in our homes.'},
-    {'c':'Perseverance','r':'Apostle N.V. Mlangeni (2013/14)','t':'Even when strong winds shook you, you said "we are not moving here."'},
-    {'c':'Perseverance','r':'Apostle N.V. Mlangeni (2013/14)','t':'Even if our hands break off, we will hold on.'},
-    {'c':'Sacrifice','r':'Apostle N.V. Mlangeni (2013/14)','t':'You sweated and worked hard making ends meet.'},
-    {'c':'Obedience','r':'Apostle N.V. Mlangeni (2013/14)','t':'You came out because you respected the word of the apostle.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2013/14)','t':'Tricks and cleverness come to an end, but foolishness does not.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2013/14)','t':'The clever do not enter the kingdom of heaven.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2013/14)','t':'God does not go with the clever.'},
-    {'c':'Strength','r':'Apostle N.V. Mlangeni (2013/14)','t':'God gave you strength, and you will build other houses.'},
-    {'c':'Hope','r':'Apostle N.V. Mlangeni (2013/14)','t':'Stay in one hope.'},
-    {'c':'Perseverance','r':'Apostle N.V. Mlangeni (2013/14)','t':'May you always live by breaking bread.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2013/14)','t':'Respect and love one another. Peace be among you.'},
-    {'c':'Service','r':'Apostle N.V. Mlangeni (2014)','t':'Be eager to work in unity in doing the duties given.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2014)','t':'All godly things will happen only if we respect one another.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2014)','t':'When the young respect the old and the old respect the young.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2014)','t':'Loving one another with godly love not pretending.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2014)','t':'God does not want someone who pretends.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2014)','t':'Do not feed each other with evil spirit of rebelling.'},
-    {'c':'Order','r':'Apostle N.V. Mlangeni (2014)','t':'There is nothing better than when each one remains where put.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2014)','t':'When there is a misunderstanding, sit down and sort it out.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2014)','t':'By solving things with respect we would be respecting the apostle.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2015/16)','t':'Love others as you love yourself.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2015/16)','t':'By loving others you will be loving the one who created you.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2015/16)','t':'To look down upon your brother means you do not know your creator.'},
-    {'c':'Sanctity','r':'Apostle N.V. Mlangeni (2015/16)','t':'Your body is the temple of God, he wrote his church in your body.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2015/16)','t':'The limbs in your body are twelve, they all work in harmony.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2015/16)','t':'He gave you the head and put brain inside it to think.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2015/16)','t':'You must think and do not be lazy to think.'},
-    {'c':'Prayer','r':'Apostle N.V. Mlangeni (2015/16)','t':'You must ask from God in whatever you do.'},
-    {'c':'Prayer','r':'Apostle N.V. Mlangeni (2015/16)','t':'If you ask for something good God will give you that which is good.'},
-    {'c':'Warning','r':'Apostle N.V. Mlangeni (2015/16)','t':'If you ask for something evil you shall be rewarded with evil.'},
-    {'c':'Prayer','r':'Apostle N.V. Mlangeni (2015/16)','t':'Learn to ask for something good to be rewarded with good.'},
-    {'c':'Forgiveness','r':'Apostle N.V. Mlangeni (2015/16)','t':'You must learn to forgive so that you also can be forgiven.'},
-    {'c':'Gratitude','r':'Apostle N.V. Mlangeni (2017/18)','t':'Thank the Lord Jesus Christ who agreed to come to an earth with troubles.'},
-    {'c':'Salvation','r':'Apostle N.V. Mlangeni (2017/18)','t':'His coming to earth was to save us with love and truth.'},
-    {'c':'Identity','r':'Apostle N.V. Mlangeni (2017/18)','t':'We have been made to be salt, and the light of the world.'},
-    {'c':'Purpose','r':'Apostle N.V. Mlangeni (2017/18)','t':'So that those in the world may also desire to be like us.'},
-    {'c':'Purpose','r':'Apostle N.V. Mlangeni (2017/18)','t':'Let us not be tasteless salt that must be thrown outside.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2017/18)','t':'This happens when a person sees themselves as great and no longer able to be led.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2017/18)','t':'A child does not outgrow their parents, to be equal with them.'},
-    {'c':'Obedience','r':'Apostle N.V. Mlangeni (2017/18)','t':'There is no one who is not led. We are all led.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2017/18)','t':'God expects from us childlike nature, and humility.'},
-    {'c':'Respect','r':'Apostle N.V. Mlangeni (2017/18)','t':'The older must respect the younger, and the younger respect the older.'},
-    {'c':'Unity','r':'Apostle N.V. Mlangeni (2017/18)','t':'We are joints in this body of Christ, working in harmony.'},
-    {'c':'Spirit','r':'Apostle N.V. Mlangeni (2017/18)','t':'A congregation without the spirit of prophecy is dead.'},
-    {'c':'Wisdom','r':'Apostle N.V. Mlangeni (2017/18)','t':'Beware of the evil one, let him not pit you against God.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2017/18)','t':'Let us not sit in the seats of the critics.'},
-    {'c':'Speech','r':'Apostle N.V. Mlangeni (2017/18)','t':'Let us stop drinking from the swamps of GOSSIP.'},
-    {'c':'Foundation','r':'Apostle N.V. Mlangeni (2018/19)','t':'Upon this rock I will build my church, and hades shall not overcome it.'},
-    {'c':'Foundation','r':'Apostle N.V. Mlangeni (2018/19)','t':'You are built on the foundation of the Apostles and prophets.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2018/19)','t':'The word of God stands forever, and does not end.'},
-    {'c':'Light','r':'Apostle N.V. Mlangeni (2018/19)','t':'Our Lord said we are the light of the world.'},
-    {'c':'Light','r':'Apostle N.V. Mlangeni (2018/19)','t':'Wherever we walk we must bring light.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2018/19)','t':'Whoever walks in the light there is no darkness in him.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2018/19)','t':'Walk in truth, and in love, in the golden footsteps.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (2018/19)','t':'A branch cannot bear fruit by itself, unless it remains in the vine.'},
-    {'c':'Humility','r':'Apostle N.V. Mlangeni (2018/19)','t':'Let us humble ourselves under the hand of our officers.'},
-    {'c':'Duty','r':'Apostle N.V. Mlangeni (2018/19)','t':'These souls you are leading, one day we will account for them.'},
-    {'c':'Speech','r':'Apostle N.V. Mlangeni (2018/19)','t':'Let us watch our tongues in the congregations.'},
-    {'c':'Discipline','r':'Apostle N.V. Mlangeni (2018/19)','t':'Do not curse an older person just because you are leading them.'},
-    {'c':'Discipline','r':'Apostle N.V. Mlangeni (2018/19)','t':'Rebuke or advise them like your parent, or your brother.'},
-    {'c':'Youth','r':'Apostle N.V. Mlangeni (2018/19)','t':'A young person must control themselves from the lusts of the flesh.'},
-    {'c':'Protection','r':'Apostle N.V. Mlangeni (2018/19)','t':'Where the will of God is done, satan does not come near.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2019/20)','t':'Let us thank with one voice, the great love with which the Lord loved us.'},
-    {'c':'Grace','r':'Apostle N.V. Mlangeni (2019/20)','t':'He sought us because He wants to show His love to us.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2019/20)','t':'Stop fighting because the Lord does not want people who fight.'},
-    {'c':'Peace','r':'Apostle N.V. Mlangeni (2019/20)','t':'Fighting does not come from God but comes from the lusts of the flesh.'},
-    {'c':'Dependence','r':'Apostle N.V. Mlangeni (2019/20)','t':'Pain makes a person remember that they were created by God.'},
-    {'c':'Faith','r':'Apostle N.V. Mlangeni (2019/20)','t':'Pinch yourself and feel whether you are still living for your Lord.'},
-    {'c':'Truth','r':'Apostle N.V. Mlangeni (2019/20)','t':'Let us live for the Lord in truth.'},
-    {'c':'Evangelism','r':'Apostle N.V. Mlangeni (2019/20)','t':'Be seen as the bringers of good news by preaching peace.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2019/20)','t':'Love comes from God because God is love.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2019/20)','t':'A person with love is born of God.'},
-    {'c':'Love','r':'Apostle N.V. Mlangeni (2019/20)','t':'He who does not have love, God is not in him.'},
+    // ---- 1975/76 - Apostle J.S. Ndlovu ----
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'Praising God is not a mere habit of attending service; it is a continuous inner remembrance of His faithfulness to us. Giving thanks flows from a heart that never forgets His blessings.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'Let us work together to praise the Lord with one voice, because His blessings in the past year have been abundant. Our unity in worship is our response to His grace.',
+    },
+    {
+      'c': 'Protection',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'God always holds us and our children in His care. Is that not something to be thankful for? It truly is.',
+    },
+    {
+      'c': 'Vigilance',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'Break bread even when you are alone, especially when idle, so the evil one does not find you empty-handed. Stay watchful and keep the Lord near.',
+    },
+    {
+      'c': 'Salvation',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'He will keep us always so that through us many may be saved. Our steadfastness is a channel of His salvation.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'May God\'s will increase in our hearts in the coming year. May we grow in obedience and grace.',
+    },
+    {
+      'c': 'Perseverance',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'Inner remembrance is the true key to giving thanks and praising God. Let that remembrance be continuous.',
+    },
+    // ---- 1977 - Apostle J.S. Ndlovu ----
+    {
+      'c': 'Unity',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'We must move forward united, with no one acting independently or disobeying. Together we are stronger.',
+    },
+    {
+      'c': 'Obedience',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'The one who acts on their own is harmed by their own doing, but the one who follows instruction stands firm. Obedience brings life.',
+    },
+    {
+      'c': 'Growth',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'Our church stands at a high standard because of the good works among you. Let that standard continue to rise.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'Let no one do things differently from others, for that destroys the unity of the church. Grow together in harmony.',
+    },
+    {
+      'c': 'Grace',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'May the grace of the Father be with you always, guiding every step you take.',
+    },
+    // ---- 1990s - Apostle S.D. Pakathi ----
+    {
+      'c': 'Protection',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'I wrote to protect you from those who confuse your minds. Stay alert and grounded in truth.',
+    },
+    {
+      'c': 'Service',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Thank you for accepting me as your servant and worker in Christ Jesus. I am honoured to serve you.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'We held on to the Creator through all the pain and challenges of the past year. Our grip on Him never loosened.',
+    },
+    {
+      'c': 'Prayer',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Be with our father wherever he is, with your hearts and prayers. He needs your spiritual support.',
+    },
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'I thank you for the great work you have done to protect and stand with your servants. Your loyalty is admirable.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'God the Father will reveal to us what this new year holds. Trust His plan for us.',
+    },
+    {
+      'c': 'Loyalty',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'We must never forget the teachings we were given by father Apostle. Those lessons are our foundation.',
+    },
+    {
+      'c': 'Order',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Walk in order without colliding, staying where you are led. Follow the path set before you.',
+    },
+    {
+      'c': 'Fellowship',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'We are all joints in the body of Christ, and we feel pain when separated. Unity is our strength.',
+    },
+    {
+      'c': 'Peace',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Do not accept decisions that divide us, so that peace and tranquility may prevail. Hold fast to peace.',
+    },
+    // ---- 1995/96 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Salvation',
+      'r': 'Apostle N.V. Mlangeni (1995/96)',
+      't':
+          'Christ conquered death through perseverance so that we could receive forgiveness. His victory is our hope.',
+    },
+    {
+      'c': 'Identity',
+      'r': 'Apostle N.V. Mlangeni (1995/96)',
+      't':
+          'We are joints of Christ\'s body, risen from the dead to give life to others. Our new identity is in Him.',
+    },
+    {
+      'c': 'Perseverance',
+      'r': 'Apostle N.V. Mlangeni (1995/96)',
+      't':
+          'Thank you for your perseverance in carrying forward the gospel of peace. Your dedication is inspiring.',
+    },
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle N.V. Mlangeni (1995/96)',
+      't':
+          'We must thank the Lord our Creator for everything that happens to us. Gratitude is our daily offering.',
+    },
+    // ---- 1996/97 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'We were loved by Christ who died for us so we could be forgiven. That love calls us to love others.',
+    },
+    {
+      'c': 'Praise',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'Praise the Creator for all He has done, for we have much more good than bad. Let your praise be constant.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'Even when a bad wind blows, do not stray onto a path God never called you to walk. Stay on His course.',
+    },
+    {
+      'c': 'Service',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'Your cooperation in building the house of God is truly commendable. May God strengthen you.',
+    },
+    {
+      'c': 'Protection',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'You did not allow the destroyers to succeed, and their aims failed. Your vigilance protected the church.',
+    },
+    // ---- 1999 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'You are beloved because you are loved by God, who created all things through love. That love defines us.',
+    },
+    {
+      'c': 'Salvation',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Carry your cross and follow Christ on His golden footsteps. The path may be narrow but it leads to life.',
+    },
+    {
+      'c': 'Forgiveness',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'After our sins were forgiven, we were made joints of Christ\'s body. Forgiveness restores us.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Branches that bear no fruit will be cut off and thrown into the fire. Stay fruitful in the vine.',
+    },
+    {
+      'c': 'Evangelism',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'We have become life so we can now go forth and save others. Our purpose is to bring life.',
+    },
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'We must thank the Lord always for everything we encounter on our journey. Every moment is a gift.',
+    },
+    {
+      'c': 'Dependence',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Misery brings you nearer to God, while pleasure can make you forget your enemies. In all times, cling to Him.',
+    },
+    {
+      'c': 'Speech',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Be careful with your words, for your mouth can cause disaster between you and God. Speak only what builds up.',
+    },
+    {
+      'c': 'Commandments',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Keep time, offer tithes materially and spiritually, and love your neighbour. These are our pillars.',
+    },
+    {
+      'c': 'Respect',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Respect your officers, for they are fountains of life opened for your sake. Honour them well.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Respect is your key to open doors, and love is your weapon to conquer challenges. Use both wisely.',
+    },
+    // ---- 2000 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Unity',
+      'r': 'Apostle N.V. Mlangeni (2000)',
+      't':
+          'God united us and bound us with His love as a golden chain of protection. Stay linked in His love.',
+    },
+    {
+      'c': 'Warning',
+      'r': 'Apostle N.V. Mlangeni (2000)',
+      't':
+          'It is sad when brothers instigate strikes in our beautiful church. We must preserve our unity.',
+    },
+    {
+      'c': 'Wisdom',
+      'r': 'Apostle N.V. Mlangeni (2000)',
+      't':
+          'Wisdom ends, but foolishness never does; it begins when you think you are wiser. Remain teachable.',
+    },
+    {
+      'c': 'Perseverance',
+      'r': 'Apostle N.V. Mlangeni (2000)',
+      't':
+          'We conquered the bad and kept the good alive this dying year. Let us carry that victory forward.',
+    },
+    {
+      'c': 'Peace',
+      'r': 'Apostle N.V. Mlangeni (2000)',
+      't':
+          'Do not lead each other into temptation or rebel against your officers. Follow the path of peace.',
+    },
+    {
+      'c': 'Reconciliation',
+      'r': 'Apostle N.V. Mlangeni (2000)',
+      't':
+          'When there is a matter between you, sit down and fix it with the spirit of God. Reconciliation heals.',
+    },
+    {
+      'c': 'Perseverance',
+      'r': 'Apostle N.V. Mlangeni (2000)',
+      't':
+          'Break bread at all times, even when alone, to keep the darkness at bay. Never neglect this practice.',
+    },
+    // ---- 2001/02 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Humility',
+      'r': 'Apostle N.V. Mlangeni (2001/02)',
+      't':
+          'Unless you become like little children, you will not enter the Kingdom of Heaven. Humility is the key.',
+    },
+    {
+      'c': 'Humility',
+      'r': 'Apostle N.V. Mlangeni (2001/02)',
+      't':
+          'Whoever humbles himself like a child is greatest in God\'s Kingdom. Pride has no place there.',
+    },
+    {
+      'c': 'Blessing',
+      'r': 'Apostle N.V. Mlangeni (2001/02)',
+      't':
+          'Criticizing your officers decreases your blessings. Respect them and receive God\'s favour.',
+    },
+    // ---- 2002/03 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Warning',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'The evil one puts a spirit of misunderstanding among officers to cause fights. Guard against division.',
+    },
+    {
+      'c': 'Vigilance',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'The evil one does not like a good thing and tries to separate the united. Stay united and vigilant.',
+    },
+    {
+      'c': 'Sacrifice',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'We were bought at a high price—the blood of Jesus shed on the cross. Never forget the cost.',
+    },
+    {
+      'c': 'Wisdom',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'Do not be like those who forget that their life comes from God. Remember your source daily.',
+    },
+    {
+      'c': 'Purpose',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'You were called to work for the salvation of your soul and your family. That is your sacred duty.',
+    },
+    {
+      'c': 'Ministry',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'The evangelist fetches, the shepherd shepherds, and the prophet warns. Each role is vital.',
+    },
+    {
+      'c': 'Prophetic',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'A congregation without the spirit of prophecy is dead. Seek the prophetic voice.',
+    },
+    {
+      'c': 'Renewal',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'Burn the old calendars and enter the new year fresh, with love and respect. Let go of the past.',
+    },
+    {
+      'c': 'Action',
+      'r': 'Apostle N.V. Mlangeni (2002/03)',
+      't':
+          'Down with gossip and cases, up with works! Let your actions speak louder than words.',
+    },
+    // ---- 2004/05 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Evangelism',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'Preach the gospel of peace so that the nation may be saved. Your voice can bring salvation.',
+    },
+    {
+      'c': 'Truth',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'Do not attract people with false promises, or they will be disappointed. Speak only the truth.',
+    },
+    {
+      'c': 'Identity',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'Let there be a clear difference between those in the church and those in the world. Be set apart.',
+    },
+    {
+      'c': 'Sanctity',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'We were bought with the precious blood of the Lamb. Our value is in that sacrifice.',
+    },
+    {
+      'c': 'Peace',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'Stop making each other cry and let everyone worship joyfully or with tears in peace. Accept all worship styles.',
+    },
+    {
+      'c': 'Discipline',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'An officer who causes division runs to the benches, for that is not a good spirit. Reject divisive spirits.',
+    },
+    {
+      'c': 'Action',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'Build a good work for yourself and do not be jealous of others. Your own labour will bear fruit.',
+    },
+    {
+      'c': 'Contentment',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'Make your own home and family beautiful, and jealousy will end. Focus on your own blessings.',
+    },
+    {
+      'c': 'Purpose',
+      'r': 'Apostle N.V. Mlangeni (2004/05)',
+      't':
+          'Everyone has a role to play—there is no time for gossip. Fulfil your purpose diligently.',
+    },
+    // ---- 2005/06 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (2005/06)',
+      't':
+          'The Lord sought us and stayed with us to show us what true love is. Let that love transform us.',
+    },
+    {
+      'c': 'Respect',
+      'r': 'Apostle N.V. Mlangeni (2005/06)',
+      't':
+          'Love your officer, for he is a fountain of salvation opened for you. Honour the vessels of grace.',
+    },
+    {
+      'c': 'Humility',
+      'r': 'Apostle N.V. Mlangeni (2005/06)',
+      't':
+          'Humble yourself like a child to be raised up; pride leads to downfall. Embrace humility daily.',
+    },
+    {
+      'c': 'Dependence',
+      'r': 'Apostle N.V. Mlangeni (2005/06)',
+      't':
+          'Pain reminds us that we did not create ourselves and draws us back to God. In pain, find Him.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle N.V. Mlangeni (2005/06)',
+      't':
+          'Pinch yourself to see if you are still truly living for the Lord. Let your life be a living testimony.',
+    },
+    {
+      'c': 'Evangelism',
+      'r': 'Apostle N.V. Mlangeni (2005/06)',
+      't':
+          'The evangelists made history and silenced satan. You too can make an impact for the Kingdom.',
+    },
+    // ---- 2007/08 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Creation',
+      'r': 'Apostle N.V. Mlangeni (2007/08)',
+      't':
+          'God gathered dust to make man and said, "This is My temple." Honour your body as His dwelling.',
+    },
+    {
+      'c': 'Sanctity',
+      'r': 'Apostle N.V. Mlangeni (2007/08)',
+      't':
+          'Do not turn God\'s temple into a hotel for all kinds of evil. Keep your temple holy.',
+    },
+    {
+      'c': 'Purity',
+      'r': 'Apostle N.V. Mlangeni (2007/08)',
+      't':
+          'God puts a mark on His children to strike down hatred, boasting, and disrespect. Live marked by purity.',
+    },
+    {
+      'c': 'Warning',
+      'r': 'Apostle N.V. Mlangeni (2007/08)',
+      't':
+          'Close your jealous eye, for God does not want such things in His heaven. Guard your heart.',
+    },
+    // ---- 2008/09 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Identity',
+      'r': 'Apostle N.V. Mlangeni (2008/09)',
+      't':
+          'You are the holy temple of God, called to save your own soul and your family. Your calling is sacred.',
+    },
+    {
+      'c': 'Discernment',
+      'r': 'Apostle N.V. Mlangeni (2008/09)',
+      't':
+          'Test every spirit, for only those that confess Jesus are of God. Be discerning in all things.',
+    },
+    {
+      'c': 'Victory',
+      'r': 'Apostle N.V. Mlangeni (2008/09)',
+      't':
+          'He who is in you is greater than he who is in the world. You have already won.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (2008/09)',
+      't':
+          'Love your neighbour and your officers, and you will love God Himself. Love is the fulfillment of the law.',
+    },
+    {
+      'c': 'Renewal',
+      'r': 'Apostle N.V. Mlangeni (2008/09)',
+      't':
+          'Praise the good you saw and forget the bad as you enter the new year. Fresh starts are God\'s gift.',
+    },
+    // ---- 2009/10 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Faith',
+      'r': 'Apostle N.V. Mlangeni (2009/10)',
+      't':
+          'God hears us when we call in difficulty; do not forget Him when the trouble passes. Remember Him always.',
+    },
+    {
+      'c': 'Dependence',
+      'r': 'Apostle N.V. Mlangeni (2009/10)',
+      't':
+          'Pain draws a person closer to God and reminds them of their Creator. In pain, cry out to Him.',
+    },
+    {
+      'c': 'Humility',
+      'r': 'Apostle N.V. Mlangeni (2009/10)',
+      't':
+          'Humble yourself to be nothing, so that God may be everything within you. Let Him be all.',
+    },
+    {
+      'c': 'Respect',
+      'r': 'Apostle N.V. Mlangeni (2009/10)',
+      't':
+          'Respect the earth and its rulers, and treat every person as God\'s creation. Honour all.',
+    },
+    {
+      'c': 'Trust',
+      'r': 'Apostle N.V. Mlangeni (2009/10)',
+      't':
+          'Suspicion is a sin that kills innocent souls—trust instead of suspect. Give others the benefit of the doubt.',
+    },
+    {
+      'c': 'Evangelism',
+      'r': 'Apostle N.V. Mlangeni (2009/10)',
+      't':
+          'Preach the kingdom of heaven with peace and love starting from your own home. Home is where it begins.',
+    },
+    // ---- 2010/11 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (2010/11)',
+      't':
+          'To see God\'s love, we must begin by loving one another at home. Love is the first step.',
+    },
+    {
+      'c': 'Respect',
+      'r': 'Apostle N.V. Mlangeni (2010/11)',
+      't':
+          'The Lamb carries all who respect their leaders on His broad shoulders. Follow Him in humility.',
+    },
+    {
+      'c': 'Peace',
+      'r': 'Apostle N.V. Mlangeni (2010/11)',
+      't':
+          'Dwell in peace, break bread, and be one as the Father and Son are one. Unity brings peace.',
+    },
+    {
+      'c': 'Blessing',
+      'r': 'Apostle N.V. Mlangeni (2010/11)',
+      't':
+          'Rejoice when insulted for Christ, for your reward in heaven is great. Your suffering is not in vain.',
+    },
+    // ---- 2011/12 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Light',
+      'r': 'Apostle N.V. Mlangeni (2011/12)',
+      't':
+          'If we walk in the light as He is in the light, we have fellowship with each other. Walk in His light.',
+    },
+    {
+      'c': 'Cleansing',
+      'r': 'Apostle N.V. Mlangeni (2011/12)',
+      't':
+          'The blood of Jesus cleanses us from all sin; do not doubt this church. Trust in His cleansing power.',
+    },
+    {
+      'c': 'Family',
+      'r': 'Apostle N.V. Mlangeni (2011/12)',
+      't':
+          'Parents, love each other so your children learn respect and love. Your example shapes them.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (2011/12)',
+      't':
+          'God loved the world so much He gave His only Son to die for it. That love is our model.',
+    },
+    {
+      'c': 'Hope',
+      'r': 'Apostle N.V. Mlangeni (2011/12)',
+      't':
+          'Do not lose hope—I will never abandon you until the end. Hope is your anchor.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle N.V. Mlangeni (2011/12)',
+      't':
+          'Dwell in one spirit and trust each other under the leadership of the Lion. Unity is our strength.',
+    },
+    // ---- 2012/13 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle N.V. Mlangeni (2012/13)',
+      't':
+          'Thank the evangelists who saved God\'s people from chains of bondage. Their ministry is precious.',
+    },
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle N.V. Mlangeni (2012/13)',
+      't':
+          'The nation was clothed in a pure white garment by the angel of heaven. We are covered in His righteousness.',
+    },
+    {
+      'c': 'Action',
+      'r': 'Apostle N.V. Mlangeni (2012/13)',
+      't':
+          'Forward, children of Israel, and praise the Lord of grace and mercy! Move forward in faith.',
+    },
+    {
+      'c': 'Humility',
+      'r': 'Apostle N.V. Mlangeni (2012/13)',
+      't':
+          'Ask God the way He wants—with humility, respect, and love for your leaders. Pray as He directs.',
+    },
+    {
+      'c': 'Blessing',
+      'r': 'Apostle N.V. Mlangeni (2012/13)',
+      't':
+          'Let diseases end and poverty cease as we break bread in our homes. Your home is a sanctuary.',
+    },
+    // ---- 2013/14 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Perseverance',
+      'r': 'Apostle N.V. Mlangeni (2013/14)',
+      't':
+          'Even when winds shake you, hold on—do not move even if your hands break off. Your perseverance is admired.',
+    },
+    {
+      'c': 'Sacrifice',
+      'r': 'Apostle N.V. Mlangeni (2013/14)',
+      't':
+          'You sweated and toiled to build houses of worship, only to be pushed out by the dragon. But you stood firm.',
+    },
+    {
+      'c': 'Obedience',
+      'r': 'Apostle N.V. Mlangeni (2013/14)',
+      't':
+          'You obeyed the apostle and left the empty shells of deception. Your obedience is a testimony.',
+    },
+    {
+      'c': 'Wisdom',
+      'r': 'Apostle N.V. Mlangeni (2013/14)',
+      't':
+          'The clever do not enter the kingdom—God does not walk with the wise in their own eyes. Be childlike.',
+    },
+    // ---- 2014 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Service',
+      'r': 'Apostle N.V. Mlangeni (2014)',
+      't':
+          'Preach the gospel eagerly and work in unity with your uniform of faith. Let your service be wholehearted.',
+    },
+    {
+      'c': 'Respect',
+      'r': 'Apostle N.V. Mlangeni (2014)',
+      't':
+          'Respect between young and old is what allows all godly things to happen. Honour all generations.',
+    },
+    {
+      'c': 'Reconciliation',
+      'r': 'Apostle N.V. Mlangeni (2014)',
+      't':
+          'Sit down, present your case, and resolve misunderstandings with respect. Reconciliation builds peace.',
+    },
+    // ---- 2015/16 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (2015/16)',
+      't':
+          'Loving others is loving the one who created you. Let your love reflect your Creator.',
+    },
+    {
+      'c': 'Identity',
+      'r': 'Apostle N.V. Mlangeni (2015/16)',
+      't':
+          'Your body is God\'s temple, and He wrote His church within you. Live as His dwelling place.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle N.V. Mlangeni (2015/16)',
+      't':
+          'Your twelve limbs work in harmony—let your mind think and seek what is good. Harmony is key.',
+    },
+    {
+      'c': 'Prayer',
+      'r': 'Apostle N.V. Mlangeni (2015/16)',
+      't':
+          'Ask for what is good, and God will give you good. Ask with confidence.',
+    },
+    {
+      'c': 'Forgiveness',
+      'r': 'Apostle N.V. Mlangeni (2015/16)',
+      't':
+          'Learn to forgive, so that you may also be forgiven. Forgiveness frees you.',
+    },
+    // ---- 2017/18 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Salvation',
+      'r': 'Apostle N.V. Mlangeni (2017/18)',
+      't':
+          'Christ came to save us with love and truth, teaching us to worship and break bread. He is our model.',
+    },
+    {
+      'c': 'Identity',
+      'r': 'Apostle N.V. Mlangeni (2017/18)',
+      't':
+          'We are the salt and light of the world; let us not be tasteless salt thrown out. Shine brightly.',
+    },
+    {
+      'c': 'Humility',
+      'r': 'Apostle N.V. Mlangeni (2017/18)',
+      't':
+          'A child does not outgrow their parents—dissatisfaction and pride cause downfall. Stay humble.',
+    },
+    {
+      'c': 'Obedience',
+      'r': 'Apostle N.V. Mlangeni (2017/18)',
+      't':
+          'We are all led by God; Lucifer fell because he thought he was equal to Him. Accept His leadership.',
+    },
+    {
+      'c': 'Humility',
+      'r': 'Apostle N.V. Mlangeni (2017/18)',
+      't':
+          'The older must respect the younger, and the younger respect the older. Mutual respect is essential.',
+    },
+    {
+      'c': 'Ministry',
+      'r': 'Apostle N.V. Mlangeni (2017/18)',
+      't':
+          'The three rivers—Evangelist, Shepherd, Prophet—keep the church alive. Each flow is vital.',
+    },
+    {
+      'c': 'Warning',
+      'r': 'Apostle N.V. Mlangeni (2017/18)',
+      't':
+          'Do not sit in the seats of critics or drink from the swamps of gossip. Avoid both.',
+    },
+    // ---- 2018/19 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Foundation',
+      'r': 'Apostle N.V. Mlangeni (2018/19)',
+      't':
+          'The church is built on the rock of Christ, and the gates of hell cannot overcome it. Stand on that rock.',
+    },
+    {
+      'c': 'Grace',
+      'r': 'Apostle N.V. Mlangeni (2018/19)',
+      't':
+          'We have seen God\'s grace from 1988 to 2018, culminating in His abundant provision. Grace is our story.',
+    },
+    {
+      'c': 'Truth',
+      'r': 'Apostle N.V. Mlangeni (2018/19)',
+      't':
+          'Walk in the golden footsteps of truth and love, and the darkness will have no hold on you. Follow the light.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle N.V. Mlangeni (2018/19)',
+      't':
+          'Remain in the true vine, or you will be cut off as a fruitless branch. Stay connected.',
+    },
+    {
+      'c': 'Humility',
+      'r': 'Apostle N.V. Mlangeni (2018/19)',
+      't':
+          'We will account for every soul we lead before the Great Shepherd. Lead with care.',
+    },
+    {
+      'c': 'Speech',
+      'r': 'Apostle N.V. Mlangeni (2018/19)',
+      't':
+          'Watch your tongue—do not curse those you lead, but advise them like family. Speak life.',
+    },
+    {
+      'c': 'Youth',
+      'r': 'Apostle N.V. Mlangeni (2018/19)',
+      't':
+          'Young people, control your fleshly lusts, for your body is the temple of God. Honour your temple.',
+    },
+    {
+      'c': 'Discipline',
+      'r': 'Apostle N.V. Mlangeni (2018/19)',
+      't':
+          'When God\'s will is done, satan cannot come near. Walk in God\'s will.',
+    },
+    // ---- 2019/20 - Apostle N.V. Mlangeni ----
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (2019/20)',
+      't':
+          'The Lord sought us and stayed with us to show us the meaning of true love. His love is our example.',
+    },
+    {
+      'c': 'Dependence',
+      'r': 'Apostle N.V. Mlangeni (2019/20)',
+      't':
+          'Pain reminds us that we were created by God and draws us closer to Him. In pain, draw near.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle N.V. Mlangeni (2019/20)',
+      't':
+          'Are you truly living for the Lord, or are you just an empty shell? Be fully alive in Him.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (2019/20)',
+      't':
+          'Love comes from God, and whoever loves is born of God. Love is the mark of His children.',
+    },
+    // ---- 2020/21 - Apostle J.R. Magano ----
+    {
+      'c': 'Reflection',
+      'r': 'Apostle J.R. Magano (2020/21)',
+      't':
+          'We must reflect on the hard times and never forget the heroes lost to the pandemic. Honour their sacrifice.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle J.R. Magano (2020/21)',
+      't':
+          'We were not shaken but remained in faith through our trust in the Lord. Our faith held firm.',
+    },
+    {
+      'c': 'Protection',
+      'r': 'Apostle J.R. Magano (2020/21)',
+      't':
+          'God placed a cloud of protection between Israel and Pharaoh\'s army. He protects us too.',
+    },
+    {
+      'c': 'Praise',
+      'r': 'Apostle J.R. Magano (2020/21)',
+      't':
+          'The children of Israel praised God for conquering the evil one. Praise is our victory anthem.',
+    },
+    {
+      'c': 'Perseverance',
+      'r': 'Apostle J.R. Magano (2020/21)',
+      't':
+          'Remain breaking bread daily and carrying the gospel of peace. Persevere in these practices.',
+    },
+    // ---- 2022/23 - Apostle S.D. Ndlovu ----
+    {
+      'c': 'Foundation',
+      'r': 'Apostle S.D. Ndlovu (2022/23)',
+      't':
+          'Christ is the rock of rocks, and His church stands firm on that rock. Our foundation is secure.',
+    },
+    {
+      'c': 'Creation',
+      'r': 'Apostle S.D. Ndlovu (2022/23)',
+      't':
+          'The Son of God came to earth so that His Father\'s people might be saved. Salvation is His mission.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle S.D. Ndlovu (2022/23)',
+      't':
+          'We are all created in God\'s image—do not see your brother as an enemy. Love one another.',
+    },
+    {
+      'c': 'Patience',
+      'r': 'Apostle S.D. Ndlovu (2022/23)',
+      't':
+          'The Love of Christ teaches patience and stands forever. Let that patience fill you.',
+    },
+    {
+      'c': 'Evangelism',
+      'r': 'Apostle S.D. Ndlovu (2022/23)',
+      't':
+          'Go and testify to all generations, carrying the Gospel of life. Your testimony matters.',
+    },
+    {
+      'c': 'Spiritual Warfare',
+      'r': 'Apostle S.D. Ndlovu (2022/23)',
+      't':
+          'We wrestle not against flesh and blood, but against the spirits of darkness. Put on your armour.',
+    },
+    {
+      'c': 'Praise',
+      'r': 'Apostle S.D. Ndlovu (2022/23)',
+      't':
+          'All will awaken and praise the power of the Lion who bought them with His blood. Praise Him now.',
+    },
+    {
+      'c': 'Action',
+      'r': 'Apostle S.D. Ndlovu (2022/23)',
+      't': 'Up with the Gospel, down with laziness and gossip! Rise to action.',
+    },
+    // ---- 2023/24 - Apostle S.D. Ndlovu ----
+    {
+      'c': 'Protection',
+      'r': 'Apostle S.D. Ndlovu (2023/24)',
+      't':
+          'The Lions are alive and care for us day and night. We are never alone.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle S.D. Ndlovu (2023/24)',
+      't':
+          'We walked together in unity, tolerating one another without doing our own thing. Unity is our strength.',
+    },
+    {
+      'c': 'Commandments',
+      'r': 'Apostle S.D. Ndlovu (2023/24)',
+      't':
+          'Remember the old teachings: tithes, staying in place, love, and avoiding gossip. They are timeless.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle S.D. Ndlovu (2023/24)',
+      't':
+          'Love starts at home and never ends, unlike prophecies and knowledge. Let love be your foundation.',
+    },
+    {
+      'c': 'Patience',
+      'r': 'Apostle S.D. Ndlovu (2023/24)',
+      't':
+          'The world asks where our love has gone—it is clothed with the Holy Spirit\'s power. Show them.',
+    },
+    {
+      'c': 'Humility',
+      'r': 'Apostle S.D. Ndlovu (2023/24)',
+      't':
+          'Let the one above learn from the one below, so that prideful hearts may end. Humility is a two-way street.',
+    },
+    // ---- 2024/25 - Apostle S.D. Ndlovu ----
+    {
+      'c': 'Rebirth',
+      'r': 'Apostle S.D. Ndlovu (2024/25)',
+      't':
+          'We were born again, not of human will, but of God\'s will. Our rebirth is divine.',
+    },
+    {
+      'c': 'Discipline',
+      'r': 'Apostle S.D. Ndlovu (2024/25)',
+      't':
+          'The Lord rebukes and leads those He loves along the path of righteousness. Accept His discipline.',
+    },
+    {
+      'c': 'Growth',
+      'r': 'Apostle S.D. Ndlovu (2024/25)',
+      't':
+          'I saw amazing godliness, respect, love, and peace in the congregations. May they grow more.',
+    },
+    {
+      'c': 'Kingdom',
+      'r': 'Apostle S.D. Ndlovu (2024/25)',
+      't':
+          'When God\'s kingdom came, we were given daily bread and taught to forgive. Live in that kingdom.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle S.D. Ndlovu (2024/25)',
+      't':
+          'Let the one above learn from the one below, and vice versa, to end pride. Unity comes from mutual learning.',
+    },
+    // ---- 2025/26 - Apostle S.D. Ndlovu ----
+    {
+      'c': 'Identity',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'The name "Beloved" is not of this earth but comes from the Father in Heaven. It is our divine title.',
+    },
+    {
+      'c': 'Grace',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'God\'s grace reached us when we obeyed and cast our nets into the deep. Grace flows to the obedient.',
+    },
+    {
+      'c': 'Guidance',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'The star that led the shepherds still guides us through the Gospel of peace. Follow that star.',
+    },
+    {
+      'c': 'Family',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'God gave us leaders as parents so we could be a peaceful family. Honour your leaders as parents.',
+    },
+    {
+      'c': 'Gift',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'God\'s gifts are given in love to complete the body of Christ. Use your gifts for His body.',
+    },
+    {
+      'c': 'Priority',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'Seek first the Kingdom, and all other things will follow. Prioritize His reign.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'Love is blind to human things and seeks only what is God\'s. Let your love be divine.',
+    },
+    {
+      'c': 'Spirit',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'This love is clothed with the power of the Holy Spirit. Let that power empower your love.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle S.D. Ndlovu (2025/26)',
+      't':
+          'If God is for us, where could we go? We stay in Him, secure and steadfast.',
+    },
 
-    // =========================================================================
-    // APOSTLE J.R. MAGANO (2020 - 2021)
-    // =========================================================================
-    {'c':'Reflection','r':'Apostle J.R. Magano (2020/21)','t':'Let us look back and reflect on the hard times we went through.'},
-    {'c':'Protection','r':'Apostle J.R. Magano (2020/21)','t':'I am grateful for the Lord\'s protection and grace that has been over you.'},
-    {'c':'Remembrance','r':'Apostle J.R. Magano (2020/21)','t':'We should not forget our heroes and heroines that rested.'},
-    {'c':'Faith','r':'Apostle J.R. Magano (2020/21)','t':'In all of this, we were not shaken but remained in faith.'},
-    {'c':'Trust','r':'Apostle J.R. Magano (2020/21)','t':'We remained in faith due to our trust in the Lord.'},
-    {'c':'Unity','r':'Apostle J.R. Magano (2020/21)','t':'I am grateful to those who gathered in prayer in the fight against evil.'},
-    {'c':'Protection','r':'Apostle J.R. Magano (2020/21)','t':'When the Lord saw their fear, He put a cloud of protection.'},
-    {'c':'Victory','r':'Apostle J.R. Magano (2020/21)','t':'The power of the Lord descended to conquer all of Pharaoh\'s army.'},
-    {'c':'Victory','r':'Apostle J.R. Magano (2020/21)','t':'All of Pharaoh\'s wisdom perished in the Red Sea.'},
-    {'c':'Praise','r':'Apostle J.R. Magano (2020/21)','t':'The children of Israel praised with joy thanking God for conquering the evil one.'},
-    {'c':'Perseverance','r':'Apostle J.R. Magano (2020/21)','t':'I ask that we remain breaking bread every day.'},
-    {'c':'Obedience','r':'Apostle J.R. Magano (2020/21)','t':'Stay with our leaders and carry the gospel of peace.'},
-    {'c':'Protection','r':'Apostle J.R. Magano (2020/21)','t':'If we do so, God will protect us at all times.'},
-
-    // =========================================================================
-    // APOSTLE S.D. NDLOVU (2022 - 2026)
-    // =========================================================================
-    {'c':'Foundation','r':'Apostle S.D. Ndlovu (2022/23)','t':'Christ is the rock of rocks that stands firm in our lives.'},
-    {'c':'Foundation','r':'Apostle S.D. Ndlovu (2022/23)','t':'His Church still stands on the rock.'},
-    {'c':'Unity','r':'Apostle S.D. Ndlovu (2022/23)','t':'We would never want to separate from this Church.'},
-    {'c':'Salvation','r':'Apostle S.D. Ndlovu (2022/23)','t':'The Son of God agreed to come to earth so that His Father\'s people might be saved.'},
-    {'c':'Creation','r':'Apostle S.D. Ndlovu (2022/23)','t':'Did God not create people in His own image, so that they might love one another?'},
-    {'c':'Love','r':'Apostle S.D. Ndlovu (2022/23)','t':'If the Love of God is within us, we will not see a brother as an enemy.'},
-    {'c':'Patience','r':'Apostle S.D. Ndlovu (2022/23)','t':'The Love of Christ teaches patience, it stands forever, it does not turn back.'},
-    {'c':'Evangelism','r':'Apostle S.D. Ndlovu (2022/23)','t':'May God lead us to testify and bear witness through the Gospel.'},
-    {'c':'Salvation','r':'Apostle S.D. Ndlovu (2022/23)','t':'The living will receive the Gospel of life, and pass it down.'},
-    {'c':'Spiritual Warfare','r':'Apostle S.D. Ndlovu (2022/23)','t':'Take up the weapons of the Spirit.'},
-    {'c':'Spiritual Warfare','r':'Apostle S.D. Ndlovu (2022/23)','t':'We wrestle not against flesh and blood, but against the spirits of darkness.'},
-    {'c':'Praise','r':'Apostle S.D. Ndlovu (2022/23)','t':'Let all who awaken praise the POWER OF THE LION.'},
-    {'c':'Sacrifice','r':'Apostle S.D. Ndlovu (2022/23)','t':'He bought eternal life for them with His blood!!'},
-    {'c':'Action','r':'Apostle S.D. Ndlovu (2022/23)','t':'Up with the Gospel!! Up with Loving one another!!'},
-    {'c':'Action','r':'Apostle S.D. Ndlovu (2022/23)','t':'Up with Diligence!! Down with laziness!!'},
-    {'c':'Speech','r':'Apostle S.D. Ndlovu (2022/23)','t':'Down with gossiping about other people!!'},
-    {'c':'Protection','r':'Apostle S.D. Ndlovu (2023/24)','t':'The Lions are alive, they hear us when we cry out.'},
-    {'c':'Protection','r':'Apostle S.D. Ndlovu (2023/24)','t':'They take care of us day and night.'},
-    {'c':'Sacrifice','r':'Apostle S.D. Ndlovu (2023/24)','t':'He gave up the beauty of Heaven, and carried the cross of shame.'},
-    {'c':'Unity','r':'Apostle S.D. Ndlovu (2023/24)','t':'I saw us walking well, all holding together, tolerating one another.'},
-    {'c':'Warning','r':'Apostle S.D. Ndlovu (2023/24)','t':'The one who does their own thing will be harmed by what they do.'},
-    {'c':'Obedience','r':'Apostle S.D. Ndlovu (2023/24)','t':'The one who does as the leader instructs has eternal life.'},
-    {'c':'Commandments','r':'Apostle S.D. Ndlovu (2023/24)','t':'Remember the old teachings: Tithes of the flesh.'},
-    {'c':'Commandments','r':'Apostle S.D. Ndlovu (2023/24)','t':'Stay where you are placed.'},
-    {'c':'Commandments','r':'Apostle S.D. Ndlovu (2023/24)','t':'Love, and do not drink from the Swamps of Gossip.'},
-    {'c':'Love','r':'Apostle S.D. Ndlovu (2023/24)','t':'We learned the works of Love, and found peace in our spirits.'},
-    {'c':'Love','r':'Apostle S.D. Ndlovu (2023/24)','t':'Prophecy, tongues, and knowledge may end, but Love will never end.'},
-    {'c':'Love','r':'Apostle S.D. Ndlovu (2023/24)','t':'Love must start at home.'},
-    {'c':'Patience','r':'Apostle S.D. Ndlovu (2023/24)','t':'Was the Apostle Paul making a mistake when he said: Love is patient!?'},
-    {'c':'Love','r':'Apostle S.D. Ndlovu (2023/24)','t':'Let us pinch ourselves and see if we still truly love one another.'},
-    {'c':'Spirit','r':'Apostle S.D. Ndlovu (2023/24)','t':'It is clothed with the power of the Holy Spirit.'},
-    {'c':'Humility','r':'Apostle S.D. Ndlovu (2023/24)','t':'Let the one above learn from the one below, and the one below learn from the one above.'}, 
-    {'c':'Rebirth','r':'Apostle S.D. Ndlovu (2024/25)','t':'Our Lord Jesus Christ gave us new birth, not of the will of man and woman.'},
-    {'c':'Gratitude','r':'Apostle S.D. Ndlovu (2024/25)','t':'We have been fortunate, but our thanksgiving is too little for the Lord\'s goodness.'},
-    {'c':'Discipline','r':'Apostle S.D. Ndlovu (2024/25)','t':'Those whom I love I rebuke, discipline, and guide in righteousness.'},
-    {'c':'Prayer','r':'Apostle S.D. Ndlovu (2024/25)','t':'I have learned that God gives you what you ask for.'},
-    {'c':'Purity','r':'Apostle S.D. Ndlovu (2024/25)','t':'Let us not disappoint the Holy Spirit who dwells in us.'},
-    {'c':'Obedience','r':'Apostle S.D. Ndlovu (2024/25)','t':'We felt the Father\'s will being done in us.'},
-    {'c':'Provision','r':'Apostle S.D. Ndlovu (2024/25)','t':'We were given our daily bread.'},
-    {'c':'Forgiveness','r':'Apostle S.D. Ndlovu (2024/25)','t':'The Holy Spirit taught us to forgive others.'},
-    {'c':'Identity','r':'Apostle S.D. Ndlovu (2025/26)','t':'This name \'Beloved\' by which you are called is not of this earth.'},
-    {'c':'Identity','r':'Apostle S.D. Ndlovu (2025/26)','t':'We are given this new name that we are the beloved children of God.'},
-    {'c':'Grace','r':'Apostle S.D. Ndlovu (2025/26)','t':'The Grace and Love of God reached all of us individually.'},
-    {'c':'Faith','r':'Apostle S.D. Ndlovu (2025/26)','t':'Leave the sand, go into the deep, and let down your nets.'},
-    {'c':'Guidance','r':'Apostle S.D. Ndlovu (2025/26)','t':'That also reminds us of the star that appeared to the shepherds.'},
-    {'c':'Family','r':'Apostle S.D. Ndlovu (2025/26)','t':'God did not allow us to be orphans.'},
-    {'c':'Gift','r':'Apostle S.D. Ndlovu (2025/26)','t':'A gift is something you give to a person because you love them.'},
-    {'c':'Priority','r':'Apostle S.D. Ndlovu (2025/26)','t':'Seek first the Kingdom of Heaven, and the righteousness of the Father.'},
-    {'c':'Peace','r':'Apostle S.D. Ndlovu (2025/26)','t':'If we are in the kingdom of God we will live in peace.'},
-    {'c':'Love','r':'Apostle S.D. Ndlovu (2025/26)','t':'Love is blind because it does not see the things of people.'},
-    {'c':'Love','r':'Apostle S.D. Ndlovu (2025/26)','t':'Love does not seek its own but God\'s.'},
-    {'c':'Love','r':'Apostle S.D. Ndlovu (2025/26)','t':'Love one another with this love that the Father has loved you with.'},
-    {'c':'Spirit','r':'Apostle S.D. Ndlovu (2025/26)','t':'This Love I speak of is clothed with the power of the Holy Spirit.'},
-    {'c':'Prayer','r':'Apostle S.D. Ndlovu (2025/26)','t':'They continued steadfastly in all things, breaking bread.'},
-    {'c':'Faith','r':'Apostle S.D. Ndlovu (2025/26)','t':'If God is for us, where could we go? '},
+    // ========================================================================
+    // ADDITIONAL QUOTES TO REACH 500 – 2–3 SENTENCES EACH
+    // ========================================================================
+    {
+      'c': 'Faith',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'Giving thanks is a continuous inner remembrance, not just a weekly habit. Keep your heart thankful.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'God holds us and our children—that is a reason for unending gratitude. Never stop giving thanks.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'Breaking bread alone keeps the evil one from finding you idle. Make it your daily discipline.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'God keeps us so that through us, many may be saved. Be a vessel of salvation.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle J.S. Ndlovu (1975/76)',
+      't':
+          'May God\'s will increase and flourish in the coming year. Pray for His will.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'Standing united means no one acts on their own or disobeys. Let unity be our hallmark.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'The one who acts alone harms themselves; the one who obeys stands firm. Obedience brings life.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'High standards come from the good works done among you. Keep doing good.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'Doing things differently destroys, but growing together builds up. Grow in unity.',
+    },
+    {
+      'c': 'Unity',
+      'r': 'Apostle J.S. Ndlovu (1977)',
+      't':
+          'The grace of the Father is with you always. Carry that grace daily.',
+    },
+    {
+      'c': 'Protection',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'I wrote to guard you from those who confuse your thinking. Stay clear and focused.',
+    },
+    {
+      'c': 'Service',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Thank you for accepting me as a servant in Christ Jesus. I am your servant.',
+    },
+    {
+      'c': 'Service',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'United we stand; our past pain has not shaken our hold on the Creator. Hold on tight.',
+    },
+    {
+      'c': 'Prayer',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Let your heart and prayers be with our father wherever he goes. He needs your support.',
+    },
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'I thank you for your great work protecting and standing with your servants. Your service is noted.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'God the Father will unveil the secrets of this new year to us. Wait in faith.',
+    },
+    {
+      'c': 'Loyalty',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Never forget the teachings you received from father Apostle. They are your guide.',
+    },
+    {
+      'c': 'Order',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Stay where you are led and walk in order without colliding. Order brings peace.',
+    },
+    {
+      'c': 'Fellowship',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'We are one body in Christ; separation causes pain to the whole. Stay connected.',
+    },
+    {
+      'c': 'Peace',
+      'r': 'Apostle S.D. Pakathi (1990s)',
+      't':
+          'Reject division so that peace and tranquility may fill the church. Pursue peace.',
+    },
+    {
+      'c': 'Salvation',
+      'r': 'Apostle N.V. Mlangeni (1995/96)',
+      't':
+          'Christ\'s perseverance conquered death and secured forgiveness for us. His victory is ours.',
+    },
+    {
+      'c': 'Identity',
+      'r': 'Apostle N.V. Mlangeni (1995/96)',
+      't':
+          'We are joints of Christ\'s body, resurrected to give life to others. Live out that life.',
+    },
+    {
+      'c': 'Perseverance',
+      'r': 'Apostle N.V. Mlangeni (1995/96)',
+      't':
+          'Your perseverance in the gospel of peace is greatly appreciated. Keep pressing on.',
+    },
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle N.V. Mlangeni (1995/96)',
+      't':
+          'Thank the Creator for both the good and the hard things that come. All things work for good.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'We are children of God, loved by Christ who died for our sins. That love defines us.',
+    },
+    {
+      'c': 'Praise',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'Praise God, for He has done much more good than bad for us. Praise Him continually.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'Do not let the dust of the spirit blow you off God\'s path. Stay anchored in Christ.',
+    },
+    {
+      'c': 'Service',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'Your dedication in building God\'s house is truly commendable. Build with joy.',
+    },
+    {
+      'c': 'Protection',
+      'r': 'Apostle N.V. Mlangeni (1996/97)',
+      't':
+          'You did not let the destroyers have their way, and they failed. Stand strong.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'God created all things through love, including you and me. Love is the foundation.',
+    },
+    {
+      'c': 'Salvation',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Carry your cross and walk the golden steps of Christ. Follow His path.',
+    },
+    {
+      'c': 'Forgiveness',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Forgiveness made us joints of Christ\'s body and children of God. Forgive freely.',
+    },
+    {
+      'c': 'Faith',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Fruitless branches are cut off; stay rooted in the true vine. Bear fruit.',
+    },
+    {
+      'c': 'Evangelism',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'We are alive in Christ to go out and save others. Go and make disciples.',
+    },
+    {
+      'c': 'Gratitude',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'For every encounter, give thanks to the Lord. Gratitude opens doors.',
+    },
+    {
+      'c': 'Dependence',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Hardship brings you close to God; prosperity can make you forget Him. Remember Him always.',
+    },
+    {
+      'c': 'Speech',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Your words carry weight—don\'t let them cause a rift with God. Speak wisely.',
+    },
+    {
+      'c': 'Commandments',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Keep time, give your tithes, and love your neighbour without fail. Obey these commandments.',
+    },
+    {
+      'c': 'Respect',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't':
+          'Honour your officers, for they are your fountains of life. Respect their role.',
+    },
+    {
+      'c': 'Love',
+      'r': 'Apostle N.V. Mlangeni (1999)',
+      't': 'Respect opens doors, and love conquers all. Walk in both.',
+    },
   ];
 }

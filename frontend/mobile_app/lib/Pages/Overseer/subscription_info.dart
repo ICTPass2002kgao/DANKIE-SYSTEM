@@ -238,32 +238,13 @@ class _SubscriptionInfoState extends State<SubscriptionInfo> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final baseColor = theme.scaffoldBackgroundColor;
-    final primaryColor = theme.primaryColor;
+    final baseColor = Api().neumoBaseColor(context);
 
     final isFreeTierActive = _requiredPlan == null;
 
     return Scaffold(
       backgroundColor: baseColor,
-      appBar: AppBar(
-        title: Text(
-          "Subscription Management",
-          style: TextStyle(
-            color: Colors.grey[800],
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        iconTheme: IconThemeData(color: primaryColor),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _fetchSubscriptionDetails,
-          ),
-        ],
-      ),
+
       body: _isLoading
           ? Center(
               child: Api().isIOSPlatform
@@ -389,10 +370,10 @@ class _SubscriptionInfoState extends State<SubscriptionInfo> {
                             price: 'Free',
                             features: [
                               'Standard generation of balance sheet (Max 49)',
-                            ],isRecommended: isFreeTierActive,
+                            ],
+                            isRecommended: isFreeTierActive,
                             isActivePlan: _currentPlan == 'free_tier',
-                            isDisabled:
-                                !isFreeTierActive, 
+                            isDisabled: !isFreeTierActive,
                             accentColor: Colors.grey,
                           ),
                           _buildPlanCard(
@@ -454,7 +435,7 @@ class _SubscriptionInfoState extends State<SubscriptionInfo> {
     return NeumorphicContainer(
       borderRadius: 16,
       padding: const EdgeInsets.all(16),
-      color: theme.scaffoldBackgroundColor,
+      color: Api().neumoBaseColor(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -462,6 +443,7 @@ class _SubscriptionInfoState extends State<SubscriptionInfo> {
             children: [
               NeumorphicContainer(
                 isPressed: true,
+                color: Api().neumoBaseColor(context),
                 borderRadius: 30,
                 padding: const EdgeInsets.all(8),
                 child: Icon(icon, color: color, size: 18),
@@ -503,7 +485,7 @@ class _SubscriptionInfoState extends State<SubscriptionInfo> {
     bool isDisabled = false,
   }) {
     final theme = Theme.of(context);
-    final baseColor = theme.scaffoldBackgroundColor;
+    final baseColor = Api().neumoBaseColor(context);
 
     String buttonText = 'Choose Plan';
     Color buttonTextColor = accentColor;
@@ -528,7 +510,7 @@ class _SubscriptionInfoState extends State<SubscriptionInfo> {
       clipBehavior: Clip.none,
       children: [
         NeumorphicContainer(
-          borderRadius: 20,
+          borderRadius: 20, 
           padding: const EdgeInsets.all(24.0),
           isPressed: isPressedStyle,
           color: baseColor,

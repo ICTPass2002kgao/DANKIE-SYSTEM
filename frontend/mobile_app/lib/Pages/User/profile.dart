@@ -50,6 +50,16 @@ class _MyProfileState extends State<MyProfile> {
   Future<Map<String, dynamic>?>? _profileFuture;
   final _formKey = GlobalKey<FormState>();
 
+  // Attendance State
+  bool _isLoadingAttendance = true;
+  Map<String, dynamic> _attendanceStats = {
+    'total': 0,
+    'present': 0,
+    'absent': 0,
+    'percentage': 0.0,
+  };
+  List<dynamic> _attendanceHistory = [];
+
   // Static Lists
   final List<String> provinces = [
     'Gauteng',
@@ -68,6 +78,7 @@ class _MyProfileState extends State<MyProfile> {
   void initState() {
     super.initState();
     _profileFuture = _fetchUserProfile();
+    _fetchUserAttendance();
   }
 
   @override
@@ -114,6 +125,55 @@ class _MyProfileState extends State<MyProfile> {
       print("Error fetching profile: $e");
     }
     return null;
+  }
+
+  Future<void> _fetchUserAttendance() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    setState(() => _isLoadingAttendance = true);
+
+    try {
+      String? token = await user.getIdToken();
+      if (token == null) throw Exception("Session expired");
+
+      final url = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/user_attendance/?uid=${user.uid}&is_visitor=false',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            _attendanceStats = Map<String, dynamic>.from(data['stats'] ?? {});
+            _attendanceHistory = List<dynamic>.from(data['history'] ?? []);
+            _isLoadingAttendance = false;
+          });
+        }
+      } else {
+        throw Exception("Failed to load attendance (${response.statusCode})");
+      }
+    } catch (e) {
+      print("Attendance fetch error: $e");
+      if (mounted) {
+        setState(() {
+          _isLoadingAttendance = false;
+          // Optionally keep default empty stats
+          _attendanceStats = {
+            'total': 0,
+            'present': 0,
+            'absent': 0,
+            'percentage': 0.0,
+          };
+          _attendanceHistory = [];
+        });
+      }
+    }
   }
 
   Future<void> _updateUserData(Map<String, dynamic> dataToUpdate) async {
@@ -365,31 +425,15 @@ class _MyProfileState extends State<MyProfile> {
       body: SafeArea(
         child: Column(
           children: [
-            // HEADER
+            // HEADER - INTEGRATED API BUILD APP BAR
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20.0,
-                vertical: 15.0,
-              ),
+              padding: const EdgeInsets.only(right: 20.0),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: NeumorphicContainer(
-                      color: neumoBaseColor,
-                      borderRadius: 50,
-                      padding: EdgeInsets.all(12),
-                      child: Icon(Icons.arrow_back, color: theme.primaryColor),
-                    ),
-                  ),
-                  Text(
-                    "My Profile",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: theme.primaryColor,
-                    ),
+                  Expanded(
+                    child:
+                        Api().buildAppBar(context, "My Profile") ??
+                        const SizedBox(),
                   ),
                   GestureDetector(
                     onTap: _onEditPressed,
@@ -427,11 +471,18 @@ class _MyProfileState extends State<MyProfile> {
                           padding: EdgeInsets.all(8),
                           child: CircleAvatar(
                             radius: 60,
+                            backgroundColor: Colors.transparent,
                             backgroundImage:
                                 (profileUrl != null && profileUrl.isNotEmpty)
                                 ? NetworkImage(_getSecureImageUrl(profileUrl))
-                                : AssetImage('assets/no_profile.png')
-                                      as ImageProvider,
+                                : null,
+                            child: (profileUrl == null || profileUrl.isEmpty)
+                                ? Icon(
+                                    Icons.person,
+                                    size: 60,
+                                    color: theme.primaryColor,
+                                  )
+                                : null,
                           ),
                         ),
                         SizedBox(height: 20),
@@ -481,6 +532,11 @@ class _MyProfileState extends State<MyProfile> {
                                       data,
                                     ),
                                     SizedBox(height: 20),
+                                    _buildAttendanceOverview(
+                                      theme,
+                                      neumoBaseColor,
+                                    ),
+                                    SizedBox(height: 20),
                                     _buildWeeklyStats(
                                       theme,
                                       neumoBaseColor,
@@ -504,6 +560,8 @@ class _MyProfileState extends State<MyProfile> {
                               _buildDetailsSection(theme, neumoBaseColor, data),
                               SizedBox(height: 20),
                               _buildApplicationsList(theme, neumoBaseColor),
+                              SizedBox(height: 20),
+                              _buildAttendanceOverview(theme, neumoBaseColor),
                               SizedBox(height: 20),
                               _buildWeeklyStats(theme, neumoBaseColor, data),
                             ],
@@ -616,6 +674,233 @@ class _MyProfileState extends State<MyProfile> {
           ),
         ],
       ),
+    );
+  }
+
+  // --- PREMIUM ATTENDANCE OVERVIEW ---
+  Widget _buildAttendanceOverview(ThemeData theme, Color baseColor) {
+    if (_isLoadingAttendance) {
+      return NeumorphicContainer(
+        color: baseColor,
+        borderRadius: 20,
+        padding: EdgeInsets.all(20),
+        child: Center(child: CupertinoActivityIndicator()),
+      );
+    }
+
+    double percentage = _attendanceStats['percentage'] ?? 0.0;
+    int total = _attendanceStats['total'] ?? 0;
+    int present = _attendanceStats['present'] ?? 0;
+    int absent = _attendanceStats['absent'] ?? 0;
+
+    return NeumorphicContainer(
+      color: baseColor,
+      borderRadius: 24,
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(CupertinoIcons.chart_pie_fill, color: theme.primaryColor),
+              SizedBox(width: 10),
+              Text(
+                "My Attendance",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: theme.primaryColor,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 20),
+
+          // Chart Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              SizedBox(
+                height: 120,
+                width: 120,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CircularProgressIndicator(
+                      value: 1.0,
+                      strokeWidth: 12,
+                      color: Colors.grey.shade300,
+                    ),
+                    CircularProgressIndicator(
+                      value: percentage,
+                      strokeWidth: 12,
+                      color: theme.primaryColor,
+                      backgroundColor: Colors.transparent,
+                      strokeCap: StrokeCap.round,
+                    ),
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "${(percentage * 100).toStringAsFixed(0)}%",
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.blueGrey[900],
+                            ),
+                          ),
+                          Text(
+                            "Present",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.grey.shade500,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(height: 100, width: 1, color: Colors.grey.shade300),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildStatRow(
+                    "Total Services",
+                    total.toString(),
+                    Colors.blueGrey,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildStatRow(
+                    "Present",
+                    present.toString(),
+                    theme.primaryColor,
+                  ),
+                  const SizedBox(height: 16),
+                  _buildStatRow("Absent", absent.toString(), Colors.redAccent),
+                ],
+              ),
+            ],
+          ),
+
+          if (_attendanceHistory.isNotEmpty) ...[
+            SizedBox(height: 20),
+            Divider(color: Colors.grey.shade300),
+            SizedBox(height: 10),
+            Text(
+              "RECENT RECORDS",
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+                color: Colors.grey.shade500,
+              ),
+            ),
+            SizedBox(height: 10),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: _attendanceHistory.length > 5
+                  ? 5
+                  : _attendanceHistory.length,
+              separatorBuilder: (context, index) => SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final record = _attendanceHistory[index];
+                bool isPresent =
+                    record['status']?.toString().toLowerCase() == 'present';
+
+                return NeumorphicContainer(
+                  isPressed: true,
+                  color: baseColor,
+                  borderRadius: 12,
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            CupertinoIcons.calendar,
+                            size: 16,
+                            color: Colors.blueGrey,
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            record['date'] ?? 'N/A',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blueGrey[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isPresent
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.red.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isPresent
+                                ? Colors.green.withOpacity(0.5)
+                                : Colors.red.withOpacity(0.5),
+                          ),
+                        ),
+                        child: Text(
+                          record['status']?.toString().toUpperCase() ??
+                              'UNKNOWN',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                            color: isPresent
+                                ? Colors.green[700]
+                                : Colors.red[700],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value, Color color) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        SizedBox(width: 15),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w900,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 
@@ -753,13 +1038,13 @@ class _MyProfileState extends State<MyProfile> {
             padding: EdgeInsets.all(10),
             child: Column(
               children: [
-                _statRow("Week 1", data['week1']),
+                _weeklyStatRow("Week 1", data['week1']),
                 Divider(),
-                _statRow("Week 2", data['week2']),
+                _weeklyStatRow("Week 2", data['week2']),
                 Divider(),
-                _statRow("Week 3", data['week3']),
+                _weeklyStatRow("Week 3", data['week3']),
                 Divider(),
-                _statRow("Week 4", data['week4']),
+                _weeklyStatRow("Week 4", data['week4']),
               ],
             ),
           ),
@@ -768,7 +1053,7 @@ class _MyProfileState extends State<MyProfile> {
     );
   }
 
-  Widget _statRow(String label, dynamic val) {
+  Widget _weeklyStatRow(String label, dynamic val) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
@@ -914,7 +1199,9 @@ class _MyProfileState extends State<MyProfile> {
                                 backgroundColor: baseColor,
                                 backgroundImage: _pickedFile != null
                                     ? FileImage(io.File(_pickedFile!.path))
-                                    : (_currentProfileImageUrl != null
+                                    : (_currentProfileImageUrl != null &&
+                                                  _currentProfileImageUrl!
+                                                      .isNotEmpty
                                               ? NetworkImage(
                                                   _getSecureImageUrl(
                                                     _currentProfileImageUrl,
@@ -924,9 +1211,11 @@ class _MyProfileState extends State<MyProfile> {
                                           as ImageProvider?,
                                 child:
                                     (_pickedFile == null &&
-                                        _currentProfileImageUrl == null)
+                                        (_currentProfileImageUrl == null ||
+                                            _currentProfileImageUrl!.isEmpty))
                                     ? Icon(
                                         Icons.camera_alt,
+                                        size: 30,
                                         color: theme.primaryColor,
                                       )
                                     : null,
