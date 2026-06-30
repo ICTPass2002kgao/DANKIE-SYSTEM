@@ -17,7 +17,11 @@ from .views import (
     create_payment_link,
     paystack_webhook, 
     ContributionHistoryViewSet
-    ,MonthlyReportViewSet,VisitorViewSet,EventDiaryViewSet,EventContributionViewSet
+    ,MonthlyReportViewSet,
+    VisitorViewSet,
+    EventDiaryViewSet,
+    EventContributionViewSet,
+    global_attendance_summary,user_attendance
 ) 
 from . import views 
 # Initialize Router
@@ -56,7 +60,8 @@ urlpatterns = [
     path('send-email/', send_legal_broadcast, name='send_email'),
     path('serve_image/', ServeDecryptedImageView.as_view(), name='serve_image'), 
     path('initialize-subscription/', initialize_subscription), 
-    
+    path('global_attendance_summary/', global_attendance_summary, name='global_attendance_summary'),
+    path('user_attendance/', user_attendance, name='user_attendance'),
     # Marketplace
     path('create_seller_subaccount/', create_seller_subaccount),
     path('create-payment-link/', create_payment_link),

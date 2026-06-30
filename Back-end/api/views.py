@@ -2,7 +2,7 @@ from calendar import calendar
 import datetime
 import os
 import json
-import threading 
+import threading
 import tempfile
 from django.utils.timezone import now
 import urllib.request
@@ -44,7 +44,7 @@ from firebase_admin import credentials, firestore, storage, auth as firebase_aut
 from django.core.mail import EmailMultiAlternatives
 
 from .mixins import CachedListMixin
-from django.db import transaction 
+from django.db import transaction
 
 from .models import (
     AttendanceLog, IssueReport, Order, Songs, Product, Users, Overseer, District, Community, 
@@ -53,7 +53,7 @@ from .models import (
     TactsoCommitteeMember, ApplicationRequest, UserUniversityApplication, 
     SellerListing, ContributionHistory, MonthlyReport,Visitor,EventContribution,EventDiary
 )
- 
+
 from .serializers import (
     AdminStaffMemberSerializer, IssueReportSerializer, OrderSerializer, SongSerializer, ProductSerializer, UsersSerializer, 
     OverseerSerializer, DistrictSerializer, CommunitySerializer, 
@@ -916,18 +916,30 @@ class UsersViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
     def update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         attendance_status = request.data.get('attendance_status')
         if attendance_status:
             instance = self.get_object()
             is_present = (attendance_status == 'Present')
-            if is_present: instance.last_attended_date = now().date()
+            
+            target_date_str = request.data.get('date')
+            if target_date_str:
+                try:
+                    target_date = datetime.datetime.strptime(target_date_str, "%Y-%m-%d").date()
+                except ValueError:
+                    target_date = now().date()
+            else:
+                target_date = now().date()
+
+            if is_present: instance.last_attended_date = target_date
             AttendanceLog.objects.update_or_create(
-                member_uid=instance.uid, date=now().date(),
+                member_uid=instance.uid, date=target_date,
                 defaults={'community_name': instance.community_name, 'is_visitor': False, 'is_present': is_present}
             )
         return super().update(request, *args, **kwargs)
+
     @action(detail=True, methods=['post'])
     def submit_verification(self, request, uid=None):
         user = self.get_object()
@@ -963,15 +975,26 @@ class VisitorViewSet(viewsets.ModelViewSet):
         overseer_uid = self.request.query_params.get('overseer_uid')
         if overseer_uid: queryset = queryset.filter(overseer_uid=overseer_uid)
         return queryset
+    
     def update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         attendance_status = request.data.get('attendance_status')
         if attendance_status:
             instance = self.get_object()
             is_present = (attendance_status == 'Present')
-            if is_present: instance.last_attended_date = now().date()
+            
+            target_date_str = request.data.get('date')
+            if target_date_str:
+                try:
+                    target_date = datetime.datetime.strptime(target_date_str, "%Y-%m-%d").date()
+                except ValueError:
+                    target_date = now().date()
+            else:
+                target_date = now().date()
+
+            if is_present: instance.last_attended_date = target_date
             AttendanceLog.objects.update_or_create(
-                member_uid=str(instance.id), date=now().date(),
+                member_uid=str(instance.id), date=target_date,
                 defaults={'community_name': instance.community_name, 'is_visitor': True, 'is_present': is_present}
             )
         return super().update(request, *args, **kwargs)
@@ -1008,7 +1031,7 @@ def monthly_attendance_report(request):
         visitor_cat = getattr(member, 'visitor_category', 'Registered') if is_visitor else 'Registered'
         visitor_role = getattr(member, 'visitor_role', '') if is_visitor else ''
         report_data.append({
-            'ui_id': uid_key, 'name': member.name, 'surname': member.surname,
+            'uid': uid_key, 'name': member.name, 'surname': member.surname,
             'gender': member.gender, 'is_visitor': is_visitor, 'visitor_category': visitor_cat,
             'visitor_role': visitor_role, 'attendance': attendance, 'total_present': total_present,
             'total_absent': total_absent, 'percentage': round(percentage, 1)
@@ -1376,7 +1399,127 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
             return Response({'status': 'success', 'message': 'Month archived successfully'})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
-        
+@api_view(['GET'])
+@authentication_classes([FirebaseAuthentication])
+@permission_classes([IsFirebaseAuthenticated])
+def global_attendance_summary(request):
+    """
+    Returns aggregated attendance for a given date.
+    Query param: date (YYYY-MM-DD)
+    Response: list of objects with:
+        overseer_name, province, region,
+        total_present, brothers_present, sisters_present,
+        parents_present, visitors_present,
+        testifies_present, ready_testifies
+    """
+    date_str = request.query_params.get('date')
+    if not date_str:
+        return Response({'error': 'Missing date parameter (YYYY-MM-DD)'}, status=400)
+    try:
+        target_date = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
+
+    # Fetch all attendance logs for this date where the member was present
+    present_logs = AttendanceLog.objects.filter(date=target_date, is_present=True)
+
+
+    # Separate user uids and visitor ids
+    user_uids = set()
+    visitor_ids = set()
+    for log in present_logs:
+        if log.is_visitor:
+            visitor_ids.add(log.member_uid)
+        else:
+            user_uids.add(log.member_uid)
+
+    # Fetch all needed Users and Visitors in bulk
+    users_map = {u.uid: u for u in Users.objects.filter(uid__in=user_uids)}
+    visitors_map = {str(v.id): v for v in Visitor.objects.filter(id__in=visitor_ids)}
+
+    # Aggregate stats per overseer_uid
+    overseer_stats = {}  # key: overseer_uid
+
+    for log in present_logs:
+        overseer_uid = None
+        gender = ''
+        category = ''
+        is_ready = False
+
+        if log.is_visitor:
+            visitor = visitors_map.get(log.member_uid)
+            if not visitor:
+                continue
+            overseer_uid = visitor.overseer_uid
+            gender = visitor.gender
+            category = visitor.visitor_category
+            is_ready = visitor.ready_for_membership
+        else:
+            user = users_map.get(log.member_uid)
+            if not user:
+                continue
+            overseer_uid = user.overseer_uid
+            gender = user.gender
+            category = 'Member'
+            is_ready = False
+
+        if not overseer_uid:
+            continue
+
+        if overseer_uid not in overseer_stats:
+            overseer_stats[overseer_uid] = {
+                'total_present': 0,
+                'brothers_present': 0,
+                'sisters_present': 0,
+                'parents_present': 0,
+                'visitors_present': 0,
+                'testifies_present': 0,
+                'ready_testifies': 0,
+            }
+
+        stats = overseer_stats[overseer_uid]
+        stats['total_present'] += 1
+
+        gender_lower = gender.lower() if gender else ''
+        if gender_lower == 'male':
+            stats['brothers_present'] += 1
+        elif gender_lower == 'female':
+            stats['sisters_present'] += 1
+
+        if log.is_visitor:
+            if category in ['Mother', 'Father']:
+                stats['parents_present'] += 1
+            else:
+                stats['visitors_present'] += 1
+                stats['testifies_present'] += 1
+                if is_ready:
+                    stats['ready_testifies'] += 1
+
+    # Fetch overseer info for all collected uids
+    overseer_objects = {
+        o.uid: o
+        for o in Overseer.objects.filter(uid__in=overseer_stats.keys())
+    }
+
+    result = []
+    for overseer_uid, stats in overseer_stats.items():
+        overseer = overseer_objects.get(overseer_uid)
+        if not overseer:
+            continue
+        result.append({
+            'overseer_name': overseer.overseer_initials_surname,
+            'province': overseer.province,
+            'region': overseer.region,
+            'total_present': stats['total_present'],
+            'brothers_present': stats['brothers_present'],
+            'sisters_present': stats['sisters_present'],
+            'parents_present': stats['parents_present'],
+            'visitors_present': stats['visitors_present'],
+            'testifies_present': stats['testifies_present'],
+            'ready_testifies': stats['ready_testifies'],
+        })
+
+    return Response(result, status=200)
 class IssueReportViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
@@ -1434,3 +1577,51 @@ class ApostolicGreetingViewSet(viewsets.ModelViewSet):
         greeting.views += 1 
         greeting.save() 
         return Response({'likes': greeting.likes, 'views': greeting.views})
+    
+@api_view(['GET'])
+@authentication_classes([FirebaseAuthentication])
+@permission_classes([IsFirebaseAuthenticated])
+def user_attendance(request):
+    """
+    Returns attendance stats and history for a specific user or visitor.
+    Query params:
+      - uid (required) – the member uid or visitor id
+      - is_visitor (optional, default false) – whether this is a visitor
+      - year (optional) – filter to a specific year
+    """
+    uid = request.query_params.get('uid')
+    if not uid:
+        return Response({'error': 'Missing uid parameter'}, status=400)
+
+    is_visitor = request.query_params.get('is_visitor', 'false').lower() == 'true'
+    year_param = request.query_params.get('year')
+
+    # Build queryset
+    logs = AttendanceLog.objects.filter(member_uid=uid, is_visitor=is_visitor)
+    if year_param:
+        logs = logs.filter(date__year=int(year_param))
+
+    logs = logs.order_by('-date')
+
+    total = logs.count()
+    present_count = logs.filter(is_present=True).count()
+    absent_count = total - present_count
+    percentage = (present_count / total) if total > 0 else 0.0
+ 
+    history = []
+    for log in logs[:20]:
+        history.append({
+            'date': log.date.isoformat(),
+            'status': 'Present' if log.is_present else 'Absent',
+        })
+
+    return Response({
+        'stats': {
+            'total': total,
+            'present': present_count,
+            'absent': absent_count,
+            'percentage': round(percentage, 2),
+        },
+        'history': history,
+    })
+
