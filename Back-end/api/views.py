@@ -1399,18 +1399,20 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
             return Response({'status': 'success', 'message': 'Month archived successfully'})
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+
 @api_view(['GET'])
 @authentication_classes([FirebaseAuthentication])
 @permission_classes([IsFirebaseAuthenticated])
 def global_attendance_summary(request):
     """
-    Returns aggregated attendance for a given date.
+    Returns aggregated attendance AND full attendee list for a given date.
     Query param: date (YYYY-MM-DD)
     Response: list of objects with:
         overseer_name, province, region,
         total_present, brothers_present, sisters_present,
         parents_present, visitors_present,
-        testifies_present, ready_testifies
+        testifies_present, ready_testifies,
+        attendees: [ {name, surname, gender, role, category} ]
     """
     date_str = request.query_params.get('date')
     if not date_str:
@@ -1420,11 +1422,8 @@ def global_attendance_summary(request):
     except ValueError:
         return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
 
-    # Fetch all attendance logs for this date where the member was present
     present_logs = AttendanceLog.objects.filter(date=target_date, is_present=True)
 
-
-    # Separate user uids and visitor ids
     user_uids = set()
     visitor_ids = set()
     for log in present_logs:
@@ -1433,11 +1432,9 @@ def global_attendance_summary(request):
         else:
             user_uids.add(log.member_uid)
 
-    # Fetch all needed Users and Visitors in bulk
     users_map = {u.uid: u for u in Users.objects.filter(uid__in=user_uids)}
     visitors_map = {str(v.id): v for v in Visitor.objects.filter(id__in=visitor_ids)}
 
-    # Aggregate stats per overseer_uid
     overseer_stats = {}  # key: overseer_uid
 
     for log in present_logs:
@@ -1445,6 +1442,9 @@ def global_attendance_summary(request):
         gender = ''
         category = ''
         is_ready = False
+        visitor_role = None
+        name = ''
+        surname = ''
 
         if log.is_visitor:
             visitor = visitors_map.get(log.member_uid)
@@ -1454,6 +1454,9 @@ def global_attendance_summary(request):
             gender = visitor.gender
             category = visitor.visitor_category
             is_ready = visitor.ready_for_membership
+            visitor_role = visitor.visitor_role or visitor.visitor_category or 'Visitor'
+            name = visitor.name
+            surname = visitor.surname
         else:
             user = users_map.get(log.member_uid)
             if not user:
@@ -1462,6 +1465,8 @@ def global_attendance_summary(request):
             gender = user.gender
             category = 'Member'
             is_ready = False
+            name = user.name
+            surname = user.surname
 
         if not overseer_uid:
             continue
@@ -1475,6 +1480,7 @@ def global_attendance_summary(request):
                 'visitors_present': 0,
                 'testifies_present': 0,
                 'ready_testifies': 0,
+                'attendees': [],  # NEW: list of attendee details
             }
 
         stats = overseer_stats[overseer_uid]
@@ -1486,16 +1492,37 @@ def global_attendance_summary(request):
         elif gender_lower == 'female':
             stats['sisters_present'] += 1
 
+        # Build role string for display
+        display_role = 'Member'
         if log.is_visitor:
             if category in ['Mother', 'Father']:
                 stats['parents_present'] += 1
+                display_role = category
+                if visitor_role and visitor_role != 'None':
+                    display_role += f" ({visitor_role})"
             else:
                 stats['visitors_present'] += 1
                 stats['testifies_present'] += 1
                 if is_ready:
                     stats['ready_testifies'] += 1
+                display_role = visitor_role if visitor_role and visitor_role != 'None' else category
+        else:
+            if gender_lower == 'male':
+                display_role = 'Brother'
+            elif gender_lower == 'female':
+                display_role = 'Sister'
+            else:
+                display_role = 'Member'
 
-    # Fetch overseer info for all collected uids
+        # Append attendee
+        stats['attendees'].append({
+            'name': name,
+            'surname': surname,
+            'gender': gender,
+            'role': display_role,
+            'category': category,
+        })
+
     overseer_objects = {
         o.uid: o
         for o in Overseer.objects.filter(uid__in=overseer_stats.keys())
@@ -1517,6 +1544,7 @@ def global_attendance_summary(request):
             'visitors_present': stats['visitors_present'],
             'testifies_present': stats['testifies_present'],
             'ready_testifies': stats['ready_testifies'],
+            'attendees': stats['attendees'],  # NEW: includes all names
         })
 
     return Response(result, status=200)
