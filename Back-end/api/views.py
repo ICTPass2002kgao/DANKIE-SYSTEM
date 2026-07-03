@@ -1412,7 +1412,7 @@ def global_attendance_summary(request):
         total_present, brothers_present, sisters_present,
         parents_present, visitors_present,
         testifies_present, ready_testifies,
-        attendees: [ {name, surname, gender, role, category} ]
+        attendees: [ {name, surname, gender, role, category, overseer_name} ]
     """
     date_str = request.query_params.get('date')
     if not date_str:
@@ -1436,6 +1436,19 @@ def global_attendance_summary(request):
     visitors_map = {str(v.id): v for v in Visitor.objects.filter(id__in=visitor_ids)}
 
     overseer_stats = {}  # key: overseer_uid
+
+    # Pre‑fetch all overseers that will be needed
+    overseer_uids = set()
+    for log in present_logs:
+        if log.is_visitor:
+            visitor = visitors_map.get(log.member_uid)
+            if visitor:
+                overseer_uids.add(visitor.overseer_uid)
+        else:
+            user = users_map.get(log.member_uid)
+            if user:
+                overseer_uids.add(user.overseer_uid)
+    overseer_map = {o.uid: o for o in Overseer.objects.filter(uid__in=overseer_uids)}
 
     for log in present_logs:
         overseer_uid = None
@@ -1480,20 +1493,15 @@ def global_attendance_summary(request):
                 'visitors_present': 0,
                 'testifies_present': 0,
                 'ready_testifies': 0,
-                'attendees': [],  # NEW: list of attendee details
+                'attendees': [],
             }
 
         stats = overseer_stats[overseer_uid]
         stats['total_present'] += 1
 
         gender_lower = gender.lower() if gender else ''
-        if gender_lower == 'male':
-            stats['brothers_present'] += 1
-        elif gender_lower == 'female':
-            stats['sisters_present'] += 1
-
-        # Build role string for display
         display_role = 'Member'
+
         if log.is_visitor:
             if category in ['Mother', 'Father']:
                 stats['parents_present'] += 1
@@ -1507,30 +1515,34 @@ def global_attendance_summary(request):
                     stats['ready_testifies'] += 1
                 display_role = visitor_role if visitor_role and visitor_role != 'None' else category
         else:
+            # 🔥 FIX: Only Members can be counted as Brothers or Sisters
             if gender_lower == 'male':
+                stats['brothers_present'] += 1
                 display_role = 'Brother'
             elif gender_lower == 'female':
+                stats['sisters_present'] += 1
                 display_role = 'Sister'
             else:
                 display_role = 'Member'
 
-        # Append attendee
+        # Get the overseer's name for this attendee
+        overseer_obj = overseer_map.get(overseer_uid)
+        overseer_name = overseer_obj.overseer_initials_surname if overseer_obj else 'Unknown'
+
+        # Append attendee WITH overseer_name
         stats['attendees'].append({
             'name': name,
             'surname': surname,
             'gender': gender,
             'role': display_role,
             'category': category,
+            'overseer_name': overseer_name,
         })
 
-    overseer_objects = {
-        o.uid: o
-        for o in Overseer.objects.filter(uid__in=overseer_stats.keys())
-    }
-
+    # Build final response
     result = []
     for overseer_uid, stats in overseer_stats.items():
-        overseer = overseer_objects.get(overseer_uid)
+        overseer = overseer_map.get(overseer_uid)
         if not overseer:
             continue
         result.append({
@@ -1544,10 +1556,12 @@ def global_attendance_summary(request):
             'visitors_present': stats['visitors_present'],
             'testifies_present': stats['testifies_present'],
             'ready_testifies': stats['ready_testifies'],
-            'attendees': stats['attendees'],  # NEW: includes all names
+            'attendees': stats['attendees'],
         })
 
     return Response(result, status=200)
+
+
 class IssueReportViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
