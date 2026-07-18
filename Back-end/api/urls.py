@@ -21,7 +21,10 @@ from .views import (
     VisitorViewSet,
     EventDiaryViewSet,
     EventContributionViewSet,
-    global_attendance_summary,user_attendance
+    global_attendance_summary,user_attendance,OverseerDiaryEventViewSet,
+    OverseerMeetingMinutesViewSet,
+    OverseerCommunicationViewSet,
+    CommunicationReadStatusViewSet
 ) 
 from . import views 
 # Initialize Router
@@ -41,7 +44,11 @@ router.register(r'districts', DistrictViewSet)
 router.register(r'committee_members', OverseerCommitteeMemberViewSet, basename='committee-members')
 router.register(r'overseer_expenses_reports', OverseerExpenseReportViewSet,basename='overseer-expenses')
 router.register(r'events', UpcomingEventViewSet)
-router.register(r'careers', CareerOpportunityViewSet) 
+router.register(r'careers', CareerOpportunityViewSet)  
+router.register(r'overseer_diary_events', OverseerDiaryEventViewSet, basename='overseer-diary-events')
+router.register(r'overseer_meeting_minutes', OverseerMeetingMinutesViewSet, basename='overseer-meeting-minutes')
+router.register(r'overseer_communications', OverseerCommunicationViewSet, basename='overseer-communications')
+router.register(r'communication_read_statuses', CommunicationReadStatusViewSet, basename='communication-read-statuses')
 router.register(r'branch_committee', BranchCommitteeMemberViewSet)
 router.register(r'applications', ApplicationRequestViewSet)
 router.register(r'university_applications', UserUniversityApplicationViewSet)

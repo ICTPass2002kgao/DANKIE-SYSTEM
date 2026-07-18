@@ -1,7 +1,7 @@
 
 from rest_framework import serializers
 from .models import (
-    AdminStaffMember, Songs, Product, Users, Overseer, District, Community, 
+    AdminStaffMember, CommunicationReadStatus, OverseerCommunication, OverseerDiaryEvent, OverseerMeetingMinutes, Songs, Product, Users, Overseer, District, Community, 
     OverseerCommitteeMember, OverseerExpenseReport, UpcomingEvent, 
     CareerOpportunity, TactsoBranch,  AdminStaffMember, AuditLog,EventContribution,EventDiary,
     TactsoCommitteeMember, ApplicationRequest,UserUniversityApplication,Community, District, Overseer
@@ -271,4 +271,29 @@ from .models import ApostolicGreeting
 class ApostolicGreetingSerializer(serializers.ModelSerializer):
     class Meta:
         model = ApostolicGreeting
+        fields = '__all__'
+        
+class OverseerDiaryEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OverseerDiaryEvent
+        fields = '__all__'
+        read_only_fields = ('created_at',)
+
+class OverseerMeetingMinutesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OverseerMeetingMinutes
+        fields = '__all__'
+        read_only_fields = ('created_at',)
+
+class OverseerCommunicationSerializer(serializers.ModelSerializer):
+    read_count = serializers.IntegerField(source='read_statuses.count', read_only=True)
+    
+    class Meta:
+        model = OverseerCommunication
+        fields = '__all__'
+        read_only_fields = ('created_at', 'sent_at')
+
+class CommunicationReadStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CommunicationReadStatus
         fields = '__all__'

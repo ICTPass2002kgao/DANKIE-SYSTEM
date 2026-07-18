@@ -70,6 +70,22 @@ class Users(models.Model):
     address = models.CharField(max_length=500, blank=True, null=True) 
     province = models.CharField(max_length=255, blank=True, null=True) 
     gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True) 
+    year_of_study = models.CharField(
+    max_length=50,
+    choices=[
+        ('1st Year', '1st Year'),
+        ('2nd Year', '2nd Year'),
+        ('3rd Year', '3rd Year'),
+        ('4th Year', '4th Year'),
+        ('5th Year', '5th Year'),
+        ('6th+ Year', '6th+ Year'),
+        ('Postgraduate', 'Postgraduate'),
+        ('Other', 'Other'),
+    ],
+    blank=True,
+    null=True,
+    verbose_name="Year of Study"
+)
     last_attended_date = models.DateField(auto_now_add=True, null=True, blank=True) 
     seller_paystack_account = models.CharField(max_length=255, blank=True, null=True)
     account_verified = models.BooleanField(default=False) 
@@ -237,12 +253,24 @@ class Overseer(models.Model):
     has_agreed_to_privacy_policy = models.BooleanField(default=False)
     def __str__(self):
         return self.overseer_initials_surname
-
 class OverseerCommitteeMember(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     overseer = models.ForeignKey(Overseer, related_name="committee_members", on_delete=models.CASCADE)
     full_name = models.CharField(max_length=255, verbose_name="Full Name")
     gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True)
+    CHURCH_OFFICE_CHOICES = (
+    ('Brother', 'Brother'),
+    ('Sister', 'Sister'),
+    ('Mother Deacon', 'Mother Deacon'),
+    ('Mother Priest', 'Mother Priest'),
+    ('Mother Community Elder', 'Mother Community Elder'),
+    ('Father Deacon', 'Father Deacon'),
+    ('Father Priest', 'Father Priest'),
+    ('Father Community Elder', 'Father Community Elder'),
+    ('Other', 'Other'),
+)
+    # Add to OverseerCommitteeMember:
+    church_office = models.CharField(max_length=50, choices=CHURCH_OFFICE_CHOICES, blank=True, null=True)
     email = models.EmailField(blank=True, verbose_name="Email") 
     accepted_ts_and_cs = models.BooleanField(default=False)
     portfolio = models.CharField(max_length=255, verbose_name="Portfolio")
@@ -428,6 +456,7 @@ class ApplicationRequest(models.Model):
         return f"{self.full_name} -> {uni_name}"
 
 class TactsoCommitteeMember(models.Model):
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     branch = models.ForeignKey(TactsoBranch, related_name="branch_committee_members", on_delete=models.CASCADE)
     accepted_ts_and_cs = models.BooleanField(default=False)
@@ -621,3 +650,58 @@ class ApostolicGreeting(models.Model):
 
     def __str__(self):
         return f"{self.apostle} - {self.year}"
+    
+class OverseerDiaryEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    overseer = models.ForeignKey(Overseer, related_name='diary_events', on_delete=models.CASCADE)
+    title = models.CharField(max_length=255, verbose_name="Event Title")
+    description = models.TextField(verbose_name="Event Description", blank=True)
+    event_date = models.DateField(verbose_name="Event Date")
+    location = models.CharField(max_length=500, verbose_name="Location", blank=True)
+    poster_url = models.TextField(blank=True, verbose_name="Poster URL")
+    created_by = models.CharField(max_length=255, blank=True, verbose_name="Created By (UID or Name)")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} - {self.event_date}"
+    
+class OverseerMeetingMinutes(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    overseer = models.ForeignKey(Overseer, related_name='meeting_minutes', on_delete=models.CASCADE)
+    title = models.CharField(max_length=255, verbose_name="Meeting Title")
+    meeting_date = models.DateField(verbose_name="Meeting Date")
+    minutes_text = models.TextField(verbose_name="Minutes Details")
+    present_members = models.JSONField(default=list, blank=True, verbose_name="Present Members (JSON)")
+    created_by = models.CharField(max_length=255, blank=True, verbose_name="Created By")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} - {self.meeting_date}"
+class OverseerCommunication(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    overseer = models.ForeignKey(Overseer, related_name='communications', on_delete=models.CASCADE)
+    subject = models.CharField(max_length=255, verbose_name="Subject")
+    
+    attachments = models.JSONField(default=list, blank=True, verbose_name="Attachment URLs (JSON)")
+    message_body = models.TextField(verbose_name="Message Body")
+    is_published = models.BooleanField(default=False, verbose_name="Is Published")
+    sent_at = models.DateTimeField(blank=True, null=True, verbose_name="Sent At")
+    created_by = models.CharField(max_length=255, blank=True, verbose_name="Created By")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.subject
+class CommunicationReadStatus(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    communication = models.ForeignKey(OverseerCommunication, related_name='read_statuses', on_delete=models.CASCADE)
+    user = models.ForeignKey(Users, on_delete=models.CASCADE, to_field='uid', db_column='user_uid')
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('communication', 'user')
+
+    def __str__(self):
+        return f"{self.user.name} read {self.communication.subject}"

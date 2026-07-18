@@ -1667,3 +1667,124 @@ def user_attendance(request):
         'history': history,
     })
 
+ 
+from rest_framework import viewsets
+from .models import Users, Overseer, OverseerCommitteeMember
+from .models import OverseerDiaryEvent, OverseerMeetingMinutes, OverseerCommunication, CommunicationReadStatus
+from .serializers import (
+    OverseerDiaryEventSerializer, OverseerMeetingMinutesSerializer,
+    OverseerCommunicationSerializer, CommunicationReadStatusSerializer
+)
+from .mixins import CachedListMixin
+
+# 1. Overseer Diary Events (Fixed select_related)
+class OverseerDiaryEventViewSet(CachedListMixin, viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
+    queryset = OverseerDiaryEvent.objects.select_related('overseer').all()  # ✅ Removed 'created_by'
+    serializer_class = OverseerDiaryEventSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        overseer_uid = self.request.query_params.get('overseer_uid')
+        if overseer_uid:
+            queryset = queryset.filter(overseer__uid=overseer_uid)
+        return queryset
+
+    def perform_create(self, serializer):
+        auth_user = Users.objects.filter(uid=self.request.user.uid).first()
+        if auth_user and auth_user.email:
+            member = OverseerCommitteeMember.objects.filter(email=auth_user.email).first()
+            if member:
+                serializer.save(created_by=member)
+                return
+        serializer.save()
+
+
+# 2. Overseer Meeting Minutes (Fixed select_related)
+class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
+    queryset = OverseerMeetingMinutes.objects.select_related('overseer').all()  # ✅ Removed 'created_by'
+    serializer_class = OverseerMeetingMinutesSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        overseer_uid = self.request.query_params.get('overseer_uid')
+        if overseer_uid:
+            queryset = queryset.filter(overseer__uid=overseer_uid)
+        return queryset
+
+    def perform_create(self, serializer):
+        auth_user = Users.objects.filter(uid=self.request.user.uid).first()
+        if auth_user and auth_user.email:
+            member = OverseerCommitteeMember.objects.filter(email=auth_user.email).first()
+            if member:
+                serializer.save(created_by=member)
+                return
+        serializer.save()
+
+
+# 3. Overseer Communications (Fixed select_related)
+class OverseerCommunicationViewSet(CachedListMixin, viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
+    queryset = OverseerCommunication.objects.select_related('overseer').prefetch_related('read_statuses').all() # ✅ Removed 'created_by'
+    serializer_class = OverseerCommunicationSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        overseer_uid = self.request.query_params.get('overseer_uid')
+        if overseer_uid:
+            queryset = queryset.filter(overseer__uid=overseer_uid)
+
+        is_published = self.request.query_params.get('is_published')
+        if is_published is not None:
+            if is_published.lower() == 'true':
+                queryset = queryset.filter(is_published=True)
+            elif is_published.lower() == 'false':
+                queryset = queryset.filter(is_published=False)
+        return queryset
+
+    def perform_create(self, serializer):
+        auth_user = Users.objects.filter(uid=self.request.user.uid).first()
+        if auth_user and auth_user.email:
+            member = OverseerCommitteeMember.objects.filter(email=auth_user.email).first()
+            if member:
+                # Also handle attachments if they are passed in files
+                uploaded_files = self.request.FILES.getlist('attachments')
+                attachment_urls = []
+                if uploaded_files:
+                    from .views import encrypt_and_upload_to_firebase # Ensure this helper is imported
+                    for file_obj in uploaded_files:
+                        url = encrypt_and_upload_to_firebase(file_obj, 'communications')
+                        if url:
+                            attachment_urls.append(url)
+                serializer.save(created_by=member, attachments=attachment_urls)
+                return
+        serializer.save()
+
+
+# 4. Communication Read Status
+class CommunicationReadStatusViewSet(CachedListMixin, viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
+    queryset = CommunicationReadStatus.objects.select_related('communication', 'user').all()
+    serializer_class = CommunicationReadStatusSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        communication_id = self.request.query_params.get('communication_id')
+        user_uid = self.request.query_params.get('user_uid')
+        if communication_id:
+            queryset = queryset.filter(communication__id=communication_id)
+        if user_uid:
+            queryset = queryset.filter(user__uid=user_uid)
+        return queryset
+
+    def perform_create(self, serializer):
+        auth_user = Users.objects.filter(uid=self.request.user.uid).first()
+        if auth_user:
+            serializer.save(user=auth_user)
+        else:
+            serializer.save()
