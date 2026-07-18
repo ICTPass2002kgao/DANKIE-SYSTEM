@@ -177,7 +177,25 @@ def encrypt_and_upload_to_firebase(file_obj, folder):
     except Exception as e:
         logger.error(f"Encryption Upload Error: {e}")
         return None
-
+    
+def upload_to_firebase(file_obj, folder):
+    """
+    Uploads a file to Firebase Storage without encryption.
+    Returns the public URL or None on failure.
+    """
+    try:
+        bucket = storage.bucket()
+        # Generate a unique filename with original extension
+        ext = file_obj.name.split('.')[-1] if '.' in file_obj.name else 'jpg'
+        filename = f"{folder}/{os.urandom(16).hex()}.{ext}"
+        blob = bucket.blob(filename)
+        file_data = file_obj.read()
+        blob.upload_from_string(file_data, content_type=file_obj.content_type or 'application/octet-stream')
+        blob.make_public()
+        return blob.public_url
+    except Exception as e:
+        logger.error(f"Firebase upload error: {e}")
+        return None
 def decrypt_from_url_to_temp(url):
     if not cipher_suite: return None
     try:
@@ -286,6 +304,38 @@ def recognize_face(request):
             return Response({'matched': result['matched'], 'distance': result.get('score', 0.0)})
     finally:
         if os.path.exists(temp_live): os.remove(temp_live)
+        
+        
+@api_view(['POST'])
+@authentication_classes([FirebaseAuthentication])
+@permission_classes([IsFirebaseAuthenticated])
+def upload_poster(request):
+    """
+    Uploads a poster image to Firebase Storage and returns the public URL.
+    Expects a file in the 'poster' field.
+    """
+    file_obj = request.FILES.get('poster')
+    if not file_obj:
+        return Response({'error': 'No poster file provided'}, status=400)
+
+    try:
+        bucket = storage.bucket()
+        # Generate a unique filename
+        ext = file_obj.name.split('.')[-1] if '.' in file_obj.name else 'jpg'
+        filename = f"posters/{os.urandom(16).hex()}.{ext}"
+        blob = bucket.blob(filename)
+        # Read file content and upload
+        file_data = file_obj.read()
+        blob.upload_from_string(file_data, content_type=file_obj.content_type or 'image/jpeg')
+        # Make public
+        blob.make_public()
+        logger.info(f"✅ Poster uploaded: {blob.public_url}")
+        return Response({'url': blob.public_url}, status=201)
+    except Exception as e:
+        logger.error(f"❌ Poster upload error: {e}")
+        return Response({'error': str(e)}, status=500)
+    
+    
 @shared_task
 def process_bulk_email_task(include_terms, include_policy):
     try:
@@ -1675,13 +1725,10 @@ from .serializers import (
     OverseerDiaryEventSerializer, OverseerMeetingMinutesSerializer,
     OverseerCommunicationSerializer, CommunicationReadStatusSerializer
 )
-from .mixins import CachedListMixin
-
-# 1. Overseer Diary Events (Fixed select_related)
 class OverseerDiaryEventViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
-    queryset = OverseerDiaryEvent.objects.select_related('overseer').all()  # ✅ Removed 'created_by'
+    queryset = OverseerDiaryEvent.objects.select_related('overseer').all()
     serializer_class = OverseerDiaryEventSerializer
 
     def get_queryset(self):
@@ -1690,6 +1737,39 @@ class OverseerDiaryEventViewSet(CachedListMixin, viewsets.ModelViewSet):
         if overseer_uid:
             queryset = queryset.filter(overseer__uid=overseer_uid)
         return queryset
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        poster_file = request.FILES.get('poster')
+        if poster_file:
+            url = upload_to_firebase(poster_file, 'posters')
+            if url:
+                data['poster_url'] = url
+            else:
+                return Response({"error": "Failed to upload poster"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        data = request.data.copy()
+        poster_file = request.FILES.get('poster')
+        if poster_file:
+            url = upload_to_firebase(poster_file, 'posters')
+            if url:
+                data['poster_url'] = url
+            else:
+                return Response({"error": "Failed to upload poster"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 
     def perform_create(self, serializer):
         auth_user = Users.objects.filter(uid=self.request.user.uid).first()
@@ -1700,8 +1780,15 @@ class OverseerDiaryEventViewSet(CachedListMixin, viewsets.ModelViewSet):
                 return
         serializer.save()
 
-
-# 2. Overseer Meeting Minutes (Fixed select_related)
+    def perform_update(self, serializer):
+        auth_user = Users.objects.filter(uid=self.request.user.uid).first()
+        if auth_user and auth_user.email:
+            member = OverseerCommitteeMember.objects.filter(email=auth_user.email).first()
+            if member:
+                serializer.save(created_by=member)
+                return
+        serializer.save()
+        
 class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
