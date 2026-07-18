@@ -114,7 +114,7 @@ class Users(models.Model):
 class Visitor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     community_name = models.CharField(max_length=255, verbose_name="Church/Branch Name")
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255,blank=True, null=True)
     overseer_uid = models.CharField(max_length=255, blank=True, null=True)
     district_elder_name = models.CharField(max_length=255, blank=True, null=True)
     surname = models.CharField(max_length=255)
