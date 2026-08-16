@@ -1004,7 +1004,7 @@ class UsersViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post', 'put'], permission_classes=[IsFirebaseAuthenticated])
     def update_skills(self, request):
-        uid = request.data.get('member_uid')
+        uid = request.data.get('uid')
         if uid:
             # Ensure the requesting user is the overseer of this member
             try:
