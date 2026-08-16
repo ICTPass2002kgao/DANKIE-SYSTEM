@@ -29,7 +29,6 @@ from .views import (
 from . import views 
 # Initialize Router
 router = DefaultRouter()  
-
 router.register(r'products', CatalogViewSet, basename='products')
 router.register(r'seller-inventory', SellerInventoryViewSet, basename='seller-inventory')
 router.register(r'orders', OrderViewSet, basename='orders')
@@ -45,8 +44,7 @@ router.register(r'committee_members', OverseerCommitteeMemberViewSet, basename='
 router.register(r'overseer_expenses_reports', OverseerExpenseReportViewSet,basename='overseer-expenses')
 router.register(r'events', UpcomingEventViewSet)
 router.register(r'careers', CareerOpportunityViewSet)  
-router.register(r'overseer_diary_events', OverseerDiaryEventViewSet, basename='overseer-diary-events')
-router.register(r'overseer_meeting_minutes', OverseerMeetingMinutesViewSet, basename='overseer-meeting-minutes')
+router.register(r'overseer_diary_events', OverseerDiaryEventViewSet, basename='overseer-diary-events') 
 router.register(r'overseer_communications', OverseerCommunicationViewSet, basename='overseer-communications')
 router.register(r'communication_read_statuses', CommunicationReadStatusViewSet, basename='communication-read-statuses')
 router.register(r'branch_committee', BranchCommitteeMemberViewSet)
@@ -56,10 +54,12 @@ router.register(r'audit_logs', AuditLogViewSet)
 router.register(r'contribution_history', ContributionHistoryViewSet)
 router.register(r'monthly_reports', MonthlyReportViewSet)
 router.register(r'visitors', VisitorViewSet, basename='visitors')
+router.register(r'tactso_meeting_minutes', views.TactsoMeetingMinutesViewSet, basename='tactso-meeting-minutes')
 # Add to your router
 router.register(r'event_diary', EventDiaryViewSet, basename='event_diary')
 router.register(r'apostolic_greetings', ApostolicGreetingViewSet, basename='apostolic_greetings')
-router.register(r'event_contributions', EventContributionViewSet, basename='event_contributions')
+router.register(r'event_contributions', EventContributionViewSet, basename='event_contributions') 
+router.register(r'overseer_meeting_minutes', OverseerMeetingMinutesViewSet, basename='overseer-meeting-minutes')
 
 urlpatterns = [ 
     path('', include(router.urls)), 
@@ -69,11 +69,9 @@ urlpatterns = [
     path('initialize-subscription/', initialize_subscription), 
     path('global_attendance_summary/', global_attendance_summary, name='global_attendance_summary'),
     path('user_attendance/', user_attendance, name='user_attendance'),
-    # Marketplace
     path('create_seller_subaccount/', create_seller_subaccount),
     path('create-payment-link/', create_payment_link),
     path('paystack-webhook/', paystack_webhook),
-    # Add this to your urlpatterns in urls.py
     path('monthly_attendance_report/', views.monthly_attendance_report, name='monthly_attendance_report'),
      
 ]

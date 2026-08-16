@@ -86,6 +86,9 @@ class Users(models.Model):
     null=True,
     verbose_name="Year of Study"
 )
+    
+    # committee_member = models.BooleanField(default=False)
+    # committee_portfolio = models.CharField(max_length=255, blank=True, null=True)
     last_attended_date = models.DateField(auto_now_add=True, null=True, blank=True) 
     seller_paystack_account = models.CharField(max_length=255, blank=True, null=True)
     account_verified = models.BooleanField(default=False) 
@@ -281,7 +284,10 @@ class OverseerCommitteeMember(models.Model):
 
     def __str__(self):
         return f"{self.full_name} - {self.portfolio}"
-
+# Add to models.py - Meeting Minutes related models
+ 
+    def __str__(self):
+        return f"{self.title} - {self.meeting_date}"
 class District(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     overseer = models.ForeignKey(Overseer, related_name='districts', on_delete=models.CASCADE)
@@ -471,7 +477,18 @@ class TactsoCommitteeMember(models.Model):
 
     def __str__(self):
         return f"{self.full_name} ({self.branch.university_name})"
+class TactsoMeetingMinutes(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    branch = models.ForeignKey(TactsoBranch, related_name='tactso_meeting_minutes', on_delete=models.CASCADE)
+    title = models.CharField(max_length=255, verbose_name="Meeting Title")
+    meeting_date = models.DateField(verbose_name="Meeting Date")
+    minutes_text = models.TextField(verbose_name="Minutes Details")
+    present_members = models.JSONField(default=list, blank=True, verbose_name="Present Members (JSON)")
+    created_by = models.CharField(max_length=255, blank=True, verbose_name="Created By")
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"{self.title} - {self.meeting_date} ({self.branch.university_name})"
 # ===============================================================================================
 # 5. STAFF & LOGS
 # ===============================================================================================

@@ -50,6 +50,9 @@ class OrderSerializer(serializers.ModelSerializer):
             )
 
         return order
+    
+# Add to serializers.py 
+        
 class ProductSerializer(serializers.ModelSerializer):
     image_url = serializers.URLField()
     additional_images = serializers.JSONField(required=False)
@@ -278,7 +281,13 @@ class OverseerDiaryEventSerializer(serializers.ModelSerializer):
         model = OverseerDiaryEvent
         fields = '__all__'
         read_only_fields = ('created_at',)
+from .models import TactsoMeetingMinutes
 
+class TactsoMeetingMinutesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TactsoMeetingMinutes
+        fields = '__all__'
+        read_only_fields = ('created_at',)
 class OverseerMeetingMinutesSerializer(serializers.ModelSerializer):
     class Meta:
         model = OverseerMeetingMinutes

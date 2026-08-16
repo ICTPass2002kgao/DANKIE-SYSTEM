@@ -51,7 +51,9 @@ from .models import (
     OverseerCommitteeMember, OverseerExpenseReport, UpcomingEvent, 
     CareerOpportunity, TactsoBranch, AdminStaffMember, AuditLog,
     TactsoCommitteeMember, ApplicationRequest, UserUniversityApplication, 
-    SellerListing, ContributionHistory, MonthlyReport,Visitor,EventContribution,EventDiary
+    SellerListing, ContributionHistory, MonthlyReport, Visitor, EventContribution, EventDiary,
+    OverseerMeetingMinutes, OverseerDiaryEvent, OverseerCommunication, CommunicationReadStatus,
+    TactsoMeetingMinutes
 )
 
 from .serializers import (
@@ -61,7 +63,7 @@ from .serializers import (
     UpcomingEventSerializer, CareerOpportunitySerializer, 
     TactsoBranchSerializer,AdminStaffMemberSerializer, AuditLogSerializer,
     TactsoCommitteeMemberSerializer, ApplicationRequestSerializer,EventContributionSerializer,EventDiarySerializer,
-    UserUniversityApplicationSerializer, SellerListingSerializer, ContributionHistorySerializer, MonthlyReportSerializer,VisitorSerializer
+    UserUniversityApplicationSerializer, SellerListingSerializer, ContributionHistorySerializer, MonthlyReportSerializer,VisitorSerializer,OverseerMeetingMinutesSerializer
 )
 
 logger = logging.getLogger(__name__)
@@ -762,7 +764,39 @@ def batch_geocode_communities(community_ids):
         # Prevents database connection leaks in background threads
         connection.close()
 
+# Add to views.py - Meeting Minutes ViewSet
 
+class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
+    queryset = OverseerMeetingMinutes.objects.select_related('overseer').all()
+    serializer_class = OverseerMeetingMinutesSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        overseer_uid = self.request.query_params.get('overseer_uid')
+        if overseer_uid:
+            queryset = queryset.filter(overseer__uid=overseer_uid)
+        
+        # Filter by date range
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(meeting_date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(meeting_date__lte=end_date)
+            
+        return queryset
+
+    def perform_create(self, serializer):
+        auth_user = Users.objects.filter(uid=self.request.user.uid).first()
+        if auth_user and auth_user.email:
+            member = OverseerCommitteeMember.objects.filter(email=auth_user.email).first()
+            if member:
+                serializer.save(created_by=member.full_name)
+                return
+        serializer.save()
+        
 class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
     def get_permissions(self):
         if self.request.method == 'GET':
@@ -1333,7 +1367,30 @@ class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     
-    
+from .models import TactsoMeetingMinutes
+from .serializers import TactsoMeetingMinutesSerializer
+
+class TactsoMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
+    queryset = TactsoMeetingMinutes.objects.select_related('branch').all()
+    serializer_class = TactsoMeetingMinutesSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        branch_id = self.request.query_params.get('branch_id')
+        if branch_id:
+            queryset = queryset.filter(branch__id=branch_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        auth_user = Users.objects.filter(uid=self.request.user.uid).first()
+        if auth_user and auth_user.email:
+            member = TactsoCommitteeMember.objects.filter(email=auth_user.email).first()
+            if member:
+                serializer.save(created_by=member.full_name)
+                return
+        serializer.save()
 # ⭐️ OPTIMIZED
 class ApplicationRequestViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
