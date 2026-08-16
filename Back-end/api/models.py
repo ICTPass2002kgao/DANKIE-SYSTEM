@@ -97,6 +97,8 @@ class Users(models.Model):
     district_elder_name = models.CharField(max_length=255, blank=True, null=True)
     overseer_uid = models.CharField(max_length=255, blank=True, null=True) 
     profile_url = models.TextField(blank=True, null=True)   
+    # In Users model
+    skills_services = models.JSONField(default=list, blank=True, verbose_name="Skills & Services")
     
     verification_status = models.CharField(max_length=50, default='Unverified', blank=True, null=True)
     contract_signature_url = models.TextField(blank=True, null=True)

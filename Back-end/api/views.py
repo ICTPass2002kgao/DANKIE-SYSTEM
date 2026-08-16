@@ -1000,7 +1000,36 @@ class UsersViewSet(viewsets.ModelViewSet):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+    # In UsersViewSet (views.py)
+
+    @action(detail=False, methods=['post', 'put'], permission_classes=[IsFirebaseAuthenticated])
+    def update_skills(self, request):
+        uid = request.data.get('member_uid')
+        if uid:
+            # Ensure the requesting user is the overseer of this member
+            try:
+                target_user = Users.objects.get(uid=uid)
+            except Users.DoesNotExist:
+                return Response({'error': 'Member not found'}, status=404)
+            # Check if the requesting user is the overseer of this member
+            overseer_uid = request.user.uid  # assuming Firebase user uid
+            if target_user.overseer_uid != overseer_uid:
+                return Response({'error': 'You are not authorized to update this member'}, status=403)
+            user = target_user
+        else:
+            # update own skills
+            try:
+                user = Users.objects.get(uid=request.user.uid)
+            except Users.DoesNotExist:
+                return Response({'error': 'User not found'}, status=404)
+        
+        skills_data = request.data.get('skills', [])
+        if not isinstance(skills_data, list):
+            return Response({'error': 'Skills must be a list'}, status=400)
+        user.skills_services = skills_data
+        user.save()
+        return Response({'status': 'skills updated', 'skills': user.skills_services})
+
     def update(self, request, *args, **kwargs):
         kwargs['partial'] = True
         attendance_status = request.data.get('attendance_status')
