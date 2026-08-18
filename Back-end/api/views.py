@@ -1,5 +1,6 @@
 from calendar import calendar
 import datetime
+import html
 import os
 import json
 import threading
@@ -17,7 +18,7 @@ from decimal import Decimal
 from email.message import EmailMessage
 import logging
 from calendar import monthrange
-
+from livekit import api
 from django.core.exceptions import ImproperlyConfigured
 from celery import shared_task
 
@@ -47,7 +48,7 @@ from .mixins import CachedListMixin
 from django.db import transaction
 
 from .models import (
-    AttendanceLog, IssueReport, Order, Songs, Product, Users, Overseer, District, Community, 
+    AttendanceLog, IssueReport, MeetingAttendance, Order, Songs, Product, Users, Overseer, District, Community, 
     OverseerCommitteeMember, OverseerExpenseReport, UpcomingEvent, 
     CareerOpportunity, TactsoBranch, AdminStaffMember, AuditLog,
     TactsoCommitteeMember, ApplicationRequest, UserUniversityApplication, 
@@ -1432,6 +1433,130 @@ class TactsoMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
                 serializer.save(created_by=member.full_name)
                 return
         serializer.save()
+         
+@api_view(['POST'])
+@authentication_classes([FirebaseAuthentication]) 
+@permission_classes([IsFirebaseAuthenticated])
+def generate_tactso_livekit_token(request):
+    
+    # 1. Get the data directly from Flutter
+    branch_id = request.data.get('branch_id')
+    participant_name = request.data.get('participant_name', 'Committee Member')
+    
+    if not branch_id:
+        return Response({"error": "Branch ID is required."}, status=400)
+        
+    # Group everyone in the same branch into the same video room
+    room_name = f"tactso_room_{branch_id}"
+    participant_identity = f"member_{uuid.uuid4().hex[:8]}"
+
+    # 2. Generate Token
+    try:
+        token = api.AccessToken(
+            settings.LIVEKIT_API_KEY, 
+            settings.LIVEKIT_API_SECRET
+        ).with_identity(participant_identity) \
+         .with_name(participant_name) \
+         .with_grants(api.VideoGrants(
+             room_join=True,
+             room=room_name,
+         )).to_jwt()
+
+        return Response({
+            "token": token,
+            "room": room_name,
+            "livekit_url": settings.LIVEKIT_URL
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+     
+def send_designed_email_via_node(recipient_email, subject, body_message, firebase_id_token=None):
+    url = "https://api-7gbt42tr6q-uc.a.run.app/sendCustomEmail"
+    
+    # Assets & Legal Links
+    logo_url = "https://firebasestorage.googleapis.com/v0/b/tact-3c612.firebasestorage.app/o/App%20Logo%2Fdankie_logo.PNG?alt=media&token=fb3a28a9-ab50-43f0-bee1-eecb34e5f394"
+    terms_url = "https://dankiemobile.org.za/terms-and-conditions"
+    privacy_url = "https://dankiemobile.org.za/policy-privacy"
+    
+    # Safely escape and format message
+    safe_subject = html.escape(str(subject))
+    # Replace newlines with <br> for the Node.js API to process correctly
+    safe_body = html.escape(str(body_message)).replace("\n", "<br>")
+    
+    # PREMIUM MODERN HTML TEMPLATE
+    html_message = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; ">
+    <div class="wrapper" style="width: 100%; padding: 40px 10px; ">
+        <div class="card" style="max-width: 500px; margin: 0 auto; background: #ffffff; border-radius: 24px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.05); ">
+            <div class="header" style="padding: 30px 30px 10px 30px; text-align: center; ">
+                <img src="{logo_url}" style=" width: 48px; height: 48px; border-radius: 12px; border: 1px solid #f1f5f9; box-shadow: 0 4px 6px rgba(0,0,0,0.05); " alt="Dankie Logo" class="logo">
+            </div>
+            <div class="content" style="padding: 20px 35px 40px 35px; ">
+                <div class="title" style="font-size: 18px; font-weight: 800; color: #1e293b; margin-bottom: 20px; letter-spacing: -0.2px; ">{safe_subject}</div>
+                <div class="body-text" style="font-size: 14px; line-height: 1.8; color: #475569; ">{safe_body}</div>
+                <div class="divider" style="height: 1px; background: #e2e8f0; margin: 25px 0; "></div>
+                <p style="font-size: 12px; color: #94a3b8; text-align: center;">
+                    This is an automated notification from Dankie. Please do not reply.
+                </p>
+            </div>
+            <div class="footer" style="padding: 25px; text-align: center; font-size: 11px; color: #94a3b8; background-color: #f8fafc; ">
+                <p>&copy; 2026 Dankie Mobile. All rights reserved.</p>
+                <div>
+                    <a href="{terms_url}" style="color: #64748b; text-decoration: underline; margin: 0 8px; ">Terms & Conditions</a> 
+                    <a href="{privacy_url}" style="color: #64748b; text-decoration: underline; margin: 0 8px; ">Privacy Policy</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+    headers = {'Content-Type': 'application/json'}
+    if firebase_id_token:
+        headers['Authorization'] = f'Bearer {firebase_id_token}'
+
+    # Keeping keys exactly as your Node.js expects
+    payload = {
+        'to': recipient_email,
+        'subject': subject,
+        'body': html_message 
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response.raise_for_status()
+        return {"success": True, "data": response.json()}
+    except requests.exceptions.RequestException as e:
+        print(f"Node.js API Error: {e}")
+        return {"success": False, "error": str(e)}  
+
+@api_view(['POST'])
+def send_email(request):
+    recipient = request.data.get('to')
+    subject = request.data.get('subject')
+    message_text = request.data.get('body')
+    
+    if not recipient or not subject or not message_text:
+        return Response({"error": "Missing parameters (email, subject, message)."}, status=400)
+    
+    # Extract token if passed from client
+    auth_header = request.headers.get('Authorization', '')
+    token = auth_header.split(' ')[1] if ' ' in auth_header else None
+    
+    result = send_designed_email_via_node(recipient, subject, message_text, firebase_id_token=token)
+    
+    if result["success"]:
+        return Response({"status": "Designed email sent successfully via Node.js endpoint."}, status=200)
+    else:
+        return Response({"error": result["error"]}, status=500)
+
 # ⭐️ OPTIMIZED
 class ApplicationRequestViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
@@ -1886,11 +2011,12 @@ class OverseerDiaryEventViewSet(CachedListMixin, viewsets.ModelViewSet):
                 serializer.save(created_by=member)
                 return
         serializer.save()
-        
+         
+
 class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFirebaseAuthenticated]
-    queryset = OverseerMeetingMinutes.objects.select_related('overseer').all()  # ✅ Removed 'created_by'
+    queryset = OverseerMeetingMinutes.objects.select_related('overseer').all()
     serializer_class = OverseerMeetingMinutesSerializer
 
     def get_queryset(self):
@@ -1905,11 +2031,52 @@ class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
         if auth_user and auth_user.email:
             member = OverseerCommitteeMember.objects.filter(email=auth_user.email).first()
             if member:
-                serializer.save(created_by=member)
+                # Fixed: created_by is a CharField, so we must save the string (full_name), not the model object.
+                serializer.save(created_by=member.full_name)
                 return
         serializer.save()
 
+     
+ 
+import uuid
+@api_view(['POST'])
+@authentication_classes([FirebaseAuthentication]) # This fixes the AnonymousUser error
+@permission_classes([IsFirebaseAuthenticated])
+def generate_livekit_token(request):
+    
+    # 1. Get the data directly from Flutter
+    overseer_id = request.data.get('overseer_id')
+    participant_name = request.data.get('participant_name', 'Committee Member')
+    
+    
+    if not overseer_id:
+        return Response({"error": "Overseer ID is required."}, status=400)
+        
+    room_name = f"overseer_room_{overseer_id}"
+    
+    # Generate a random unique ID for the LiveKit session, but use their actual name
+    participant_identity = f"member_{uuid.uuid4().hex[:8]}"
 
+    # 2. Generate Token
+    try:
+        token = api.AccessToken(
+            settings.LIVEKIT_API_KEY, 
+            settings.LIVEKIT_API_SECRET
+        ).with_identity(participant_identity) \
+         .with_name(participant_name) \
+         .with_grants(api.VideoGrants(
+             room_join=True,
+             room=room_name,
+         )).to_jwt()
+
+        return Response({
+            "token": token,
+            "room": room_name,
+            "livekit_url": settings.LIVEKIT_URL
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+    
 # 3. Overseer Communications (Fixed select_related)
 class OverseerCommunicationViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]

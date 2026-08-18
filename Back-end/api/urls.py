@@ -63,8 +63,10 @@ router.register(r'overseer_meeting_minutes', OverseerMeetingMinutesViewSet, base
 
 urlpatterns = [ 
     path('', include(router.urls)), 
+    path('livekit-token/', views.generate_livekit_token),
+    path('tactso-livekit-token/', views.generate_tactso_livekit_token),
     path('verify_faces/', recognize_face, name='verify_faces'),  
-    path('send-email/', send_legal_broadcast, name='send_email'),
+    path('send-email-broadcast/', send_legal_broadcast, name='send_email'),
     path('serve_image/', ServeDecryptedImageView.as_view(), name='serve_image'), 
     path('initialize-subscription/', initialize_subscription), 
     path('global_attendance_summary/', global_attendance_summary, name='global_attendance_summary'),
@@ -72,6 +74,8 @@ urlpatterns = [
     path('create_seller_subaccount/', create_seller_subaccount),
     path('create-payment-link/', create_payment_link),
     path('paystack-webhook/', paystack_webhook),
+    path('send-email/', views.send_email, name='send-email'),
     path('monthly_attendance_report/', views.monthly_attendance_report, name='monthly_attendance_report'),
+    
      
 ]

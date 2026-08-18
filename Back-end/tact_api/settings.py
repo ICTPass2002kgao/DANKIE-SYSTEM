@@ -162,7 +162,14 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'setamict@gmail.com'
 EMAIL_HOST_PASSWORD = 'owwa msaz ueit juum'
 DEFAULT_FROM_EMAIL = 'setamict@gmail.com'
+LIVEKIT_API_KEY = os.environ.get("LIVEKIT_API_KEY")
+LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET")
+LIVEKIT_URL = os.environ.get("LIVEKIT_URL")
 
+# Optional but recommended: Add a quick check to prevent the server from running 
+# if you forget to add these to your .env file in production.
+if not all([LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL]):
+    raise ValueError("Missing LiveKit credentials in .env file.")
 # ===============================================================================
 # 9. ENCRYPTION & FIREBASE 
 # ===============================================================================

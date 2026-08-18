@@ -287,9 +287,8 @@ class OverseerCommitteeMember(models.Model):
     def __str__(self):
         return f"{self.full_name} - {self.portfolio}"
 # Add to models.py - Meeting Minutes related models
- 
-    def __str__(self):
-        return f"{self.title} - {self.meeting_date}"
+  
+
 class District(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     overseer = models.ForeignKey(Overseer, related_name='districts', on_delete=models.CASCADE)
@@ -478,13 +477,17 @@ class TactsoCommitteeMember(models.Model):
     added_at = models.TextField(blank=True, verbose_name="Added At",auto_created=True)
 
     def __str__(self):
-        return f"{self.full_name} ({self.branch.university_name})"
+        return f"{self.full_name} ({self.branch.university_name})" 
+
 class TactsoMeetingMinutes(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     branch = models.ForeignKey(TactsoBranch, related_name='tactso_meeting_minutes', on_delete=models.CASCADE)
     title = models.CharField(max_length=255, verbose_name="Meeting Title")
-    meeting_date = models.DateField(verbose_name="Meeting Date")
-    minutes_text = models.TextField(verbose_name="Minutes Details")
+    meeting_date = models.DateField(verbose_name="Meeting Date") 
+    meeting_time = models.TimeField(null=True, blank=True, verbose_name="Meeting Time")
+     
+    minutes_text = models.TextField(blank=True, null=True, verbose_name="Minutes Details")
+    
     present_members = models.JSONField(default=list, blank=True, verbose_name="Present Members (JSON)")
     created_by = models.CharField(max_length=255, blank=True, verbose_name="Created By")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -682,20 +685,37 @@ class OverseerDiaryEvent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.title} - {self.event_date}"
-    
+        return f"{self.title} - {self.event_date}" 
+
 class OverseerMeetingMinutes(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     overseer = models.ForeignKey(Overseer, related_name='meeting_minutes', on_delete=models.CASCADE)
     title = models.CharField(max_length=255, verbose_name="Meeting Title")
-    meeting_date = models.DateField(verbose_name="Meeting Date")
-    minutes_text = models.TextField(verbose_name="Minutes Details")
+    meeting_date = models.DateField(verbose_name="Meeting Date") 
+    meeting_time = models.TimeField(null=True, blank=True, verbose_name="Meeting Time")
+    google_meet_url = models.URLField(max_length=500, null=True, blank=True, verbose_name="Google Meet URL")
+    
+    minutes_text = models.TextField(verbose_name="Minutes Details") 
     present_members = models.JSONField(default=list, blank=True, verbose_name="Present Members (JSON)")
+    
     created_by = models.CharField(max_length=255, blank=True, verbose_name="Created By")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.title} - {self.meeting_date}"
+
+ 
+class MeetingAttendance(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    meeting = models.ForeignKey(OverseerMeetingMinutes, related_name="attendance_records", on_delete=models.CASCADE)
+    committee_member = models.ForeignKey(OverseerCommitteeMember, on_delete=models.CASCADE)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta: 
+        unique_together = ('meeting', 'committee_member') 
+
+    def __str__(self):
+        return f"{self.committee_member.full_name} joined {self.meeting.title}"
 class OverseerCommunication(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     overseer = models.ForeignKey(Overseer, related_name='communications', on_delete=models.CASCADE)

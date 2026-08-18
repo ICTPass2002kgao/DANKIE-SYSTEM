@@ -287,12 +287,29 @@ class TactsoMeetingMinutesSerializer(serializers.ModelSerializer):
     class Meta:
         model = TactsoMeetingMinutes
         fields = '__all__'
-        read_only_fields = ('created_at',)
+        read_only_fields = ('created_at',) 
+
 class OverseerMeetingMinutesSerializer(serializers.ModelSerializer):
     class Meta:
         model = OverseerMeetingMinutes
         fields = '__all__'
         read_only_fields = ('created_at',)
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        
+        # 1. Get the legacy manual list (if any)
+        manual_list = representation.get('present_members', [])
+        if not isinstance(manual_list, list):
+            manual_list = []
+            
+        # 2. Get the automated list of people who clicked "Join"
+        automated_list = list(instance.attendance_records.values_list('committee_member__full_name', flat=True))
+        
+        # 3. Merge them, remove duplicates (using set), and return as a combined list to Flutter
+        representation['present_members'] = list(set(manual_list + automated_list))
+        
+        return representation
 
 class OverseerCommunicationSerializer(serializers.ModelSerializer):
     read_count = serializers.IntegerField(source='read_statuses.count', read_only=True)
