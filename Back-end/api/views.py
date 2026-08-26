@@ -69,9 +69,9 @@ from .serializers import (
 
 logger = logging.getLogger(__name__)
 
-# ==========================================
+# =============================================================================================================
 # 1. INITIALIZATION & SETUP
-# ==========================================
+# =============================================================================================================
 
 if hasattr(settings, 'ENCRYPTION_KEY') and settings.ENCRYPTION_KEY:
     try:
@@ -138,9 +138,9 @@ class IsFirebaseAuthenticated(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and getattr(request.user, 'is_authenticated', False))
 
-# ==========================================
+# ================================================================================================
 # 2. HELPER FUNCTIONS (Security, AI, Email)
-# ==========================================
+# ================================================================================================
 
 def generate_face_encoding(file_obj):
     if GLOBAL_FACE_APP is None: return "[]"
@@ -154,8 +154,7 @@ def generate_face_encoding(file_obj):
         if img is None: return "[]"
         faces = GLOBAL_FACE_APP.get(img)
         if not faces: return "[]"
-        
-        # Sort by largest face bounding box
+         
         faces = sorted(faces, key=lambda x: (x.bbox[2]-x.bbox[0]) * (x.bbox[3]-x.bbox[1]), reverse=True)
         embedding = faces[0].embedding.tolist()
         return json.dumps(embedding)
@@ -165,7 +164,7 @@ def generate_face_encoding(file_obj):
     finally:
         if 'temp_file' in locals() and os.path.exists(temp_file.name):
             os.remove(temp_file.name)
-        file_obj.seek(0)  # CRITICAL: Reset the file pointer for Firebase upload
+        file_obj.seek(0)   
 def encrypt_and_upload_to_firebase(file_obj, folder):
     if not cipher_suite: return None
     try:
@@ -187,8 +186,7 @@ def upload_to_firebase(file_obj, folder):
     Returns the public URL or None on failure.
     """
     try:
-        bucket = storage.bucket()
-        # Generate a unique filename with original extension
+        bucket = storage.bucket() 
         ext = file_obj.name.split('.')[-1] if '.' in file_obj.name else 'jpg'
         filename = f"{folder}/{os.urandom(16).hex()}.{ext}"
         blob = bucket.blob(filename)
@@ -262,8 +260,7 @@ def recognize_face(request):
         with open(temp_live, 'wb+') as f:
             for chunk in live_file.chunks(): f.write(chunk)
 
-        if candidates_json:
-            # FAST PATH: Check against all loaded encodings at once natively
+        if candidates_json: 
             try:
                 candidates = json.loads(candidates_json)
             except Exception:
@@ -322,15 +319,12 @@ def upload_poster(request):
         return Response({'error': 'No poster file provided'}, status=400)
 
     try:
-        bucket = storage.bucket()
-        # Generate a unique filename
+        bucket = storage.bucket() 
         ext = file_obj.name.split('.')[-1] if '.' in file_obj.name else 'jpg'
         filename = f"posters/{os.urandom(16).hex()}.{ext}"
-        blob = bucket.blob(filename)
-        # Read file content and upload
+        blob = bucket.blob(filename) 
         file_data = file_obj.read()
-        blob.upload_from_string(file_data, content_type=file_obj.content_type or 'image/jpeg')
-        # Make public
+        blob.upload_from_string(file_data, content_type=file_obj.content_type or 'image/jpeg') 
         blob.make_public()
         logger.info(f"✅ Poster uploaded: {blob.public_url}")
         return Response({'url': blob.public_url}, status=201)
@@ -761,11 +755,9 @@ def batch_geocode_communities(community_ids):
             except Exception as e:
                 print(f"Error processing community {cid}: {e}")
                 pass
-    finally:
-        # Prevents database connection leaks in background threads
+    finally: 
         connection.close()
-
-# Add to views.py - Meeting Minutes ViewSet
+ 
 
 class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
@@ -832,9 +824,7 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
                 if isinstance(raw_districts, str):
                     parsed = json.loads(raw_districts)
                 else:
-                    parsed = raw_districts
-                    
-                # ⭐️ SMART PARSING: Safely convert Flutter's Map/Dict into the expected List
+                    parsed = raw_districts 
                 if isinstance(parsed, dict):
                     for elder_name, comms in parsed.items():
                         districts_data.append({
@@ -889,8 +879,7 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
                     community_name=c_data.get('community_name', 'Unknown')
                 )
                 created_community_ids.append(comm.id)
-
-        # ⭐️ Safely trigger geocoding on a separate thread
+ 
         if created_community_ids:
             threading.Thread(
                 target=batch_geocode_communities, 
@@ -1387,7 +1376,7 @@ class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         branch_id = request.data.get('branch')
         if branch_id:
             current_count = TactsoCommitteeMember.objects.filter(branch__id=branch_id).count()
-            if current_count >= 6: 
+            if current_count >= 16: 
                 return Response({"error": "Maximum limit of 6 committee members reached."}, status=status.HTTP_400_BAD_REQUEST)
         
         data = request.data.dict() if hasattr(request.data, 'dict') else request.data.copy()
