@@ -467,6 +467,7 @@ class TactsoCommitteeMember(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     branch = models.ForeignKey(TactsoBranch, related_name="branch_committee_members", on_delete=models.CASCADE)
     accepted_ts_and_cs = models.BooleanField(default=False)
+    phone = models.CharField(max_length=100, blank=True, verbose_name="Phone")
     full_name = models.CharField(max_length=255, verbose_name="Name")
     gender = models.CharField(max_length=50, choices=GENDER_CHOICES, blank=True, null=True)
     email = models.EmailField(blank=True, verbose_name="Email")
