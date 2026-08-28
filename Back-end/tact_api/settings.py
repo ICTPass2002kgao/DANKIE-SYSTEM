@@ -224,7 +224,7 @@ CACHES = {
                 "max_connections": 50,
                 "retry_on_timeout": True,
             },
-            "IGNORE_EXCEPTIONS": True,
+            "IGNORE_EXCEPTIONS": False,
             "SOCKET_CONNECT_TIMEOUT": 5,
             "SOCKET_TIMEOUT": 5,
         },
