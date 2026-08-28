@@ -210,9 +210,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 import os
 
 # ==========================================
-# CACHE CONFIGURATION (Using Redis Database 1)
+# CACHE CONFIGURATION (Railway Redis)
 # ==========================================
-REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/1")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379")
 
 CACHES = {
     "default": {
@@ -233,11 +233,11 @@ CACHES = {
 }
 
 # ==========================================
-# CELERY CONFIGURATION (Using Redis Database 0)
+# CELERY CONFIGURATION
 # ==========================================
-# We use database 0 for the message broker to prevent conflicts with the cache
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://127.0.0.1:6379/0")
+# Railway does not inject CELERY_BROKER_URL. We MUST fallback to REDIS_URL.
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", REDIS_URL)
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", REDIS_URL)
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
