@@ -737,8 +737,7 @@ class _TactsoReportsTabState extends State<TactsoReportsTab> {
 
     Api().showLoading(context);
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      final uid = user?.uid;
+      final user = FirebaseAuth.instance.currentUser; 
       final String? token = await user?.getIdToken();
 
       final docId = "${widget.universityName}_${_selectedYear}_$_selectedMonth";

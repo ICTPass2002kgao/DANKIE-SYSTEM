@@ -52,7 +52,7 @@ class TikTokShareSheet extends StatefulWidget {
 class _TikTokShareSheetState extends State<TikTokShareSheet> {
   double _clipDurationSeconds = 15.0;
   bool _isGenerating = false;
-  final String _appDomain = "https://dankie.netlify.app";
+  final String _appDomain = "https://web.dankiemobile.org.za";
   late final ScreenshotController _screenshotController;
 
   @override
@@ -63,9 +63,11 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
 
   double _getLiveStartSeconds() {
     if (audioHandler != null) {
-      final currentPosMs = audioHandler!.playbackState.value.position.inMilliseconds;
+      final currentPosMs =
+          audioHandler!.playbackState.value.position.inMilliseconds;
       final currentPosSec = currentPosMs / 1000.0;
-      final totalDuration = audioHandler!.mediaItem.value?.duration?.inSeconds ?? 300;
+      final totalDuration =
+          audioHandler!.mediaItem.value?.duration?.inSeconds ?? 300;
       if (currentPosSec > totalDuration - 5) return 0.0;
       return currentPosSec;
     }
@@ -90,11 +92,15 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
     final String tempAudioClipPath = '$tempDir/audio_clip.aac';
     final String finalVideoPath = '$tempDir/final_clip_$now.mp4';
 
-    String appLink = "$_appDomain/song?url=${Uri.encodeComponent(widget.songUrl)}&song=${Uri.encodeComponent(widget.songName)}&artist=${Uri.encodeComponent(widget.artistName)}";
-    String message = "🎵 ${widget.songName} - ${widget.artistName}\n\nTap to listen in DANKIE:\n$appLink";
+    String appLink =
+        "$_appDomain/song?url=${Uri.encodeComponent(widget.songUrl)}&song=${Uri.encodeComponent(widget.songName)}&artist=${Uri.encodeComponent(widget.artistName)}";
+    String message =
+        "🎵 ${widget.songName} - ${widget.artistName}\n\nTap to listen in DANKIE:\n$appLink";
 
     try {
-      File sourceFile = await DefaultCacheManager().getSingleFile(widget.songUrl);
+      File sourceFile = await DefaultCacheManager().getSingleFile(
+        widget.songUrl,
+      );
       String sourceFilePath = sourceFile.path;
 
       final imageBytes = await _screenshotController.captureFromWidget(
@@ -108,17 +114,23 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
       final String tempPngPath = '$tempDir/frame.png';
       await File(tempPngPath).writeAsBytes(imageBytes);
 
-      String audioCmd = "-y -ss $startSeconds -t $duration -i \"$sourceFilePath\" -c:a aac -b:a 128k \"$tempAudioClipPath\"";
+      String audioCmd =
+          "-y -ss $startSeconds -t $duration -i \"$sourceFilePath\" -c:a aac -b:a 128k \"$tempAudioClipPath\"";
       Session audioSession = await FFmpegKit.execute(audioCmd);
-      if (!ReturnCode.isSuccess(await audioSession.getReturnCode())) throw Exception("Audio Cut Failed");
+      if (!ReturnCode.isSuccess(await audioSession.getReturnCode()))
+        throw Exception("Audio Cut Failed");
 
-      String visualCmd = "-y -loop 1 -i \"$tempPngPath\" -i \"$tempAudioClipPath\" -filter_complex \"[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2[bg];[1:a]showwaves=s=600x120:mode=line:colors=white[waves];[bg][waves]overlay=(W-w)/2:H-h-455:shortest=1[video_out]\" -map \"[video_out]\" -t $duration -c:v mpeg4 -q:v 3 -pix_fmt yuv420p -r 24 \"$tempVisualPath\"";
+      String visualCmd =
+          "-y -loop 1 -i \"$tempPngPath\" -i \"$tempAudioClipPath\" -filter_complex \"[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2[bg];[1:a]showwaves=s=600x120:mode=line:colors=white[waves];[bg][waves]overlay=(W-w)/2:H-h-455:shortest=1[video_out]\" -map \"[video_out]\" -t $duration -c:v mpeg4 -q:v 3 -pix_fmt yuv420p -r 24 \"$tempVisualPath\"";
       Session visualSession = await FFmpegKit.execute(visualCmd);
-      if (!ReturnCode.isSuccess(await visualSession.getReturnCode())) throw Exception("Visual Gen Failed");
+      if (!ReturnCode.isSuccess(await visualSession.getReturnCode()))
+        throw Exception("Visual Gen Failed");
 
-      String muxCmd = "-y -i \"$tempVisualPath\" -i \"$tempAudioClipPath\" -c:v copy -c:a aac -shortest \"$finalVideoPath\"";
+      String muxCmd =
+          "-y -i \"$tempVisualPath\" -i \"$tempAudioClipPath\" -c:v copy -c:a aac -shortest \"$finalVideoPath\"";
       Session muxSession = await FFmpegKit.execute(muxCmd);
-      if (!ReturnCode.isSuccess(await muxSession.getReturnCode())) throw Exception("Muxing Failed");
+      if (!ReturnCode.isSuccess(await muxSession.getReturnCode()))
+        throw Exception("Muxing Failed");
 
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       Navigator.pop(context);
@@ -128,11 +140,21 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
     } catch (e) {
       debugPrint("⛔️ VIDEO ERROR: $e");
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Video generation failed: $e"), duration: const Duration(seconds: 4), backgroundColor: Colors.red));
-      try { Navigator.pop(context); } catch (_) {}
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Video generation failed: $e"),
+          duration: const Duration(seconds: 4),
+          backgroundColor: Colors.red,
+        ),
+      );
+      try {
+        Navigator.pop(context);
+      } catch (_) {}
       await Share.share(message);
     } finally {
-      try { await Directory(tempDir).delete(recursive: true); } catch (_) {}
+      try {
+        await Directory(tempDir).delete(recursive: true);
+      } catch (_) {}
       if (mounted) {
         setState(() => _isGenerating = false);
         if (_isGenerating) Navigator.pop(context);
@@ -143,8 +165,10 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
   Future<void> _generateAndShareStatic(bool isStatus) async {
     setState(() => _isGenerating = true);
     try {
-      final appLink = "$_appDomain/music?url=${Uri.encodeComponent(widget.songUrl)}";
-      final message = "🎵 ${widget.songName} - ${widget.artistName}\n\nListen here: $appLink";
+      final appLink =
+          "$_appDomain/music?url=${Uri.encodeComponent(widget.songUrl)}";
+      final message =
+          "🎵 ${widget.songName} - ${widget.artistName}\n\nListen here: $appLink";
 
       if (kIsWeb) {
         await Share.share(message);
@@ -152,10 +176,14 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
         final directory = (await getApplicationDocumentsDirectory()).path;
         String path = '$directory/ttact_share.png';
         final imageBytes = await _screenshotController.captureFromWidget(
-          ShareCardGenerator(songName: widget.songName, artistName: widget.artistName, appLogoPath: "assets/dankie_logo.PNG"),
+          ShareCardGenerator(
+            songName: widget.songName,
+            artistName: widget.artistName,
+            appLogoPath: "assets/dankie_logo.PNG",
+          ),
           delay: const Duration(milliseconds: 10),
         );
-        File(path).writeAsBytesSync(imageBytes); 
+        File(path).writeAsBytesSync(imageBytes);
         await Share.shareXFiles([XFile(path)], text: message);
       }
     } catch (e) {
@@ -169,9 +197,15 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
   }
 
   void _copyDeepLink() {
-    String appLink = "$_appDomain/music?url=${Uri.encodeComponent(widget.songUrl)}";
+    String appLink =
+        "$_appDomain/music?url=${Uri.encodeComponent(widget.songUrl)}";
     Clipboard.setData(ClipboardData(text: appLink));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(kIsWeb ? "Link copied!" : "App Link Copied!"), backgroundColor: Colors.green));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(kIsWeb ? "Link copied!" : "App Link Copied!"),
+        backgroundColor: Colors.green,
+      ),
+    );
     Navigator.pop(context);
   }
 
@@ -190,17 +224,17 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [ 
+        children: [
           Center(
             child: NeumorphicContainer(
               color: neumoBaseColor,
-              isPressed: true, 
+              isPressed: true,
               borderRadius: 10,
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               child: SizedBox(height: 4, width: 40),
             ),
-          ), 
-          const SizedBox(height: 25), 
+          ),
+          const SizedBox(height: 25),
           Text(
             "Share to",
             style: TextStyle(
@@ -209,18 +243,30 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
               color: widget.theme.primaryColor,
             ),
           ),
-          const SizedBox(height: 20), 
+          const SizedBox(height: 20),
           if (!kIsWeb) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("Clip Duration", style: TextStyle(fontWeight: FontWeight.bold, color: widget.theme.hintColor)),
+                Text(
+                  "Clip Duration",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: widget.theme.hintColor,
+                  ),
+                ),
                 NeumorphicContainer(
                   color: neumoBaseColor,
-                  isPressed: true,  
+                  isPressed: true,
                   borderRadius: 8,
                   padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  child: Text("${_clipDurationSeconds.toInt()}s", style: TextStyle(fontWeight: FontWeight.bold, color: widget.theme.primaryColor)),
+                  child: Text(
+                    "${_clipDurationSeconds.toInt()}s",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: widget.theme.primaryColor,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -306,7 +352,7 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
         children: [
           NeumorphicContainer(
             color: bgColor,
-             
+
             isPressed: false, // Convex Pop-out
             padding: EdgeInsets.all(20),
             child: Icon(icon, color: color, size: 28),
@@ -315,9 +361,9 @@ class _TikTokShareSheetState extends State<TikTokShareSheet> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 12, 
+              fontSize: 12,
               color: widget.theme.hintColor,
-              fontWeight: FontWeight.w600
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

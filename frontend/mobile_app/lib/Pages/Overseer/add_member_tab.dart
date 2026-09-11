@@ -36,6 +36,7 @@ class _AddMemberTabState extends State<AddMemberTab> {
   // --- DROPDOWN STATE ---
   String? selectedDistrictElder;
   String? selectedCommunityName;
+  String? selectedGender; // NEW: gender selection
   String selectedProvince = '';
 
   // Cache for the overseer data to prevent refetching on every setstate
@@ -63,16 +64,12 @@ class _AddMemberTabState extends State<AddMemberTab> {
     if (user == null) return null;
 
     try {
-      // FIXED: Fetch the ID token to prevent 403 Forbidden
       final String? token = await user.getIdToken();
-
-      // Fetch using Email to find the specific Overseer profile
       final identifier = user.email ?? "";
       final url = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?email=$identifier',
       );
 
-      // FIXED: Injected Authorization header
       final response = await http.get(
         url,
         headers: {'Authorization': 'Bearer $token'},
@@ -163,27 +160,10 @@ class _AddMemberTabState extends State<AddMemberTab> {
                       controller: memberSurnameController,
                       placeholder: "Surname",
                     ),
-                    _buildNeumorphicTextField(
-                      context,
-                      controller: memberEmailController,
-                      placeholder: "Email (Optional)",
-                      keyboardType: TextInputType.emailAddress,
-                    ),
-                    _buildNeumorphicTextField(
-                      context,
-                      controller: memberAddressController,
-                      placeholder: "Address",
-                    ),
-                    _buildNeumorphicTextField(
-                      context,
-                      controller: memberContactController,
-                      placeholder: "Phone Number",
-                      keyboardType: TextInputType.phone,
-                    ),
 
                     const SizedBox(height: 10),
 
-                    // Dropdowns for Organization (API Powered)
+                    // Dropdowns for Organization (API Powered) + Gender
                     _buildOrgDropdowns(context),
 
                     const SizedBox(height: 30),
@@ -219,7 +199,7 @@ class _AddMemberTabState extends State<AddMemberTab> {
     );
   }
 
-  // --- 2. UPDATED DROPDOWN BUILDER ---
+  // --- 2. UPDATED DROPDOWN BUILDER (with Gender) ---
   Widget _buildOrgDropdowns(BuildContext context) {
     final baseColor = Theme.of(context).scaffoldBackgroundColor;
     final hintColor = Theme.of(context).hintColor;
@@ -245,13 +225,10 @@ class _AddMemberTabState extends State<AddMemberTab> {
         }
 
         var data = snapshot.data!;
-        // Assuming Django returns 'province' and 'districts' nested
         selectedProvince = data['province'] ?? '';
 
-        // Django Serializer returns 'districts' list
         List districts = data['districts'] ?? [];
 
-        // Extract District Elders (Map snake_case if needed)
         List<String> elders = districts
             .map(
               (e) => (e['district_elder_name'] ?? e['districtElderName'])
@@ -259,7 +236,6 @@ class _AddMemberTabState extends State<AddMemberTab> {
             )
             .toList();
 
-        // Extract Communities based on selected District Elder
         List<String> communities = [];
         if (selectedDistrictElder != null) {
           var dist = districts.firstWhere(
@@ -270,7 +246,6 @@ class _AddMemberTabState extends State<AddMemberTab> {
           );
 
           if (dist != null) {
-            // Django Serializer usually nests 'communities' inside 'districts'
             communities = (dist['communities'] as List)
                 .map(
                   (c) => (c['community_name'] ?? c['communityName']).toString(),
@@ -278,6 +253,9 @@ class _AddMemberTabState extends State<AddMemberTab> {
                 .toList();
           }
         }
+
+        // Gender options
+        final List<String> genderOptions = ['Male', 'Female'];
 
         return Column(
           children: [
@@ -335,20 +313,49 @@ class _AddMemberTabState extends State<AddMemberTab> {
                 ),
               ),
             ),
+
+            const SizedBox(height: 16),
+
+            // GENDER DROPDOWN (NEW)
+            NeumorphicContainer(
+              isPressed: true,
+              borderRadius: 12,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              color: baseColor,
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedGender,
+                  hint: Text(
+                    "Select Gender",
+                    style: TextStyle(color: hintColor),
+                  ),
+                  isExpanded: true,
+                  icon: Icon(Icons.arrow_drop_down, color: primaryColor),
+                  dropdownColor: baseColor,
+                  items: genderOptions
+                      .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                      .toList(),
+                  onChanged: (val) => setState(() {
+                    selectedGender = val;
+                  }),
+                ),
+              ),
+            ),
           ],
         );
       },
     );
   }
 
-  // --- 3. UPDATED REGISTRATION LOGIC (DJANGO API) ---
+  // --- 3. UPDATED REGISTRATION LOGIC (with Gender) ---
   Future<void> _registerMember() async {
-    if (memberNameController.text.isEmpty ||
-        memberSurnameController.text.isEmpty ||
-        selectedDistrictElder == null) {
+    if (memberSurnameController.text.isEmpty ||
+        selectedDistrictElder == null ||
+        selectedGender == null) {
+      // added gender validation
       Api().showMessage(
         context,
-        "Please fill required fields (Name, Surname, District)",
+        "Please fill required fields (Name, Surname, District, Gender)",
         "Error",
         Colors.red,
       );
@@ -362,44 +369,38 @@ class _AddMemberTabState extends State<AddMemberTab> {
       if (user == null) throw Exception("User not logged in");
 
       final uid = user.uid;
-      // FIXED: Fetch the ID token to prevent 403 Forbidden
       final String? token = await user.getIdToken();
 
-      // Construct the payload for Django UserSerializer
       final Map<String, dynamic> payload = {
-        'uid': DateTime.now().millisecondsSinceEpoch
-            .toString(), // Temp UID or let Django gen UUID
+        'uid': DateTime.now().millisecondsSinceEpoch.toString(),
         'name': memberNameController.text.trim(),
         'surname': memberSurnameController.text.trim(),
         'email': memberEmailController.text.trim(),
         'address': memberAddressController.text.trim(),
         'phone': memberContactController.text.trim(),
-        'overseer_uid': uid, // Ensure field matches Django Model (overseer_uid)
+        'overseer_uid': uid,
         'role': 'Member',
         'province': selectedProvince,
         'district_elder_name': selectedDistrictElder,
         'community_name': selectedCommunityName,
+        'gender': selectedGender, // NEW: gender field
         'week1': "0.0",
         'week2': "0.0",
         'week3': "0.0",
         'week4': "0.0",
-        // 'createdAt': is handled by auto_now_add in Django
       };
 
-      // Send POST request
       final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/');
       final response = await http.post(
         url,
         headers: {
           "Content-Type": "application/json",
-          "Authorization":
-              "Bearer $token", // FIXED: Injected Authorization header
+          "Authorization": "Bearer $token",
         },
         body: jsonEncode(payload),
       );
 
-      if (mounted) Navigator.pop(context); // Close loading
-
+      if (mounted) Navigator.pop(context);  
       if (response.statusCode == 201 || response.statusCode == 200) {
         if (mounted) {
           Api().showMessage(
@@ -410,7 +411,6 @@ class _AddMemberTabState extends State<AddMemberTab> {
           );
         }
 
-        // Keep Audit Log (Assuming Audit class handles backend, or needs similar update)
         OverseerAuditLogs.logAction(
           action: "CREATED",
           details: "Created member ${memberNameController.text.trim()}",
@@ -421,7 +421,6 @@ class _AddMemberTabState extends State<AddMemberTab> {
 
         _clearMemberInputs();
       } else {
-        // Handle Server Errors
         print("Server Error: ${response.body}");
         if (mounted) {
           Api().showMessage(
@@ -449,6 +448,7 @@ class _AddMemberTabState extends State<AddMemberTab> {
     setState(() {
       selectedDistrictElder = null;
       selectedCommunityName = null;
+      selectedGender = null; // Reset gender
     });
   }
 }

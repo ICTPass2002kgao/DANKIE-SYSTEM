@@ -19,7 +19,7 @@ import 'package:ttact/Components/NeuDesign.dart';
 
 import 'package:ttact/Pages/Admin/admin_portal.dart';
 import 'package:ttact/Pages/Overseer/overseer_page.dart';
-import 'package:ttact/Pages/tactso_pages/tactso_branches__applications.dart';
+import 'package:ttact/Pages/tactso_pages/tactso_branch_main_menu.dart';
 
 class FaceVerificationScreen extends StatefulWidget {
   final String email;

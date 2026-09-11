@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
-import 'package:ttact/Pages/Admin/services/overseer_services.dart';
+import 'package:ttact/Pages/Overseer/components/overseer_services.dart';
 
 // --- PLATFORM UTILITIES ---
 bool get isIOSPlatform =>

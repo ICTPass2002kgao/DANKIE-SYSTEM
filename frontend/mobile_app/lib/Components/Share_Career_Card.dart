@@ -35,7 +35,7 @@ class CareerShareSheet extends StatefulWidget {
 class _CareerShareSheetState extends State<CareerShareSheet> {
   final ScreenshotController _screenshotController = ScreenshotController();
   bool _isGenerating = false;
-  final String _appDomain = "https://dankie.netlify.app";
+  final String _appDomain = "https://web.dankiemobile.org.za";
 
   Future<void> _generateAndShare() async {
     setState(() => _isGenerating = true);
@@ -101,7 +101,7 @@ class _CareerShareSheetState extends State<CareerShareSheet> {
             isPressed: true, // Sunken
             borderRadius: 10,
             padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: SizedBox(height: 4, width: 40), // Invisible spacer to give size
+            child: SizedBox(height: 4, width: 40), 
           ),
           
           const SizedBox(height: 25),

@@ -96,6 +96,9 @@ class ReportPdfData {
 }
 
 class PdfGeneratorService {
+
+
+  
   static Future<Uint8List> generatePdfDocument(
     PdfPageFormat format,
     ReportPdfData data,
@@ -115,98 +118,96 @@ class PdfGeneratorService {
       data.isViewingHistory,
     );
 
-    // ⭐️ Fetch Signatures and Names from Database
+    // Fetch Signatures, Names, and Church Offices from Database
     final sigData = await _fetchSignaturesFromDatabase();
 
     final String currentMonth = _getMonthName(data.month);
     final String currentYear = data.year.toString();
 
-    // --- PAGE 1: Income Statement ---
+    // --- PAGE 1: Income Statement (Using MultiPage) ---
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
+        maxPages: 1000,
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.symmetric(horizontal: 60, vertical: 30),
-        build: (pw.Context context) {
-          return pw.Column(
+        build: (context) => [
+          pw.SizedBox(height: 10),
+          _buildHeader(cloisterFont, data.logoBytes),
+          pw.SizedBox(height: 20),
+          _buildInfoTable(
+            currentMonth,
+            currentYear,
+            data.overseerName,
+            data.districtElder,
+            data.communityName,
+            data.province,
+            data.overseerCode,
+            data.region,
+          ),
+          // ⚠️ Removed pw.Expanded to allow MultiPage to flow naturally
+          _buildIncomeExpenditureTable(data),
+          pw.SizedBox(height: 10),
+
+          // Signatures
+          _buildSignatures(
+            data.overseerName,
+            sigData['overseerChurchOffice'] ?? 'Father',
+            sigData['overseerSig'],
+            data.districtElder,
+            'Father',
+            null,
+            sigData['treasurerName'],
+            sigData['treasurerChurchOffice'] ?? '',
+            sigData['treasurerSig'],
+            sigData['secretaryName'],
+            sigData['secretaryChurchOffice'] ?? '',
+            sigData['secretarySig'],
+          ),
+
+          pw.SizedBox(height: 10),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.center,
             children: [
-              pw.SizedBox(height: 10),
-              _buildHeader(cloisterFont, data.logoBytes),
-              pw.SizedBox(height: 20),
-              _buildInfoTable(
-                currentMonth,
-                currentYear,
-                data.overseerName,
-                data.districtElder,
-                data.communityName,
-                data.province,
-                data.overseerCode,
-                data.region,
-              ),
-              pw.Expanded(child: _buildIncomeExpenditureTable(data)),
-              pw.SizedBox(height: 10),
-
-              // ⭐️ Inject Signatures
-              _buildSignatures(
-                data.overseerName,
-                sigData['overseerSig'],
-                data.districtElder,
-                null, // District Elder signs manually
-                sigData['treasurerName'],
-                sigData['treasurerSig'],
-                sigData['secretaryName'],
-                sigData['secretarySig'],
-              ),
-
-              pw.SizedBox(height: 10),
               pw.Text(
-                "NB: Attach all receipts and Bank Deposit Slips with Neat and Clear Details",
+                "NB",
                 style: pw.TextStyle(
                   fontSize: 8,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
+              pw.Text(
+                ": Attach all receipts and Bank Deposit Slips with Neat and Clear Details",
+                style: pw.TextStyle(fontSize: 8),
+              ),
             ],
-          );
-        },
+          ),
+        ],
       ),
     );
 
-    // --- PAGE 2: Balance Sheet ---
-
+    // --- PAGE 2: Balance Sheet (Using MultiPage) ---
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
+        maxPages: 1000,
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.symmetric(horizontal: 60, vertical: 30),
-        build: (pw.Context context) {
-          return pw.Column(
-            children: [
-              _buildHeader(cloisterFont, data.logoBytes),
-              pw.SizedBox(height: 15),
-              pw.Text(
-                "Balance Sheet",
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              balanceSheetRows,
-              pw.Spacer(),
+        build: (context) => [
+          pw.SizedBox(height: 10),
+          _buildInfoTable(
+            currentMonth,
+            currentYear,
+            data.overseerName,
+            data.districtElder,
+            data.communityName,
+            data.province,
+            data.overseerCode,
+            data.region,
+          ),
+          // 👇 The contributor table widget
+          balanceSheetRows,
 
-              // ⭐️ Inject Signatures on Balance Sheet as well
-              _buildSignatures(
-                data.overseerName,
-                sigData['overseerSig'],
-                data.districtElder,
-                null,
-                sigData['treasurerName'],
-                sigData['treasurerSig'],
-                sigData['secretaryName'],
-                sigData['secretarySig'],
-              ),
-            ],
-          );
-        },
+          pw.SizedBox(height: 20),
+        ],
       ),
     );
 
@@ -215,15 +216,18 @@ class PdfGeneratorService {
 
   // --- Private Helper Methods ---
 
-  // ⭐️ NEW: Fetch Signatures and Member Names from API
   static Future<Map<String, dynamic>> _fetchSignaturesFromDatabase() async {
     final user = FirebaseAuth.instance.currentUser;
     final uid = user?.uid;
     final token = await user?.getIdToken();
 
     Map<String, dynamic> result = {
+      'overseerName': '',
+      'overseerChurchOffice': 'Father',
       'treasurerName': '',
+      'treasurerChurchOffice': '',
       'secretaryName': '',
+      'secretaryChurchOffice': '',
       'overseerSig': null,
       'treasurerSig': null,
       'secretarySig': null,
@@ -242,6 +246,8 @@ class PdfGeneratorService {
         if (d.isNotEmpty) {
           final overId = d.first['id'];
           final String? overSigStr = d.first['signature_base64'];
+          result['overseerName'] = d.first['overseer_initials_surname'] ?? '';
+          result['overseerChurchOffice'] = d.first['church_office'] ?? 'Father';
 
           if (overSigStr != null && overSigStr.trim().isNotEmpty) {
             try {
@@ -269,9 +275,11 @@ class PdfGeneratorService {
 
               if (m['portfolio'] == 'Treasurer') {
                 result['treasurerName'] = m['full_name'] ?? '';
+                result['treasurerChurchOffice'] = m['church_office'] ?? '';
                 result['treasurerSig'] = sigBytes;
               } else if (m['portfolio'] == 'Secretary') {
                 result['secretaryName'] = m['full_name'] ?? '';
+                result['secretaryChurchOffice'] = m['church_office'] ?? '';
                 result['secretarySig'] = sigBytes;
               }
             }
@@ -735,58 +743,181 @@ class PdfGeneratorService {
     );
   }
 
-  // ⭐️ UPDATED: Accepts Dynamic Names and Signature Bytes
+  // --- UPDATED SIGNATURE BLOCK METHODS ---
+
   static pw.Widget _buildSignatures(
     String overseerName,
+    String overseerChurchOffice,
     dynamic overseerSig,
     String districtElderName,
+    String districtElderChurchOffice,
     dynamic districtElderSig,
     String treasurerName,
+    String treasurerChurchOffice,
     dynamic treasurerSig,
     String secretaryName,
+    String secretaryChurchOffice,
     dynamic secretarySig,
   ) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: pw.CrossAxisAlignment.end,
+    String formatName(String office, String title, String name) {
+      if (name.isEmpty) return '';
+      if (office.isNotEmpty) return '$office $title $name';
+      return '$title $name'.trim();
+    }
+
+    String overseerFullName = formatName(
+      overseerChurchOffice,
+      'O/S',
+      overseerName,
+    );
+    String districtElderFullName = formatName(
+      districtElderChurchOffice,
+      'D/E',
+      districtElderName,
+    );
+    String treasurerFullName = treasurerChurchOffice.isNotEmpty
+        ? "$treasurerName ($treasurerChurchOffice)"
+        : treasurerName;
+    String secretaryFullName = secretaryChurchOffice.isNotEmpty
+        ? "$secretaryName ($secretaryChurchOffice)"
+        : secretaryName;
+
+    return pw.Column(
       children: [
-        _sig("Overseer", overseerName, overseerSig),
-        _sig("District Elder", districtElderName, districtElderSig),
-        _sig("Treasurer", treasurerName, treasurerSig),
-        _sig("Secretary", secretaryName, secretarySig),
+        // ROW 1
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: _sigItem(
+                "Overseer",
+                overseerFullName,
+                overseerSig as Uint8List?,
+              ),
+            ),
+            pw.SizedBox(width: 40),
+            pw.Expanded(
+              child: _sigItem(
+                "District Elder",
+                districtElderFullName,
+                districtElderSig as Uint8List?,
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 15),
+        // ROW 2
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(child: _sigItem("Community Elder", "", null)),
+            pw.SizedBox(width: 40),
+            pw.Expanded(
+              child: _sigItem(
+                "Treasurer",
+                treasurerFullName,
+                treasurerSig as Uint8List?,
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 15),
+        // ROW 3
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: _sigItem(
+                "Secretary",
+                secretaryFullName,
+                secretarySig as Uint8List?,
+              ),
+            ),
+            pw.SizedBox(width: 40),
+            pw.Expanded(child: _sigItem("Contact Person", "", null)),
+          ],
+        ),
+        pw.SizedBox(height: 15),
+        // ROW 4
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(child: _sigItem("Telephone No", "", null)),
+            pw.SizedBox(width: 40),
+            pw.Expanded(
+              child: _sigItem(
+                "Email Address",
+                "",
+                null,
+                hasSignatureRow: false,
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  // ⭐️ UPDATED: Prints the image if present, leaves blank space if null
-  static pw.Widget _sig(String title, String name, Uint8List? signature) {
+  static pw.Widget _sigItem(
+    String title,
+    String nameValue,
+    Uint8List? signature, {
+    bool hasSignatureRow = true,
+  }) {
     return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.center,
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          title,
-          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            pw.Text(
+              title,
+              style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(width: 5),
+            pw.Expanded(
+              child: pw.Container(
+                padding: const pw.EdgeInsets.only(bottom: 2),
+                decoration: const pw.BoxDecoration(
+                  border: pw.Border(
+                    bottom: pw.BorderSide(
+                      width: 1,
+                      style: pw.BorderStyle.dotted,
+                    ),
+                  ),
+                ),
+                child: pw.Text(
+                  nameValue,
+                  style: const pw.TextStyle(fontSize: 10),
+                ),
+              ),
+            ),
+          ],
         ),
-        pw.SizedBox(height: 5),
-        if (signature != null)
-          pw.Container(
-            height: 35,
-            width: 80,
-            child: pw.Image(pw.MemoryImage(signature), fit: pw.BoxFit.contain),
+        pw.SizedBox(height: 8),
+        if (hasSignatureRow)
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text("Signature: ", style: const pw.TextStyle(fontSize: 10)),
+              pw.SizedBox(width: 5),
+              if (signature != null)
+                pw.Container(
+                  height: 25,
+                  width: 80,
+                  child: pw.Image(
+                    pw.MemoryImage(signature),
+                    fit: pw.BoxFit.contain,
+                  ),
+                )
+              else
+                pw.SizedBox(height: 25), // Spacer for manual signature
+            ],
           )
         else
-          pw.SizedBox(height: 35), // Blank space for manual signing
-
-        pw.Container(width: 90, height: 1, color: PdfColors.black),
-        pw.SizedBox(height: 2),
-        pw.Text(
-          name.isNotEmpty ? name : "..............................",
-          style: const pw.TextStyle(fontSize: 8),
-        ),
-        pw.Text(
-          "Signature",
-          style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700),
-        ),
+          pw.SizedBox(
+            height: 25,
+          ), // Keep vertical alignment with columns that have signatures
       ],
     );
   }
@@ -801,15 +932,14 @@ class PdfGeneratorService {
   ) async {
     List<List<String>> data = [];
     double grandTotal = 0.0;
+    bool fetchError = false;
 
     try {
       final user = FirebaseAuth.instance.currentUser;
       final uid = user?.uid;
       final token = await user?.getIdToken();
 
-      // Determine correct endpoint
       String endpoint = isViewingHistory ? 'contribution_history' : 'users';
-
       String encDistrict = Uri.encodeComponent(districtElder);
       String encCommunity = Uri.encodeComponent(communityName);
 
@@ -830,10 +960,29 @@ class PdfGeneratorService {
       );
 
       if (response.statusCode == 200) {
-        final List records = json.decode(response.body);
+        final dynamic decoded = json.decode(response.body);
+        List records = [];
+
+        // 📌 Robust response parsing
+        if (decoded is List) {
+          records = decoded;
+        } else if (decoded is Map && decoded.containsKey('results')) {
+          records = decoded['results'] as List;
+        } else if (decoded is Map && decoded.containsKey('data')) {
+          records = decoded['data'] as List;
+        } else {
+          throw Exception("Invalid API response format");
+        }
 
         for (var d in records) {
-          String name = "${d['name'] ?? ''} ${d['surname'] ?? ''}";
+          // 📌 Robust name extraction
+          String name = d['full_name'] ?? '';
+          if (name.isEmpty) {
+            String firstName = d['first_name'] ?? d['name'] ?? '';
+            String lastName = d['last_name'] ?? d['surname'] ?? '';
+            name = "$firstName $lastName".trim();
+          }
+
           double w1 = double.tryParse(d['week1']?.toString() ?? '0') ?? 0.0;
           double w2 = double.tryParse(d['week2']?.toString() ?? '0') ?? 0.0;
           double w3 = double.tryParse(d['week3']?.toString() ?? '0') ?? 0.0;
@@ -841,128 +990,164 @@ class PdfGeneratorService {
 
           double total = w1 + w2 + w3 + w4;
           grandTotal += total;
-
-          data.add([
-            name,
-            w1 == 0 ? "-" : w1.toStringAsFixed(2),
-            w2 == 0 ? "-" : w2.toStringAsFixed(2),
-            w3 == 0 ? "-" : w3.toStringAsFixed(2),
-            w4 == 0 ? "-" : w4.toStringAsFixed(2),
-            total.toStringAsFixed(2),
-          ]);
+          if (w1 == 0 && w2 == 0 && w3 == 0 && w4 == 0) {
+            // Skip members with no contributions
+            continue;
+          } else {
+            data.add([
+              name.isEmpty ? "Unknown Member" : name,
+              w1 == 0 ? "-" : w1.toStringAsFixed(2),
+              w2 == 0 ? "-" : w2.toStringAsFixed(2),
+              w3 == 0 ? "-" : w3.toStringAsFixed(2),
+              w4 == 0 ? "-" : w4.toStringAsFixed(2),
+              total.toStringAsFixed(2),
+            ]);
+          }
         }
+      } else {
+        throw Exception("Server responded with status ${response.statusCode}");
       }
     } catch (e) {
       print("PDF Data Fetch Error: $e");
+      fetchError = true;
     }
 
-    // Fill empty rows to maintain layout height
-    while (data.length < 15) {
-      data.add(["", "", "", "", "", ""]);
+    // 📌 Always return a container with a fixed height
+    if (data.isEmpty) {
+      return pw.Container(
+        width: double.infinity,
+        height: 120, // Fixed height ensures layout is visible
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(width: 1, color: PdfColors.grey400),
+        ),
+        child: pw.Center(
+          child: pw.Text(
+            fetchError
+                ? "Error loading contribution data"
+                : "No contributions recorded for this community.",
+            textAlign: pw.TextAlign.center,
+            style: pw.TextStyle(
+              fontSize: 10,
+              color: PdfColors.grey700,
+              fontStyle: pw.FontStyle.italic,
+            ),
+          ),
+        ),
+      );
     }
 
-    return pw.Table(
-      border: pw.TableBorder.all(width: 0.5),
-      columnWidths: {
-        0: const pw.FlexColumnWidth(3),
-        1: const pw.FlexColumnWidth(1),
-        2: const pw.FlexColumnWidth(1),
-        3: const pw.FlexColumnWidth(1),
-        4: const pw.FlexColumnWidth(1),
-        5: const pw.FlexColumnWidth(1.2),
-      },
-      children: [
-        pw.TableRow(
-          decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-          children:
-              [
-                    "Members Name and Surname",
-                    "WEEK 1",
-                    "WEEK 2",
-                    "WEEK 3",
-                    "WEEK 4",
-                    "MONTHLY",
-                  ]
-                  .map(
-                    (e) => pw.Padding(
-                      padding: const pw.EdgeInsets.all(4),
-                      child: pw.Text(
-                        e,
-                        style: pw.TextStyle(
-                          fontWeight: pw.FontWeight.bold,
-                          fontSize: 7,
+    // 📌 Table rendering with fixed columns
+    return pw.Container(
+      width: double.infinity,
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(width: 1, color: PdfColors.grey400),
+      ),
+      child: pw.Table(
+        border: pw.TableBorder.all(width: 0.5),
+        columnWidths: {
+          0: const pw.FlexColumnWidth(3),
+          1: const pw.FixedColumnWidth(35),
+          2: const pw.FixedColumnWidth(35),
+          3: const pw.FixedColumnWidth(35),
+          4: const pw.FixedColumnWidth(35),
+          5: const pw.FixedColumnWidth(40),
+        },
+        children: [
+          // Header Row
+          pw.TableRow(
+            decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+            children:
+                [
+                      "Members Name and Surname",
+                      "WEEK 1",
+                      "WEEK 2",
+                      "WEEK 3",
+                      "WEEK 4",
+                      "MONTHLY",
+                    ]
+                    .map(
+                      (e) => pw.Padding(
+                        padding: const pw.EdgeInsets.all(4),
+                        child: pw.Text(
+                          e,
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 7,
+                          ),
+                          textAlign: pw.TextAlign.center,
                         ),
-                        textAlign: pw.TextAlign.center,
+                      ),
+                    )
+                    .toList(),
+          ),
+          // Data Rows
+          ...data
+              .map(
+                (row) => pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(3),
+                      child: pw.Text(
+                        row[0],
+                        style: const pw.TextStyle(fontSize: 8),
                       ),
                     ),
-                  )
-                  .toList(),
-        ),
-        ...data
-            .map(
-              (row) => pw.TableRow(
-                children: [
-                  pw.Padding(
-                    padding: const pw.EdgeInsets.all(3),
-                    child: pw.Text(
-                      row[0],
-                      style: const pw.TextStyle(fontSize: 8),
-                    ),
-                  ),
-                  ...row
-                      .sublist(1)
-                      .map(
-                        (e) => pw.Padding(
-                          padding: const pw.EdgeInsets.all(3),
-                          child: pw.Text(
-                            e,
-                            textAlign: pw.TextAlign.center,
-                            style: const pw.TextStyle(fontSize: 8),
+                    ...row
+                        .sublist(1)
+                        .map(
+                          (e) => pw.Padding(
+                            padding: const pw.EdgeInsets.all(3),
+                            child: pw.Text(
+                              e,
+                              textAlign: pw.TextAlign.center,
+                              style: const pw.TextStyle(fontSize: 8),
+                            ),
                           ),
                         ),
-                      ),
-                ],
-              ),
-            )
-            .toList(),
-        pw.TableRow(
-          children: [
-            pw.Container(
-              alignment: pw.Alignment.centerRight,
-              padding: const pw.EdgeInsets.all(5),
-              child: pw.Text(
-                "GRAND TOTAL",
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: 9,
+                  ],
+                ),
+              )
+              .toList(),
+          // Grand Total
+          pw.TableRow(
+            children: [
+              pw.Container(
+                alignment: pw.Alignment.centerRight,
+                padding: const pw.EdgeInsets.all(5),
+                child: pw.Text(
+                  "GRAND TOTAL",
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 9,
+                  ),
                 ),
               ),
-            ),
-            pw.Container(
-              decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            ),
-            pw.Container(
-              decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            ),
-            pw.Container(
-              decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            ),
-            pw.Container(
-              decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-            ),
-            pw.Padding(
-              padding: const pw.EdgeInsets.all(3),
-              child: pw.Text(
-                "R ${grandTotal.toStringAsFixed(2)}",
-                style: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  fontSize: 9,
+              pw.Container(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+              pw.Container(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+              pw.Container(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+              pw.Container(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
+              ),
+              pw.Padding(
+                padding: const pw.EdgeInsets.all(3),
+                child: pw.Text(
+                  "R ${grandTotal.toStringAsFixed(2)}",
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 9,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

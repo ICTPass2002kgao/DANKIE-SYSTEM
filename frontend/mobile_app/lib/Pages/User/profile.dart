@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // REQUIRED FOR SECURE TOKEN
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:qr_flutter/qr_flutter.dart'; // 🔥 ADDED FOR QR CODE GENERATION
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
@@ -411,6 +412,168 @@ class _MyProfileState extends State<MyProfile> {
     return '${Api().BACKEND_BASE_URL_DEBUG}/serve_image/?url=${Uri.encodeComponent(originalUrl)}';
   }
 
+  // --- SKILLS MANAGEMENT: SAVE SKILLS TO BACKEND ---
+  Future<void> _saveSkills(List<dynamic> updatedSkills) async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    Api().showLoading(context);
+    try {
+      String? token = await user.getIdToken();
+      final response = await http.post(
+        Uri.parse(
+          '${Api().BACKEND_BASE_URL_DEBUG}/users/update_member_skills/',
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'uid': user.uid, 'skills': updatedSkills}),
+      );
+
+      Navigator.pop(context); // close loading dialog
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _profileFuture =
+              _fetchUserProfile(); // Refresh profile to show new skills
+        });
+        Api().showMessage(
+          context,
+          'Skills/Services updated successfully!',
+          'Success',
+          Colors.green,
+        );
+      } else {
+        final respBody = json.decode(response.body);
+        Api().showMessage(
+          context,
+          respBody['error'] ?? 'Failed to update skills.',
+          'Error',
+          Colors.red,
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      Api().showMessage(
+        context,
+        'Error saving skills: $e',
+        'Error',
+        Colors.red,
+      );
+    }
+  }
+
+  // --- SKILLS MANAGEMENT: ADD / EDIT DIALOG ---
+  void _showAddEditSkillDialog(
+    Map<String, dynamic> currentData, {
+    int? skillIndex,
+  }) {
+    final isEditing = skillIndex != null;
+    final List<dynamic> currentSkills = List.from(
+      currentData['skills_services'] ?? [],
+    );
+
+    final _titleController = TextEditingController();
+    final _descController = TextEditingController();
+    final _linkController = TextEditingController();
+
+    if (isEditing) {
+      final skill = currentSkills[skillIndex];
+      _titleController.text = skill['title'] ?? '';
+      _descController.text = skill['description'] ?? '';
+      _linkController.text = skill['link'] ?? '';
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Api().neumoBaseColor(context),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          isEditing ? 'Edit Service/Skill' : 'Add Service/Skill',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.blueGrey[900],
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: InputDecoration(
+                labelText: 'Title (e.g., Plumber, Developer)*',
+              ),
+            ),
+            SizedBox(height: 8),
+            TextField(
+              controller: _descController,
+              decoration: InputDecoration(labelText: 'Description (Optional)'),
+              maxLines: 2,
+            ),
+            SizedBox(height: 8),
+            TextField(
+              controller: _linkController,
+              decoration: InputDecoration(labelText: 'Website/Link (Optional)'),
+            ),
+          ],
+        ),
+        actions: [
+          if (isEditing)
+            TextButton(
+              onPressed: () {
+                currentSkills.removeAt(skillIndex);
+                Navigator.pop(context);
+                _saveSkills(currentSkills);
+              },
+              child: Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).primaryColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              final title = _titleController.text.trim();
+              if (title.isEmpty) {
+                Api().showMessage(
+                  context,
+                  "Title is required",
+                  "Validation",
+                  Colors.orange,
+                );
+                return;
+              }
+
+              final newSkill = {
+                'title': title,
+                'description': _descController.text.trim(),
+                'link': _linkController.text.trim(),
+              };
+
+              if (isEditing) {
+                currentSkills[skillIndex] = newSkill;
+              } else {
+                currentSkills.add(newSkill);
+              }
+
+              Navigator.pop(context);
+              _saveSkills(currentSkills);
+            },
+            child: Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -532,6 +695,13 @@ class _MyProfileState extends State<MyProfile> {
                                       data,
                                     ),
                                     SizedBox(height: 20),
+                                    _buildSkillsSection(
+                                      // 🔥 ADDED SKILLS SECTION
+                                      theme,
+                                      neumoBaseColor,
+                                      data,
+                                    ),
+                                    SizedBox(height: 20),
                                     _buildAttendanceOverview(
                                       theme,
                                       neumoBaseColor,
@@ -547,9 +717,19 @@ class _MyProfileState extends State<MyProfile> {
                               ),
                               SizedBox(width: 20),
                               Expanded(
-                                child: _buildApplicationsList(
-                                  theme,
-                                  neumoBaseColor,
+                                child: Column(
+                                  children: [
+                                    _buildApplicationsList(
+                                      theme,
+                                      neumoBaseColor,
+                                    ),
+                                    SizedBox(height: 20),
+                                    _buildQRSection(
+                                      theme,
+                                      neumoBaseColor,
+                                      data,
+                                    ), // 🔥 QR Section Added Here
+                                  ],
                                 ),
                               ),
                             ],
@@ -558,6 +738,18 @@ class _MyProfileState extends State<MyProfile> {
                           Column(
                             children: [
                               _buildDetailsSection(theme, neumoBaseColor, data),
+                              SizedBox(height: 20),
+                              _buildSkillsSection(
+                                theme,
+                                neumoBaseColor,
+                                data,
+                              ), // 🔥 ADDED SKILLS SECTION
+                              SizedBox(height: 20),
+                              _buildQRSection(
+                                theme,
+                                neumoBaseColor,
+                                data,
+                              ), // 🔥 QR Section Added Here
                               SizedBox(height: 20),
                               _buildApplicationsList(theme, neumoBaseColor),
                               SizedBox(height: 20),
@@ -651,6 +843,176 @@ class _MyProfileState extends State<MyProfile> {
           _infoRow(Icons.map, "Province", data['province'] ?? 'N/A'),
           _infoRow(Icons.group, "Community", data['community_name'] ?? 'N/A'),
           _infoRow(Icons.person, "Elder", data['district_elder_name'] ?? 'N/A'),
+        ],
+      ),
+    );
+  }
+
+  // 🔥 NEW SKILLS & SERVICES SECTION
+  Widget _buildSkillsSection(
+    ThemeData theme,
+    Color baseColor,
+    Map<String, dynamic> data,
+  ) {
+    final List<dynamic> skills = data['skills_services'] ?? [];
+
+    return NeumorphicContainer(
+      color: baseColor,
+      borderRadius: 20,
+      padding: EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "My Services & Skills",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: theme.primaryColor,
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _showAddEditSkillDialog(data),
+                child: Container(
+                  padding: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.primaryColor.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.add, color: theme.primaryColor, size: 20),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Divider(color: theme.hintColor.withOpacity(0.2)),
+          if (skills.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              child: Text(
+                "No services or skills added yet.",
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else
+            ...skills.asMap().entries.map((entry) {
+              int index = entry.key;
+              var s = entry.value;
+              return Container(
+                margin: EdgeInsets.only(bottom: 12),
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.primaryColor.withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s['title'] ?? 'Untitled',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          if (s['description'] != null &&
+                              s['description'].toString().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Text(
+                                s['description'],
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.blueGrey[700],
+                                ),
+                              ),
+                            ),
+                          if (s['link'] != null &&
+                              s['link'].toString().isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Text(
+                                s['link'],
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        CupertinoIcons.pencil_circle_fill,
+                        size: 28,
+                        color: theme.primaryColor,
+                      ),
+                      onPressed: () =>
+                          _showAddEditSkillDialog(data, skillIndex: index),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
+      ),
+    );
+  }
+
+  // 🔥 NEW QR CODE SECTION
+  Widget _buildQRSection(
+    ThemeData theme,
+    Color baseColor,
+    Map<String, dynamic> data,
+  ) {
+    return NeumorphicContainer(
+      color: baseColor,
+      borderRadius: 20,
+      padding: EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            "Attendance QR Code",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: theme.primaryColor,
+            ),
+          ),
+          SizedBox(height: 10),
+          Container(
+            padding: EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: QrImageView(
+              data: data['uid'] ?? data['id'] ?? '',
+              version: QrVersions.auto,
+              size: 160.0,
+              backgroundColor: Colors.white,
+            ),
+          ),
+          SizedBox(height: 10),
+          Text(
+            "Show this code to the committee member to check in.",
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );

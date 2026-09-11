@@ -2,6 +2,9 @@ import java.util.Properties
 import java.io.FileInputStream
 import org.gradle.api.GradleException 
 
+val newBuildDir = rootProject.layout.projectDirectory.dir("../build")
+layout.buildDirectory.value(newBuildDir.dir(project.name))
+
 fun getKeystoreProperties(key: String): String {
     val keystorePropertiesFile = rootProject.file("key.properties")
     val keystoreProperties = Properties()
@@ -24,7 +27,7 @@ plugins {
 
 android {
     namespace = "com.thetact.ttact"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -40,19 +43,17 @@ android {
     defaultConfig {
         applicationId = "com.thetact.ttact"
         minSdk = 27
-        targetSdk = 35
-        versionCode = 53
-        versionName = "1.0.53"
+        targetSdk = 36
+        versionCode = 61
+        versionName = "1.0.61"
         
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
 
         ndk {
             abiFilters.add("arm64-v8a")
         }
-         
         multiDexEnabled = true 
-    }
-    
+    } 
     signingConfigs {
         create("release") {
             storeFile = file(getKeystoreProperties("storeFile"))
@@ -83,19 +84,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-ads:22.6.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
-
-configurations.all {
-    resolutionStrategy {
-        force("androidx.camera:camera-core:1.5.0")
-        force("androidx.camera:camera-camera2:1.5.0")
-        force("androidx.camera:camera-lifecycle:1.5.0")
-        force("androidx.camera:camera-video:1.5.0")
-        force("androidx.camera:camera-view:1.5.0")
-        force("androidx.camera:camera-extensions:1.5.0")
-    }
-}
-
-// 👇 DESTRUCTIVE FORCE TO OVERRIDE INCOMPATIBLE THIRD-PARTY PLUGINS 👇
+ 
 subprojects {
     afterEvaluate {
         if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {

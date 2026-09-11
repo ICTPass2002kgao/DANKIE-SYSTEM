@@ -99,6 +99,14 @@ dependencies:
   flutter_face_liveness: ^3.1.0
   flutter_ionicons: ^8.0.13
   dio: ^5.9.2
+  flutter_form_builder: ^10.3.0+2
+  form_builder_validators: ^11.3.0
+  mobile_scanner: ^7.4.0
+  qr_flutter: ^4.1.0
+  livekit_client: ^2.11.0
+  flutter_quill: ^11.5.1
+  flutter_localizations:
+    sdk: flutter
   
 dev_dependencies:
   flutter_test:

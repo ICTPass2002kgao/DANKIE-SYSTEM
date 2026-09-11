@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ttact/Components/API.dart';
 // If using Firebase Auth for the token, uncomment the line below:
 // import 'package:firebase_auth/firebase_auth.dart';
@@ -43,35 +44,85 @@ class _EventsPageState extends State<EventsPage> {
     });
 
     try {
-      // If your API requires the Firebase Token, fetch it here:
-      final user = FirebaseAuth.instance.currentUser;
-      final token = await user?.getIdToken();
+      final prefs = await SharedPreferences.getInstance(); // Cache mechanism
+      User? user = FirebaseAuth.instance.currentUser;
+
+      // --- 🔥 PRODUCTION FIX: Wait 3 seconds for auth to restore ---
+      if (user == null) {
+        try {
+          await FirebaseAuth.instance.authStateChanges().first.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {},
+          );
+          user = FirebaseAuth.instance.currentUser;
+        } catch (_) {
+          // Timeout occurred, user is still null
+        }
+      }
+      // -----------------------------------------------------------
+
+      String? token;
+      if (user != null) {
+        token = await user.getIdToken();
+      }
 
       final response = await http.get(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/event_diary/'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
+          // 🔥 Only add Authorization header if we actually have a token!
+          if (token != null) 'Authorization': 'Bearer $token',
         },
       );
 
       if (response.statusCode == 200) {
+        final decodedData = json.decode(response.body);
+        // Cache successful data for offline/fast cold-starts
+        await prefs.setString('cached_global_events', json.encode(decodedData));
+
         setState(() {
-          upcomingEvents = json.decode(response.body);
+          upcomingEvents = decodedData;
+          isLoading = false;
+        });
+      } else {
+        // If we get a 401/403 because auth failed, fallback to cache
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          final cached = prefs.getString('cached_global_events');
+          if (cached != null) {
+            setState(() {
+              upcomingEvents = json.decode(cached);
+              isLoading = false;
+            });
+          } else {
+            setState(() {
+              errorMessage = 'Authentication failed. Please restart the app.';
+              isLoading = false;
+            });
+          }
+        } else {
+          setState(() {
+            errorMessage =
+                'Failed to load events. Code: ${response.statusCode}';
+            isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching events: $e");
+      // Fallback to cache on network error
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('cached_global_events');
+      if (cached != null) {
+        setState(() {
+          upcomingEvents = json.decode(cached);
           isLoading = false;
         });
       } else {
         setState(() {
-          errorMessage = 'Failed to load events. Code: ${response.statusCode}';
+          errorMessage = 'Network error occurred while fetching events.';
           isLoading = false;
         });
       }
-    } catch (e) {
-      debugPrint("Error fetching events: $e");
-      setState(() {
-        errorMessage = 'Network error occurred while fetching events.';
-        isLoading = false;
-      });
     }
   }
 

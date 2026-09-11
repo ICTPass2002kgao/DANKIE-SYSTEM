@@ -749,7 +749,7 @@ class _DashboardTabState extends State<DashboardTab>
                             ),
                           ),
                           child: Text(
-                            "Your contribution secures your district's standing in the Annual Report. Lead by example and support this event today.",
+                            "Your contribution secures your overseer's standing in the Annual Report. Lead by example and support this event today.",
                             style: TextStyle(
                               fontSize: 14,
                               color: theme.primaryColor,

@@ -1,17 +1,23 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, avoid_print
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 import 'package:ttact/Pages/Overseer/components/overseer_dialog.dart';
 import 'package:ttact/Pages/Overseer/components/overseer_reports_full_page.dart';
 import 'package:ttact/Pages/Overseer/components/overseer_utilities.dart';
 import 'package:ttact/Pages/Overseer/components/pdf_generator_register.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class OverseerDigitalRegisterTab extends StatefulWidget {
   final String? loggerName;
@@ -53,24 +59,20 @@ class _OverseerDigitalRegisterTabState
   String _selectedDistrict = 'All';
   String _selectedCommunity = 'All';
 
+  // NEW: Branch selector – choose a specific community or All
+  String _selectedBranch = 'All';
+
   int _currentPage = 0;
   final int _rowsPerPage = 50;
 
+  // Debouncer map for attendance toggles
+  final Map<String, Timer> _toggleDebouncers = {};
+
   Color get _primaryColor => Theme.of(context).primaryColor;
 
-  // Editable Date Check
-  bool get _isEditableDay {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final selected = DateTime(
-      _selectedDate.year,
-      _selectedDate.month,
-      _selectedDate.day,
-    );
-    return !selected.isBefore(today);
-  }
+  bool get _isEditableDay => true;
 
-  // Stats now use _filteredUsers to ensure dynamic dashboard updates
+  // Stats now use _filteredUsers
   int get totalMembers => _filteredUsers.length;
   int get presentMembers =>
       _filteredUsers.where((u) => u['isPresent'] == true).length;
@@ -120,30 +122,64 @@ class _OverseerDigitalRegisterTabState
       )
       .length;
 
+  // --- PRIORITY ORDER FOR SPIRITUAL PARENTS ---
+  final List<String> _spiritualRoleOrder = [
+    'Apostle',
+    'Overseer',
+    'District Elder',
+    'Community Elder',
+    'Priest',
+    'Deacon',
+  ];
+
+  // --- ROLE TO COLOR MAPPING ---
+  final Map<String, Color> _roleTagColors = {
+    'Apostle': Colors.blue,
+    'Overseer': Colors.white,
+    'District Elder': const Color(0xFF800000),
+    'Community Elder': Colors.red,
+    'Priest': Colors.green,
+    'Deacon': Colors.yellow,
+  };
+
+  int _getParentPriority(Map<String, dynamic> user) {
+    final String category = user['visitor_category'] ?? '';
+    final String role = user['visitor_role'] ?? 'None';
+    if (category != 'Mother' && category != 'Father') return 999;
+    for (int i = 0; i < _spiritualRoleOrder.length; i++) {
+      if (role.contains(_spiritualRoleOrder[i])) return i;
+    }
+    return _spiritualRoleOrder.length;
+  }
+
   List<dynamic> get _filteredUsers {
     List<dynamic> baseList = _usersList;
 
-    // Apply District Filter
+    // NEW: Branch filter (community)
+    if (_selectedBranch != 'All') {
+      baseList = baseList.where((u) {
+        final c = u['community_name'] ?? u['communityName'] ?? '';
+        return c == _selectedBranch;
+      }).toList();
+    }
+
+    // District filter
     if (_selectedDistrict != 'All') {
       baseList = baseList.where((u) {
-        String d =
-            u['district_elder_name'] ??
-            u['districtElderName'] ??
-            'Unassigned District';
+        String d = u['district_elder_name'] ?? u['districtElderName'] ?? '';
         return d == _selectedDistrict;
       }).toList();
     }
 
-    // Apply Community Filter
-    if (_selectedCommunity != 'All') {
+    // Community filter (if not already filtered by branch)
+    if (_selectedCommunity != 'All' && _selectedBranch == 'All') {
       baseList = baseList.where((u) {
-        String c =
-            u['community_name'] ?? u['communityName'] ?? 'Unassigned Community';
+        String c = u['community_name'] ?? u['communityName'] ?? '';
         return c == _selectedCommunity;
       }).toList();
     }
 
-    // Apply Search Query
+    // Search
     if (_searchQuery.isNotEmpty) {
       baseList = baseList.where((user) {
         final name = "${user['name'] ?? ''} ${user['surname'] ?? ''}"
@@ -154,6 +190,7 @@ class _OverseerDigitalRegisterTabState
       }).toList();
     }
 
+    // Sorting: Parents first (by hierarchy), then Visitors, then Members
     baseList.sort((a, b) {
       bool aIsParent =
           a['visitor_category'] == 'Mother' ||
@@ -161,10 +198,20 @@ class _OverseerDigitalRegisterTabState
       bool bIsParent =
           b['visitor_category'] == 'Mother' ||
           b['visitor_category'] == 'Father';
-
+      if (aIsParent && bIsParent) {
+        int aPriority = _getParentPriority(a);
+        int bPriority = _getParentPriority(b);
+        if (aPriority != bPriority) return aPriority.compareTo(bPriority);
+        return "${a['name']} ${a['surname']}".compareTo(
+          "${b['name']} ${b['surname']}",
+        );
+      }
       if (aIsParent && !bIsParent) return -1;
       if (!aIsParent && bIsParent) return 1;
-
+      bool aIsVisitor = a['isVisitor'] == true;
+      bool bIsVisitor = b['isVisitor'] == true;
+      if (aIsVisitor && !bIsVisitor) return -1;
+      if (!aIsVisitor && bIsVisitor) return 1;
       final nameA = "${a['name'] ?? ''} ${a['surname'] ?? ''}".toLowerCase();
       final nameB = "${b['name'] ?? ''} ${b['surname'] ?? ''}".toLowerCase();
       return nameA.compareTo(nameB);
@@ -180,9 +227,7 @@ class _OverseerDigitalRegisterTabState
           user['district_elder_name'] ??
           user['districtElderName'] ??
           'Unassigned District';
-      if (!grouped.containsKey(districtName)) {
-        grouped[districtName] = [];
-      }
+      if (!grouped.containsKey(districtName)) grouped[districtName] = [];
       grouped[districtName]!.add(user);
     }
     return grouped;
@@ -203,19 +248,19 @@ class _OverseerDigitalRegisterTabState
   @override
   void dispose() {
     _searchController.dispose();
+    _toggleDebouncers.values.forEach((t) => t.cancel());
+    _toggleDebouncers.clear();
     super.dispose();
   }
 
   Future<void> _fetchOverseerDataAndMembers() async {
     setState(() => _isLoading = true);
-
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
         setState(() => _isLoading = false);
         return;
       }
-
       final user = FirebaseAuth.instance.currentUser;
       String token = user != null ? await user.getIdToken() ?? "" : "";
       final headers = {
@@ -233,12 +278,10 @@ class _OverseerDigitalRegisterTabState
         final results = (decoded is Map && decoded.containsKey('results'))
             ? decoded['results']
             : decoded;
-
         if (results is List && results.isNotEmpty) {
           _overseerData = results[0];
           final List districts = _overseerData!['districts'] ?? [];
           Map<String, List<String>> mapping = {};
-
           for (var d in districts) {
             String dName = d['district_elder_name'] ?? 'Unknown District';
             List communities = d['communities'] ?? [];
@@ -250,7 +293,7 @@ class _OverseerDigitalRegisterTabState
         }
       }
 
-      // 2. Fetch Users strictly filtering by `overseer_uid`
+      // 2. Fetch Users
       final uRes = await http.get(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/?overseer_uid=$uid'),
         headers: headers,
@@ -261,22 +304,19 @@ class _OverseerDigitalRegisterTabState
         final rawList = (decoded is Map && decoded.containsKey('results'))
             ? decoded['results'] as List
             : decoded as List;
-
         for (var m in rawList) {
           final map = Map<String, dynamic>.from(m as Map);
-          String mOverseer = (map['overseer_uid'] ?? '').toString();
-
-          if (mOverseer == uid) {
+          if ((map['overseer_uid'] ?? '').toString() == uid) {
             map['isVisitor'] = false;
             map['visitor_category'] = 'Registered';
-            map['ui_id'] = map['uid'];
-            map['isPresent'] = false; // Default, will override below
+            map['uid'] = map['uid'];
+            map['isPresent'] = false;
             members.add(map);
           }
         }
       }
 
-      // 3. Fetch Visitors strictly filtering by `overseer_uid`
+      // 3. Fetch Visitors
       final vRes = await http.get(
         Uri.parse(
           '${Api().BACKEND_BASE_URL_DEBUG}/visitors/?overseer_uid=$uid',
@@ -289,16 +329,13 @@ class _OverseerDigitalRegisterTabState
         final rawList = (decoded is Map && decoded.containsKey('results'))
             ? decoded['results'] as List
             : decoded as List;
-
         for (var v in rawList) {
           final map = Map<String, dynamic>.from(v as Map);
-          String vOverseer = (map['overseer_uid'] ?? '').toString();
-
-          if (vOverseer == uid) {
+          if ((map['overseer_uid'] ?? '').toString() == uid) {
             map['isVisitor'] = true;
             map['visitor_category'] = map['visitor_category'] ?? 'Testify';
-            map['ui_id'] = map['id'];
-            map['isPresent'] = false; // Default, will override below
+            map['uid'] = map['id'];
+            map['isPresent'] = false;
             visitors.add(map);
           }
         }
@@ -306,7 +343,7 @@ class _OverseerDigitalRegisterTabState
 
       _usersList = [...members, ...visitors];
 
-      // Re-map communities just in case new ones were added outside hierarchy
+      // Update hierarchy with any new communities
       for (var u in _usersList) {
         String dName =
             u['district_elder_name'] ??
@@ -314,41 +351,27 @@ class _OverseerDigitalRegisterTabState
             'Unassigned District';
         String cName =
             u['community_name'] ?? u['communityName'] ?? 'Unassigned Community';
-
         if (cName.isNotEmpty) {
-          if (!_officialHierarchy.containsKey(dName)) {
+          if (!_officialHierarchy.containsKey(dName))
             _officialHierarchy[dName] = [];
-          }
-          if (!_officialHierarchy[dName]!.contains(cName)) {
+          if (!_officialHierarchy[dName]!.contains(cName))
             _officialHierarchy[dName]!.add(cName);
-          }
         }
       }
 
-      // Fetch historical attendance for the selected date
       await _fetchAttendanceForSelectedDate(token);
     } catch (e) {
-      print("Network error fetching spiritual data: $e");
+      print("Network error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Uses Monthly Report to accurately extract attendance for the _selectedDate
   Future<void> _fetchAttendanceForSelectedDate(String token) async {
     try {
-      // 1. Reset all local states to absent (Critical for new days to reset naturally)
-      for (var u in _usersList) {
-        u['isPresent'] = false;
-      }
-
-      // 2. Gather unique communities
+      for (var u in _usersList) u['isPresent'] = false;
       Set<String> allCommunities = {};
-      for (var comms in _officialHierarchy.values) {
-        allCommunities.addAll(comms);
-      }
-
-      // 3. Batch process requests in parallel
+      for (var comms in _officialHierarchy.values) allCommunities.addAll(comms);
       List<Future<http.Response>> requests = [];
       for (String comm in allCommunities) {
         final url = Uri.parse(
@@ -358,31 +381,23 @@ class _OverseerDigitalRegisterTabState
           http.get(url, headers: {'Authorization': 'Bearer $token'}),
         );
       }
-
       final responses = await Future.wait(requests);
-
-      // 4. Map true/false statuses based on selected day
       for (var res in responses) {
         if (res.statusCode == 200) {
           final decoded = json.decode(res.body);
           List data = decoded['data'] ?? [];
           for (var item in data) {
-            String uiId = item['ui_id'].toString();
-            Map<String, dynamic> attMap = item['attendance'] ?? {};
-
-            bool isPresentOnDay = attMap[_selectedDate.day.toString()] == true;
-
-            int idx = _usersList.indexWhere(
-              (u) => u['ui_id'].toString() == uiId,
-            );
-            if (idx != -1) {
-              _usersList[idx]['isPresent'] = isPresentOnDay;
-            }
+            String uiId = item['uid'].toString();
+            bool isPresentOnDay =
+                (item['attendance'] ?? {})[_selectedDate.day.toString()] ==
+                true;
+            int idx = _usersList.indexWhere((u) => u['uid'].toString() == uiId);
+            if (idx != -1) _usersList[idx]['isPresent'] = isPresentOnDay;
           }
         }
       }
     } catch (e) {
-      print("Error fetching daily historical attendance: $e");
+      print("Error fetching attendance: $e");
     }
   }
 
@@ -393,9 +408,7 @@ class _OverseerDigitalRegisterTabState
     });
     final user = FirebaseAuth.instance.currentUser;
     String token = user != null ? await user.getIdToken() ?? "" : "";
-
     await _fetchAttendanceForSelectedDate(token);
-
     if (mounted) setState(() => _isLoading = false);
   }
 
@@ -404,37 +417,70 @@ class _OverseerDigitalRegisterTabState
     bool isPresent,
     bool isVisitor,
   ) async {
-    if (!_isEditableDay) return; // Failsafe for past days
-
-    final index = _usersList.indexWhere((u) => u['ui_id'] == uiId);
+    if (_toggleDebouncers.containsKey(uiId)) {
+      _toggleDebouncers[uiId]!.cancel();
+      _toggleDebouncers.remove(uiId);
+    }
+    final index = _usersList.indexWhere((u) => u['uid'] == uiId);
     if (index == -1) return;
-
     setState(() {
       _usersList[index]['isPresent'] = isPresent;
     });
+    _toggleDebouncers[uiId] = Timer(
+      const Duration(milliseconds: 300),
+      () async {
+        _toggleDebouncers.remove(uiId);
+        final currentIndex = _usersList.indexWhere((u) => u['uid'] == uiId);
+        if (currentIndex == -1) return;
+        final currentIsPresent = _usersList[currentIndex]['isPresent'] as bool;
+        await _sendAttendanceUpdate(uiId, currentIsPresent, isVisitor);
+      },
+    );
+  }
 
+  Future<void> _sendAttendanceUpdate(
+    String uiId,
+    bool isPresent,
+    bool isVisitor,
+  ) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      String token = user != null ? await user.getIdToken() ?? "" : "";
-
+      final token = user != null ? await user.getIdToken() ?? "" : "";
       final endpoint = isVisitor ? '/visitors/$uiId/' : '/users/$uiId/';
-
-      String formattedDate =
+      final formattedDate =
           "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}";
-
-      await http.patch(
+      final response = await http.patch(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}$endpoint'),
         headers: {
           'Authorization': 'Bearer $token',
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: jsonEncode({
           'attendance_status': isPresent ? 'Present' : 'Absent',
           'date': formattedDate,
         }),
       );
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        final index = _usersList.indexWhere((u) => u['uid'] == uiId);
+        if (index != -1)
+          setState(() => _usersList[index]['isPresent'] = !isPresent);
+        Api().showMessage(
+          context,
+          "Failed to update attendance.",
+          "Error",
+          Colors.red,
+        );
+      }
     } catch (e) {
-      print("Error saving attendance: $e");
+      final index = _usersList.indexWhere((u) => u['uid'] == uiId);
+      if (index != -1)
+        setState(() => _usersList[index]['isPresent'] = !isPresent);
+      Api().showMessage(
+        context,
+        "Network error updating attendance.",
+        "Error",
+        Colors.red,
+      );
     }
   }
 
@@ -447,9 +493,7 @@ class _OverseerDigitalRegisterTabState
     try {
       final user = FirebaseAuth.instance.currentUser;
       String token = user != null ? await user.getIdToken() ?? "" : "";
-
       final endpoint = isVisitor ? '/visitors/$uiId/' : '/users/$uiId/';
-
       final res = await http.patch(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}$endpoint'),
         headers: {
@@ -458,7 +502,6 @@ class _OverseerDigitalRegisterTabState
         },
         body: jsonEncode(updatedData),
       );
-
       if (res.statusCode == 200 || res.statusCode == 204) {
         Api().showMessage(
           context,
@@ -499,7 +542,6 @@ class _OverseerDigitalRegisterTabState
       final user = FirebaseAuth.instance.currentUser;
       String token = user != null ? await user.getIdToken() ?? "" : "";
       final uid = user?.uid;
-
       final payload = {
         "name": name,
         "surname": surname,
@@ -512,7 +554,6 @@ class _OverseerDigitalRegisterTabState
         "visitor_category": visitorCategory,
         "visitor_role": visitorRole,
       };
-
       final res = await http.post(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/visitors/'),
         headers: {
@@ -521,7 +562,6 @@ class _OverseerDigitalRegisterTabState
         },
         body: jsonEncode(payload),
       );
-
       if (res.statusCode == 201 || res.statusCode == 200) {
         Api().showMessage(
           context,
@@ -545,6 +585,59 @@ class _OverseerDigitalRegisterTabState
     }
   }
 
+  String _capitaliseName(String? name) {
+    if (name == null || name.isEmpty) return '';
+    return name
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return '';
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
+  }
+
+  void _exportMemberList() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final token = user != null ? await user.getIdToken() ?? "" : "";
+    Uint8List? signatureBytes;
+    try {
+      final res = await http.get(
+        Uri.parse(
+          '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?uid=${user?.uid}',
+        ),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is List && data.isNotEmpty) {
+          final sigStr = data[0]['signature_base64'];
+          if (sigStr != null && sigStr.isNotEmpty)
+            signatureBytes = base64Decode(sigStr);
+        }
+      }
+    } catch (e) {
+      print("Error fetching signature: $e");
+    }
+    Uint8List? logoBytes;
+    try {
+      final ByteData data = await rootBundle.load('assets/logo.png');
+      logoBytes = data.buffer.asUint8List();
+    } catch (_) {}
+    OverseerPdfGenerator.exportMemberListPDF(
+      context: context,
+      members: _filteredUsers,
+      overseerName:
+          _overseerData?['overseer_initials_surname'] ??
+          widget.loggerName ??
+          'Unknown',
+      regionName: _overseerData?['region'] ?? widget.regionName ?? 'Unknown',
+      loggerName: widget.loggerName ?? 'Authorized Officer',
+      loggerRole: widget.loggerRole ?? '',
+      logoBytes: logoBytes,
+      signatureBytes: signatureBytes,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -553,70 +646,68 @@ class _OverseerDigitalRegisterTabState
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: _isEditableDay
-          ? Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  FloatingActionButton.extended(
-                    heroTag: 'testifyBtn',
-                    onPressed: () {
-                      showAddVisitorDialog(
-                        context,
-                        widget.neumoColor,
-                        _primaryColor,
-                        _officialHierarchy,
-                        _submitNewVisitor,
-                      );
-                    },
-                    backgroundColor: Colors.orange,
-                    icon: Icon(
-                      CupertinoIcons.person_badge_plus,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    label: Text(
-                      "Add Testify",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  FloatingActionButton.extended(
-                    heroTag: 'guestBtn',
-                    onPressed: () {
-                      showAddVisitingMemberDialog(
-                        context,
-                        widget.neumoColor,
-                        _primaryColor,
-                        _officialHierarchy,
-                        _submitNewVisitor,
-                      );
-                    },
-                    backgroundColor: _primaryColor,
-                    icon: Icon(
-                      CupertinoIcons.person_3_fill,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    label: Text(
-                      "Add Guest Member",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ],
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            FloatingActionButton.extended(
+              heroTag: 'testifyBtn',
+              onPressed: () {
+                showAddVisitorDialog(
+                  context,
+                  widget.neumoColor,
+                  _primaryColor,
+                  _officialHierarchy,
+                  _submitNewVisitor,
+                );
+              },
+              backgroundColor: Colors.orange,
+              icon: Icon(
+                CupertinoIcons.person_badge_plus,
+                color: Colors.white,
+                size: 18,
               ),
-            )
-          : const SizedBox.shrink(),
+              label: Text(
+                "Add Testify",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            SizedBox(height: 12),
+            FloatingActionButton.extended(
+              heroTag: 'parentBtn',
+              onPressed: () {
+                showAddVisitingMemberDialog(
+                  context,
+                  widget.neumoColor,
+                  _primaryColor,
+                  _officialHierarchy,
+                  _submitNewVisitor,
+                );
+              },
+              backgroundColor: _primaryColor,
+              icon: Icon(
+                CupertinoIcons.person_3_fill,
+                color: Colors.white,
+                size: 18,
+              ),
+              label: Text(
+                "Add Parents",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           return Padding(
@@ -649,45 +740,15 @@ class _OverseerDigitalRegisterTabState
                         ),
                         const SizedBox(height: 32),
 
-                        // --- DYNAMIC FILTER SECTION ---
+                        // --- NEW BRANCH SELECTOR ---
+                        _buildBranchSelector(),
+                        const SizedBox(height: 16),
+
+                        // --- FILTER SECTION ---
                         _buildFilterSection(),
                         const SizedBox(height: 16),
 
-                        if (!_isEditableDay)
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.only(bottom: 16),
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 12,
-                              horizontal: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.red.shade200),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  CupertinoIcons.lock_fill,
-                                  color: Colors.red.shade700,
-                                  size: 20,
-                                ),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    "Archived Record (Read-Only): You are viewing attendance for a past date. Changes are locked.",
-                                    style: TextStyle(
-                                      color: Colors.red.shade700,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
+                        // --- ATTENDANCE OVERVIEW ---
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -729,16 +790,20 @@ class _OverseerDigitalRegisterTabState
                         const SizedBox(height: 16),
                         _buildDashboardChart(),
                         const SizedBox(height: 32),
+
+                        // --- REGISTER LIST HEADER ---
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
                               child: buildSectionHeader(
-                                "Digital Register",
+                                "Register",
                                 CupertinoIcons.list_bullet,
                                 _primaryColor,
                               ),
                             ),
+                            _buildQrScanButton(),
+                            SizedBox(width: 10),
                             _buildDownloadMenu(),
                           ],
                         ),
@@ -775,20 +840,97 @@ class _OverseerDigitalRegisterTabState
     );
   }
 
-  // --- UI WIDGETS BOUND TO STATE ---
+  // --- NEW BRANCH SELECTOR ---
+  Widget _buildBranchSelector() {
+    // Collect all unique communities from hierarchy
+    Set<String> allCommunities = {};
+    for (var list in _officialHierarchy.values) allCommunities.addAll(list);
+    List<String> branchOptions = ['All', ...allCommunities];
+
+    return NeumorphicContainer(
+      color: widget.neumoColor,
+      borderRadius: 16,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.storefront, color: _primaryColor, size: 20),
+              SizedBox(width: 8),
+              Text(
+                "Select Branch (Community)",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.blueGrey[800],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 12),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: _selectedBranch,
+                icon: Icon(CupertinoIcons.chevron_down, size: 14),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blueGrey[800],
+                  fontSize: 13,
+                ),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedBranch = newValue!;
+                    _selectedCommunity = 'All'; // Reset community filter
+                    _selectedDistrict = 'All';
+                    _currentPage = 0;
+                  });
+                },
+                items: branchOptions.map<DropdownMenuItem<String>>((
+                  String value,
+                ) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value, overflow: TextOverflow.ellipsis),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          if (_selectedBranch != 'All')
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                "Showing members from: $_selectedBranch",
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildFilterSection() {
     List<String> distOptions = ['All', ..._officialHierarchy.keys];
     List<String> commOptions = ['All'];
-
     if (_selectedDistrict != 'All' &&
         _officialHierarchy.containsKey(_selectedDistrict)) {
       commOptions.addAll(_officialHierarchy[_selectedDistrict]!);
     } else {
       Set<String> allComms = {};
-      for (var list in _officialHierarchy.values) {
-        allComms.addAll(list);
-      }
+      for (var list in _officialHierarchy.values) allComms.addAll(list);
       commOptions.addAll(allComms);
     }
 
@@ -837,9 +979,8 @@ class _OverseerDigitalRegisterTabState
                         );
                       },
                     );
-                    if (picked != null && picked != _selectedDate) {
+                    if (picked != null && picked != _selectedDate)
                       _onDateChanged(picked);
-                    }
                   },
                   child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -892,8 +1033,7 @@ class _OverseerDigitalRegisterTabState
                       onChanged: (String? newValue) {
                         setState(() {
                           _selectedDistrict = newValue!;
-                          _selectedCommunity =
-                              'All'; // Reset community on district change
+                          _selectedCommunity = 'All';
                           _currentPage = 0;
                         });
                       },
@@ -955,9 +1095,119 @@ class _OverseerDigitalRegisterTabState
     );
   }
 
+  Widget _buildQrScanButton() {
+    return GestureDetector(
+      onTap: _openQRScanner,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.purple,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.purple.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.qr_code_scanner, color: Colors.white, size: 18),
+            SizedBox(width: 6),
+            Text(
+              "SCAN QR",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openQRScanner() async {
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: SizedBox(
+              width: 300,
+              height: 300,
+              child: MobileScanner(
+                controller: MobileScannerController(
+                  detectionSpeed: DetectionSpeed.noDuplicates,
+                  facing: CameraFacing.back,
+                ),
+                onDetect: (capture) async {
+                  final List<Barcode> barcodes = capture.barcodes;
+                  if (barcodes.isNotEmpty) {
+                    final String? code = barcodes.first.rawValue;
+                    if (code != null) _processScannedQR(code);
+                  }
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _processScannedQR(String code) {
+    final userIndex = _usersList.indexWhere(
+      (u) => u['uid']?.toString() == code,
+    );
+    if (userIndex == -1) {
+      Api().showMessage(
+        context,
+        "User with this ID not found.",
+        "Not Found",
+        Colors.orange,
+      );
+      return;
+    }
+    final user = _usersList[userIndex];
+    final bool isVisitor = user['isVisitor'] ?? false;
+    final bool isPresent = user['isPresent'] ?? false;
+    if (isPresent) {
+      Api().showMessage(
+        context,
+        "${user['name'] ?? 'User'} is already marked present.",
+        "Already Scanned",
+        Colors.yellow,
+      );
+    } else {
+      _toggleUserAttendance(user['uid'], true, isVisitor);
+      Api().showMessage(
+        context,
+        "${user['name'] ?? 'User'} marked present!",
+        "Checked In",
+        Colors.green,
+      );
+    }
+  }
+
   Widget _buildDownloadMenu() {
     return PopupMenuButton<String>(
-      onSelected: (value) {
+      // In _buildDownloadMenu, replace the onSelected handler with:
+      onSelected: (value) async {
+        // Determine branch display name
+        String branchDisplay = _selectedBranch == 'All'
+            ? 'All Branches'
+            : _selectedBranch;
+
         if (value == 'Monthly') {
           showMonthPickerForReport(context, widget.neumoColor, _primaryColor, (
             month,
@@ -971,7 +1221,7 @@ class _OverseerDigitalRegisterTabState
                 month: month,
                 year: year,
                 officialHierarchy: _officialHierarchy,
-                usersList: _filteredUsers, // Passes filtered data to generator
+                usersList: _filteredUsers,
                 overseerName:
                     _overseerData?['overseer_initials_surname'] ??
                     'Unknown Overseer',
@@ -988,9 +1238,12 @@ class _OverseerDigitalRegisterTabState
                 brothersTotal: brothersTotal,
                 sistersPresent: sistersPresent,
                 sistersTotal: sistersTotal,
+                branchName: branchDisplay, // NEW
               );
             });
           });
+        } else if (value == 'MemberList') {
+          _exportMemberList(); // You may also add branchName to this function if desired
         } else {
           showSignatureDialog(context, widget.neumoColor, _primaryColor, (
             signatureBytes,
@@ -1015,6 +1268,7 @@ class _OverseerDigitalRegisterTabState
               brothersTotal: brothersTotal,
               sistersPresent: sistersPresent,
               sistersTotal: sistersTotal,
+              branchName: branchDisplay, // NEW
             );
           });
         }
@@ -1085,6 +1339,23 @@ class _OverseerDigitalRegisterTabState
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: Colors.blue,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'MemberList',
+          child: Row(
+            children: [
+              Icon(CupertinoIcons.list_bullet, color: Colors.green, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'Export Member List',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.green,
                 ),
               ),
             ],
@@ -1200,11 +1471,9 @@ class _OverseerDigitalRegisterTabState
               ),
             ],
           ),
-
           const SizedBox(height: 20),
           Container(height: 1, color: Colors.grey.shade300),
           const SizedBox(height: 20),
-
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1277,15 +1546,12 @@ class _OverseerDigitalRegisterTabState
 
   Widget _buildPaginatedTable() {
     int totalPages = (_filteredUsers.length / _rowsPerPage).ceil();
-    if (_currentPage >= totalPages && totalPages > 0) {
+    if (_currentPage >= totalPages && totalPages > 0)
       _currentPage = totalPages - 1;
-    }
-
     int startIndex = _currentPage * _rowsPerPage;
     int endIndex = (startIndex + _rowsPerPage > _filteredUsers.length)
         ? _filteredUsers.length
         : startIndex + _rowsPerPage;
-
     List<dynamic> paginatedData = _filteredUsers.sublist(startIndex, endIndex);
 
     return NeumorphicContainer(
@@ -1304,12 +1570,8 @@ class _OverseerDigitalRegisterTabState
             child: Row(
               children: [
                 Expanded(
-                  flex: 3,
+                  flex: 4,
                   child: Text("MEMBER INFO", style: _tableHeaderStyle()),
-                ),
-                Expanded(
-                  flex: 2,
-                  child: Text("CONTACT", style: _tableHeaderStyle()),
                 ),
                 Expanded(
                   flex: 1,
@@ -1328,18 +1590,15 @@ class _OverseerDigitalRegisterTabState
               ],
             ),
           ),
-
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: paginatedData.length,
             separatorBuilder: (context, index) =>
                 Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
-            itemBuilder: (context, index) {
-              return _buildTableRow(paginatedData[index]);
-            },
+            itemBuilder: (context, index) =>
+                _buildTableRow(paginatedData[index]),
           ),
-
           if (totalPages > 1)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -1412,7 +1671,9 @@ class _OverseerDigitalRegisterTabState
   }
 
   Widget _buildTableRow(Map<String, dynamic> user) {
-    final fullName = "${user['name'] ?? ''} ${user['surname'] ?? ''}".trim();
+    final name = _capitaliseName(user['name']);
+    final surname = _capitaliseName(user['surname']);
+    final fullName = "$name $surname".trim();
     final isPresent = user['isPresent'] ?? false;
     final isVisitor = user['isVisitor'] ?? false;
     final visitorCategory = user['visitor_category'] ?? 'Testify';
@@ -1420,7 +1681,6 @@ class _OverseerDigitalRegisterTabState
     final isReady =
         user['ready_for_membership'] == true ||
         user['ready_for_membership'] == 'true';
-
     final commName =
         user['community_name'] ?? user['communityName'] ?? 'Unassigned';
     final elderName =
@@ -1432,13 +1692,22 @@ class _OverseerDigitalRegisterTabState
     Color tagColor = Colors.transparent;
     bool isParent = visitorCategory == 'Mother' || visitorCategory == 'Father';
 
-    bool canEdit = isVisitor && !isParent;
-
     if (isParent) {
-      tagLabel = visitorRole != null && visitorRole != 'None'
-          ? "${visitorCategory.toUpperCase()} - ${visitorRole.toUpperCase()}"
-          : visitorCategory.toUpperCase();
-      tagColor = Colors.purple;
+      String roleForTag = visitorRole ?? 'None';
+      String? matchedRole;
+      for (String role in _spiritualRoleOrder) {
+        if (roleForTag.contains(role)) {
+          matchedRole = role;
+          break;
+        }
+      }
+      if (matchedRole != null) {
+        tagLabel = matchedRole;
+        tagColor = _roleTagColors[matchedRole] ?? Colors.grey;
+      } else {
+        tagLabel = visitorCategory.toUpperCase();
+        tagColor = Colors.purple;
+      }
     } else if (visitorCategory == 'Brother' || visitorCategory == 'Sister') {
       tagLabel = visitorCategory.toUpperCase();
       tagColor = Colors.teal;
@@ -1461,7 +1730,7 @@ class _OverseerDigitalRegisterTabState
       color: Colors.transparent,
       child: InkWell(
         onTap: _isEditableDay
-            ? () => _toggleUserAttendance(user['ui_id'], !isPresent, isVisitor)
+            ? () => _toggleUserAttendance(user['uid'], !isPresent, isVisitor)
             : null,
         splashColor: _primaryColor.withOpacity(0.1),
         highlightColor: _primaryColor.withOpacity(0.05),
@@ -1472,7 +1741,7 @@ class _OverseerDigitalRegisterTabState
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                flex: 3,
+                flex: 4,
                 child: Row(
                   children: [
                     Container(
@@ -1555,7 +1824,9 @@ class _OverseerDigitalRegisterTabState
                               child: Text(
                                 tagLabel,
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: tagColor == Colors.white
+                                      ? Colors.black
+                                      : Colors.white,
                                   fontSize: 8,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1573,30 +1844,6 @@ class _OverseerDigitalRegisterTabState
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Row(
-                  children: [
-                    Icon(
-                      CupertinoIcons.phone_fill,
-                      size: 14,
-                      color: Colors.grey.shade400,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        user['phone'] ?? user['email'] ?? 'N/A',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -1631,7 +1878,7 @@ class _OverseerDigitalRegisterTabState
                           trackColor: Colors.grey.shade300,
                           onChanged: _isEditableDay
                               ? (val) => _toggleUserAttendance(
-                                  user['ui_id'],
+                                  user['uid'],
                                   val,
                                   isVisitor,
                                 )
@@ -1646,26 +1893,24 @@ class _OverseerDigitalRegisterTabState
                 flex: 1,
                 child: Align(
                   alignment: Alignment.centerRight,
-                  child: canEdit
-                      ? IconButton(
-                          icon: Icon(
-                            CupertinoIcons.pencil_ellipsis_rectangle,
-                            color: Colors.grey.shade600,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            showEditMemberDialog(
-                              context,
-                              user,
-                              isVisitor,
-                              widget.neumoColor,
-                              _primaryColor,
-                              _updateMemberDetails,
-                            );
-                          },
-                          tooltip: "Update Record",
-                        )
-                      : const SizedBox.shrink(),
+                  child: IconButton(
+                    icon: Icon(
+                      CupertinoIcons.pencil_ellipsis_rectangle,
+                      color: Colors.grey.shade600,
+                      size: 20,
+                    ),
+                    onPressed: () {
+                      showEditMemberDialog(
+                        context,
+                        user,
+                        isVisitor,
+                        widget.neumoColor,
+                        _primaryColor,
+                        _updateMemberDetails,
+                      );
+                    },
+                    tooltip: "Edit Record",
+                  ),
                 ),
               ),
             ],
@@ -1675,7 +1920,3 @@ class _OverseerDigitalRegisterTabState
     );
   }
 }
-
-// =========================================================================
-// NEW PAGE: FULL REPORTS VIEW WITH NATIVE FLUTTER GRAPHS & FILTERS
-// =========================================================================

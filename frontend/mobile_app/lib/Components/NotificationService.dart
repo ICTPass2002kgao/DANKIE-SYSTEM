@@ -83,7 +83,7 @@ class NotificationService {
       targetDate.year,
       targetDate.month,
       targetDate.day,
-      07, // Hour
+      04, // Hour
       00, // Minute
     );
 

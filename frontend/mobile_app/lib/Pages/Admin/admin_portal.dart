@@ -7,7 +7,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
-import 'package:ttact/Pages/Admin/GlobalAttendanceReportScreen.dart';
+import 'package:ttact/Pages/Admin/global_attendance_report_screen.dart';
 import 'package:ttact/Pages/Admin/Overseer_BalanceSheet_Global.dart';
 
 // --- IMPORT YOUR EXISTING PAGES ---

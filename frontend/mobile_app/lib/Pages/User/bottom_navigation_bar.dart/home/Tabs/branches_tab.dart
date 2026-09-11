@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http; // Added for Django
 import 'package:firebase_auth/firebase_auth.dart'; // REQUIRED FOR SECURE TOKEN
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
- import 'package:ttact/Components/API.dart'; // Ensure API is imported
+import 'package:ttact/Components/API.dart'; // Ensure API is imported
 import 'package:ttact/Components/HomePageHelpers.dart';
 import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/Tactso_Branch_Details.dart'
     hide isIOSPlatform;
@@ -244,49 +244,53 @@ class _BranchesTabState extends State<BranchesTab>
                 return SizedBox(
                   width: cardWidth,
                   // ⭐️ 3. NEUMORPHIC TILE
-                  child: NeumorphicContainer(
-                    color: neumoBaseColor,
-                    isPressed: false,
-                    borderRadius: 20,
-                    padding: EdgeInsets.all(0),
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => TactsoBranchDetails(
-                              universityDetails: representativeCampusData,
-                              campusListForUniversity: campuses,
+                  child: displayName != "University Of Testing"
+                      ? NeumorphicContainer(
+                          color: neumoBaseColor,
+                          isPressed: false,
+                          borderRadius: 20,
+                          padding: EdgeInsets.all(0),
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => TactsoBranchDetails(
+                                    universityDetails: representativeCampusData,
+                                    campusListForUniversity: campuses,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: UniversityCard(
+                                imageUrl: getImgUrl(representativeCampusData),
+                                UniName: displayName,
+                                uniAddress:
+                                    representativeCampusData['address'] ?? '',
+                                applicationLink:
+                                    representativeCampusData['application_link'] ??
+                                    representativeCampusData['application_link'] ??
+                                    '',
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => TactsoBranchDetails(
+                                        universityDetails:
+                                            representativeCampusData,
+                                        campusListForUniversity: campuses,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                applicationIsOpen: anyCampusApplicationOpen,
+                              ),
                             ),
                           ),
-                        );
-                      },
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: UniversityCard(
-                          imageUrl: getImgUrl(representativeCampusData),
-                          UniName: displayName,
-                          uniAddress: representativeCampusData['address'] ?? '',
-                          applicationLink:
-                              representativeCampusData['application_link'] ??
-                              representativeCampusData['application_link'] ??
-                              '',
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => TactsoBranchDetails(
-                                  universityDetails: representativeCampusData,
-                                  campusListForUniversity: campuses,
-                                ),
-                              ),
-                            );
-                          },
-                          applicationIsOpen: anyCampusApplicationOpen,
-                        ),
-                      ),
-                    ),
-                  ),
+                        )
+                      : SizedBox(),
                 );
               }).toList(),
             ),

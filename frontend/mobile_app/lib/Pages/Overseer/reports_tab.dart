@@ -80,7 +80,6 @@ class _ReportsTabState extends State<ReportsTab> {
   final Color _shadowDark = const Color(0xFFA3B1C6);
   final Color _textColor = const Color(0xFF4A5568);
 
-  // ⭐️ THE BULLETPROOF DECIMAL PARSER
   double safeParse(dynamic val) {
     if (val == null) return 0.0;
     if (val is num) return val.toDouble();
@@ -489,149 +488,6 @@ class _ReportsTabState extends State<ReportsTab> {
     return true;
   }
 
-  // ⭐️ NEW SIGNATURE VERIFICATION LOGIC
-  Future<bool> _verifySignaturesComplete() async {
-    Api().showLoading(context);
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      final uid = user?.uid;
-      final String? token = await user?.getIdToken();
-
-      final overRes = await http.get(
-        Uri.parse('$baseUrl/overseers/?uid=$uid'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      bool hasOverseerSig = false;
-      String? overseerId;
-
-      if (overRes.statusCode == 200) {
-        final List data = jsonDecode(overRes.body);
-        if (data.isNotEmpty) {
-          overseerId = data.first['id'];
-          final sig = data.first['signature_base64'];
-          hasOverseerSig = sig != null && sig.toString().trim().isNotEmpty;
-        }
-      }
-
-      bool hasTreasurerSig = false;
-      bool hasSecretarySig = false;
-
-      if (overseerId != null) {
-        final comRes = await http.get(
-          Uri.parse(
-            '$baseUrl/overseer_committee_members/?overseer=$overseerId',
-          ),
-          headers: {'Authorization': 'Bearer $token'},
-        );
-        if (comRes.statusCode == 200) {
-          final List comData = jsonDecode(comRes.body);
-          for (var member in comData) {
-            final sig = member['signature_base64'];
-            if (member['portfolio'] == 'Treasurer') {
-              hasTreasurerSig = sig != null && sig.toString().trim().isNotEmpty;
-            } else if (member['portfolio'] == 'Secretary') {
-              hasSecretarySig = sig != null && sig.toString().trim().isNotEmpty;
-            }
-          }
-        }
-      }
-
-      Navigator.pop(context); // Close loading
-
-      if (!hasOverseerSig || !hasTreasurerSig || !hasSecretarySig) {
-        List<String> missing = [];
-        if (!hasOverseerSig) missing.add("Overseer");
-        if (!hasTreasurerSig) missing.add("Treasurer");
-        if (!hasSecretarySig) missing.add("Secretary");
-
-        _showMissingSignaturesDialog(missing);
-        return false;
-      }
-
-      return true;
-    } catch (e) {
-      Navigator.pop(context);
-      print("Error verifying signatures: $e");
-      Api().showMessage(
-        context,
-        "Error verifying signatures.",
-        "Error",
-        Colors.red,
-      );
-      return false;
-    }
-  }
-
-  void _showMissingSignaturesDialog(List<String> missingRoles) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: Api().neumoBaseColor(context),
-        title: const Text(
-          "Missing Signatures",
-          style: TextStyle(
-            color: Colors.redAccent,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "You cannot archive the monthly report until the following members have signed off via the Signatures Tab:",
-              style: TextStyle(color: _textColor, height: 1.4),
-            ),
-            const SizedBox(height: 15),
-            ...missingRoles.map(
-              (role) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.orange,
-                      size: 18,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      role,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          Container(
-            decoration: _neuDecoration(radius: 8),
-            child: TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  "Understood",
-                  style: TextStyle(
-                    color: Colors.blueAccent,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   ReportPdfData _buildCurrentPdfData() {
     String overseerName = "Overseer";
     if (_overseerData != null) {
@@ -729,10 +585,6 @@ class _ReportsTabState extends State<ReportsTab> {
     }
 
     if (!_validateFinancials()) return;
-
-    // ⭐️ TRIGGER SIGNATURE CHECK BEFORE ALLOWING ARCHIVE
-    bool signaturesComplete = await _verifySignaturesComplete();
-    if (!signaturesComplete) return;
 
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -854,7 +706,7 @@ class _ReportsTabState extends State<ReportsTab> {
 
       OverseerAuditLogs.logAction(
         action: "ARCHIVED",
-        details: "Archived report for $_selectedCommunityName via Django",
+        details: "Archived report for $_selectedCommunityName ",
         committeeMemberName: widget.committeeMemberName,
         committeeMemberRole: widget.committeeMemberRole,
         universityCommitteeFace: widget.faceUrl,

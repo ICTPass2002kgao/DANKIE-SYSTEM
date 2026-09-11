@@ -2,27 +2,38 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.thetact.ttact">
 
-    <!-- Permissions -->
+    <!-- Location & Network -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
+    <!-- Services & General -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
-    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/> 
+
+    <!-- Camera & Audio (LiveKit Requirements) -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-feature android:name="android.hardware.camera.front" android:required="true" />
-<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
- 
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- [FIX 1] REMOVED the AD_ID 'tools:node=remove' block. 
-         Huawei parser crashes on this. If you don't want AD_ID, simply don't include the line. -->
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
-    <!-- [FIX 2] Removed 'tools:targetApi'. Build.gradle handles this. -->
+    <!-- Bluetooth (Required for WebRTC Audio Routing to Headsets) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
     <application
         android:label="DANKIE"
         android:icon="@mipmap/launcher_icon"
@@ -32,14 +43,15 @@
         <meta-data 
             android:name="com.google.android.gms.ads.APPLICATION_ID" 
             android:value="ca-app-pub-6759693957212853~5704923982"/>
-   <meta-data
-        android:name="com.google.android.geo.API_KEY"
-        android:value="AIzaSyDAigV-EJXPZq41U1-K6930yVIvuCv_P9o"/>
-        <!-- [FIX 3] Switched back to relative path '.MainActivity' 
-             This is safer. Ensure your Kotlin MainActivity extends AudioServiceActivity instead. -->
-             <meta-data
+        
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDAigV-EJXPZq41U1-K6930yVIvuCv_P9o"/>
+        
+        <meta-data
             android:name="com.ryanheise.audioservice.notification_icon"
             android:resource="@drawable/ic_notification" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

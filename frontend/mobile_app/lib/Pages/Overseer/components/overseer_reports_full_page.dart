@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:fl_chart/fl_chart.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 import 'package:ttact/Pages/Overseer/components/overseer_dialog.dart';
@@ -41,32 +42,132 @@ class _OverseerFullReportsPageState extends State<OverseerFullReportsPage> {
 
   List<dynamic> get _filteredData {
     return widget.usersList.where((u) {
-      // 1. Status Check
       if (_statusFilter == 'Present' && u['isPresent'] != true) return false;
       if (_statusFilter == 'Absent' && u['isPresent'] == true) return false;
-
-      // 2. Gender Check
       if (_genderFilter != 'All') {
         final g = (u['gender'] ?? '').toString().toLowerCase();
         if (_genderFilter == 'Male' && g != 'male') return false;
         if (_genderFilter == 'Female' && g != 'female') return false;
       }
-
-      // 3. District Check
       if (_districtFilter != 'All') {
         final d = u['district_elder_name'] ?? u['districtElderName'] ?? '';
         if (d != _districtFilter) return false;
       }
-
-      // 4. Community Check
       if (_communityFilter != 'All') {
         final c = u['community_name'] ?? u['communityName'] ?? '';
         if (c != _communityFilter) return false;
       }
-
       return true;
     }).toList();
   }
+
+  // ----- Computed stats -----
+  int get totalMembers => _filteredData.length;
+  int get presentMembers =>
+      _filteredData.where((u) => u['isPresent'] == true).length;
+  int get absentMembers => totalMembers - presentMembers;
+
+  int get brothersTotal => _filteredData
+      .where((u) => (u['gender'] ?? '').toString().toLowerCase() == 'male')
+      .length;
+  int get brothersPresent => _filteredData
+      .where(
+        (u) =>
+            u['isPresent'] == true &&
+            (u['gender'] ?? '').toString().toLowerCase() == 'male',
+      )
+      .length;
+  int get sistersTotal => _filteredData
+      .where((u) => (u['gender'] ?? '').toString().toLowerCase() == 'female')
+      .length;
+  int get sistersPresent => _filteredData
+      .where(
+        (u) =>
+            u['isPresent'] == true &&
+            (u['gender'] ?? '').toString().toLowerCase() == 'female',
+      )
+      .length;
+
+  int get totalTestifies => _filteredData
+      .where(
+        (u) =>
+            u['isVisitor'] == true &&
+            u['visitor_category'] != 'Mother' &&
+            u['visitor_category'] != 'Father',
+      )
+      .length;
+  int get readyTestifies => _filteredData
+      .where(
+        (u) =>
+            u['isVisitor'] == true &&
+            u['visitor_category'] != 'Mother' &&
+            u['visitor_category'] != 'Father' &&
+            (u['ready_for_membership'] == true ||
+                u['ready_for_membership'] == 'true'),
+      )
+      .length;
+
+  // ----- Role breakdown -----
+  Map<String, int> get roleCounts {
+    final Map<String, int> counts = {};
+    for (var u in _filteredData) {
+      if (u['isPresent'] != true) continue;
+      String role = 'Member';
+      if (u['isVisitor'] == true) {
+        String cat = u['visitor_category'] ?? '';
+        String roleStr = u['visitor_role'] ?? '';
+        if (cat == 'Mother' || cat == 'Father') {
+          role = roleStr.isNotEmpty && roleStr != 'None'
+              ? '$cat ($roleStr)'
+              : cat;
+        } else {
+          role = roleStr.isNotEmpty && roleStr != 'None'
+              ? roleStr
+              : cat.isEmpty
+              ? 'Visitor'
+              : cat;
+        }
+      } else {
+        String gender = (u['gender'] ?? '').toString().toLowerCase();
+        role = gender == 'male'
+            ? 'Brother'
+            : (gender == 'female' ? 'Sister' : 'Member');
+      }
+      counts[role] = (counts[role] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  // ----- Top 3 Districts & Communities -----
+  Map<String, int> get districtTotals {
+    final Map<String, int> totals = {};
+    for (var u in _filteredData) {
+      if (u['isPresent'] != true) continue;
+      String d =
+          u['district_elder_name'] ?? u['districtElderName'] ?? 'Unassigned';
+      totals[d] = (totals[d] ?? 0) + 1;
+    }
+    return totals;
+  }
+
+  Map<String, int> get communityTotals {
+    final Map<String, int> totals = {};
+    for (var u in _filteredData) {
+      if (u['isPresent'] != true) continue;
+      String c = u['community_name'] ?? u['communityName'] ?? 'Unassigned';
+      totals[c] = (totals[c] ?? 0) + 1;
+    }
+    return totals;
+  }
+
+  List<MapEntry<String, int>> get topDistricts =>
+      districtTotals.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value))
+        ..take(3);
+  List<MapEntry<String, int>> get topCommunities =>
+      communityTotals.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value))
+        ..take(3);
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +190,12 @@ class _OverseerFullReportsPageState extends State<OverseerFullReportsPage> {
                   SizedBox(height: 24),
                   _buildMetricCards(neumoBase),
                   SizedBox(height: 24),
-                  _buildNativeBarChart(neumoBase),
+                  // New visualizations
+                  _buildTopBranches(neumoBase),
+                  SizedBox(height: 24),
+                  _buildRoleBreakdownChart(neumoBase),
+                  SizedBox(height: 24),
+                  _buildDistrictProgress(neumoBase),
                   SizedBox(height: 24),
                   _buildCategorizedList(neumoBase),
                 ],
@@ -126,7 +232,6 @@ class _OverseerFullReportsPageState extends State<OverseerFullReportsPage> {
   Widget _buildFilters(Color neumoBase) {
     List<String> distOptions = ['All', ...widget.hierarchy.keys];
     List<String> commOptions = ['All'];
-
     if (_districtFilter != 'All' &&
         widget.hierarchy.containsKey(_districtFilter)) {
       commOptions.addAll(widget.hierarchy[_districtFilter]!);
@@ -232,75 +337,55 @@ class _OverseerFullReportsPageState extends State<OverseerFullReportsPage> {
   }
 
   Widget _buildMetricCards(Color neumoBase) {
-    final fd = _filteredData;
-    int tot = fd.length;
-    int pres = fd.where((e) => e['isPresent'] == true).length;
-    int abs = tot - pres;
-    int bros = fd
-        .where((e) => (e['gender'] ?? '').toString().toLowerCase() == 'male')
-        .length;
-    int sises = fd
-        .where((e) => (e['gender'] ?? '').toString().toLowerCase() == 'female')
-        .length;
-    int visitors = fd.where((e) => e['isVisitor'] == true).length;
-    int testifies = fd
-        .where(
-          (e) =>
-              e['isVisitor'] == true &&
-              e['visitor_category'] != 'Mother' &&
-              e['visitor_category'] != 'Father',
-        )
-        .length;
-
     return Wrap(
       spacing: 16,
       runSpacing: 16,
       children: [
         _metricTile(
           "Total Queried",
-          tot.toString(),
+          totalMembers.toString(),
           CupertinoIcons.person_3_fill,
           Colors.blueGrey,
           neumoBase,
         ),
         _metricTile(
           "Present",
-          pres.toString(),
+          presentMembers.toString(),
           CupertinoIcons.check_mark_circled_solid,
           Colors.green,
           neumoBase,
         ),
         _metricTile(
           "Absent",
-          abs.toString(),
+          absentMembers.toString(),
           CupertinoIcons.xmark_circle_fill,
           Colors.red,
           neumoBase,
         ),
         _metricTile(
           "Brothers",
-          bros.toString(),
+          "$brothersPresent / $brothersTotal",
           CupertinoIcons.person_solid,
           Colors.blue,
           neumoBase,
         ),
         _metricTile(
           "Sisters",
-          sises.toString(),
+          "$sistersPresent / $sistersTotal",
           CupertinoIcons.person_solid,
           Colors.pink,
           neumoBase,
         ),
         _metricTile(
-          "Total Visitors/Guests",
-          visitors.toString(),
+          "Total Visitors",
+          totalTestifies.toString(),
           CupertinoIcons.person_crop_circle_badge_exclam,
           Colors.orange,
           neumoBase,
         ),
         _metricTile(
-          "Total Testifies",
-          testifies.toString(),
+          "Ready Testifies",
+          readyTestifies.toString(),
           CupertinoIcons.book_fill,
           Colors.purple,
           neumoBase,
@@ -351,19 +436,250 @@ class _OverseerFullReportsPageState extends State<OverseerFullReportsPage> {
     );
   }
 
-  Widget _buildNativeBarChart(Color neumoBase) {
+  // ----- Top 3 Districts & Communities -----
+  Widget _buildTopBranches(Color neumoBase) {
+    final topDist = topDistricts;
+    final topComm = topCommunities;
+    if (topDist.isEmpty && topComm.isEmpty) return SizedBox.shrink();
+
+    return NeumorphicContainer(
+      borderRadius: 16,
+      padding: EdgeInsets.all(16),
+      color: neumoBase,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Top Performing Branches",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Colors.grey[800],
+            ),
+          ),
+          SizedBox(height: 16),
+          if (topDist.isNotEmpty) ...[
+            Text(
+              "Top 3 Districts",
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: widget.primaryColor,
+              ),
+            ),
+            SizedBox(height: 8),
+            ...topDist.asMap().entries.map((e) {
+              int rank = e.key + 1;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      "#$rank",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        e.value.key,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      "${e.value.value} present",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: widget.primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+            SizedBox(height: 16),
+          ],
+          if (topComm.isNotEmpty) ...[
+            Text(
+              "Top 3 Communities",
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: widget.primaryColor,
+              ),
+            ),
+            SizedBox(height: 8),
+            ...topComm.asMap().entries.map((e) {
+              int rank = e.key + 1;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      "#$rank",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        e.value.key,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      "${e.value.value} present",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: widget.primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ----- Role Breakdown Pie Chart -----
+  Widget _buildRoleBreakdownChart(Color neumoBase) {
+    final roles = roleCounts;
+    if (roles.isEmpty) return SizedBox.shrink();
+
+    // Prepare pie sections
+    final List<PieChartSectionData> sections = roles.entries.map((entry) {
+      final color = _getRoleColor(entry.key);
+      return PieChartSectionData(
+        color: color,
+        value: entry.value.toDouble(),
+        title: '${entry.value}',
+        radius: 30,
+        titleStyle: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+      );
+    }).toList();
+
+    return NeumorphicContainer(
+      borderRadius: 16,
+      padding: EdgeInsets.all(16),
+      color: neumoBase,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Role Breakdown (Present)",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Colors.grey[800],
+            ),
+          ),
+          SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                flex: 6,
+                child: SizedBox(
+                  height: 150,
+                  child: PieChart(
+                    PieChartData(
+                      sections: sections,
+                      centerSpaceRadius: 30,
+                      sectionsSpace: 2,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: roles.entries.map((entry) {
+                    return _legendItem(
+                      entry.key,
+                      _getRoleColor(entry.key),
+                      entry.value,
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getRoleColor(String role) {
+    if (role.contains('Apostle')) return Colors.blue;
+    if (role.contains('Overseer')) return Colors.grey;
+    if (role.contains('District Elder')) return const Color(0xFF800000);
+    if (role.contains('Community Elder')) return Colors.red;
+    if (role.contains('Priest')) return Colors.green;
+    if (role.contains('Deacon')) return Colors.yellow;
+    if (role == 'Brother') return Colors.blue;
+    if (role == 'Sister') return Colors.pink;
+    if (role.contains('Mother') || role.contains('Father'))
+      return Colors.purple;
+    return Colors.grey;
+  }
+
+  Widget _legendItem(String label, Color color, int value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "$label ($value)",
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ----- District Progress Bars -----
+  Widget _buildDistrictProgress(Color neumoBase) {
     Map<String, int> distTotals = {};
     Map<String, int> distPresent = {};
-
     for (var u in _filteredData) {
       String d =
           u['district_elder_name'] ?? u['districtElderName'] ?? 'Unassigned';
       distTotals[d] = (distTotals[d] ?? 0) + 1;
-      if (u['isPresent'] == true) {
-        distPresent[d] = (distPresent[d] ?? 0) + 1;
-      }
+      if (u['isPresent'] == true) distPresent[d] = (distPresent[d] ?? 0) + 1;
     }
-
     if (distTotals.isEmpty) return SizedBox.shrink();
 
     return NeumorphicContainer(
@@ -387,9 +703,8 @@ class _OverseerFullReportsPageState extends State<OverseerFullReportsPage> {
             int tot = e.value;
             int pres = distPresent[dist] ?? 0;
             double pct = tot == 0 ? 0 : pres / tot;
-
             return Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
+              padding: const EdgeInsets.only(bottom: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -446,6 +761,7 @@ class _OverseerFullReportsPageState extends State<OverseerFullReportsPage> {
     );
   }
 
+  // ----- Categorized List -----
   Widget _buildCategorizedList(Color neumoBase) {
     Map<String, List<dynamic>> groupedByDist = {};
     for (var u in _filteredData) {
@@ -475,7 +791,7 @@ class _OverseerFullReportsPageState extends State<OverseerFullReportsPage> {
         int pres = users.where((u) => u['isPresent'] == true).length;
 
         return Padding(
-          padding: const EdgeInsets.only(bottom: 16.0),
+          padding: const EdgeInsets.only(bottom: 16),
           child: NeumorphicContainer(
             borderRadius: 16,
             padding: EdgeInsets.zero,

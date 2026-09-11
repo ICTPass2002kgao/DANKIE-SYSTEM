@@ -351,11 +351,10 @@ class _MotherPageState extends State<MotherPage>
   // ⭐️ RELOCATION & GPS LOGIC
   // ===========================================================================
   Future<void> _checkLocationAndRelocation() async {
-    if (kIsWeb) return; // Skip on web to avoid permission blocking UX
+    if (kIsWeb) return;
 
     String registeredProvince = _userData['province'] ?? 'none';
-    if (registeredProvince.toLowerCase() == 'none')
-      return; // Skip if they don't even have a province yet
+    if (registeredProvince.toLowerCase() == 'none') return;
 
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -381,12 +380,10 @@ class _MotherPageState extends State<MotherPage>
         String currentPhysicalProvince =
             placemarks.first.administrativeArea ?? '';
 
-        // Clean up province strings to ensure accurate matching
         currentPhysicalProvince = currentPhysicalProvince
             .replaceAll(' Province', '')
             .trim();
 
-        // Verify it is a valid SA province
         String? matchedProvince;
         for (var p in provinces) {
           if (currentPhysicalProvince.toLowerCase().contains(p.toLowerCase())) {
@@ -401,30 +398,24 @@ class _MotherPageState extends State<MotherPage>
           String visitingKey = 'is_visiting_${uid}_$matchedProvince';
           String dateKey = 'relocation_date_${uid}_$matchedProvince';
 
-          // 1. If physical province MATCHES registered province
           if (matchedProvince.toLowerCase() ==
               registeredProvince.toLowerCase()) {
-            // Reset timers if they went back home
             await prefs.remove(visitingKey);
             await prefs.remove(dateKey);
             return;
           }
 
-          // 2. If physical province is DIFFERENT
           bool isJustVisiting = prefs.getBool(visitingKey) ?? false;
-          if (isJustVisiting)
-            return; // Ignore them if they already said they are visiting
+          if (isJustVisiting) return;
 
           String? startDateStr = prefs.getString(dateKey);
           if (startDateStr == null) {
-            // Day 1 in new province
             await prefs.setString(dateKey, DateTime.now().toIso8601String());
           } else {
             DateTime startDate = DateTime.parse(startDateStr);
             int daysPassed = DateTime.now().difference(startDate).inDays;
 
             if (daysPassed >= 3) {
-              // Trigger Relocation Prompt
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _showRelocationPrompt(matchedProvince!, visitingKey);
               });
@@ -452,77 +443,76 @@ class _MotherPageState extends State<MotherPage>
           backgroundColor: Colors.transparent,
           elevation: 0,
           insetPadding: const EdgeInsets.all(20),
-          child: NeumorphicContainer(
-            color: neumoBaseColor,
-            borderRadius: 24,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Icon(
-                  CupertinoIcons.location_solid,
-                  size: 60,
-                  color: theme.primaryColor,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  "Location Update",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+          child: SingleChildScrollView(
+            child: NeumorphicContainer(
+              color: neumoBaseColor,
+              borderRadius: 24,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Icon(
+                    CupertinoIcons.location_solid,
+                    size: 60,
                     color: theme.primaryColor,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "We noticed you have been in $newProvince for 3 days. Did you relocate?",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: theme.hintColor, fontSize: 14),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Location Update",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: theme.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "We noticed you have been in $newProvince for 3 days. Did you relocate?",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.hintColor, fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
 
-                GestureDetector(
-                  onTap: () async {
-                    Navigator.pop(dialogContext);
-                    await _handleRelocationConfirmed(newProvince);
-                  },
-                  child: NeumorphicContainer(
-                    color: theme.primaryColor,
-                    borderRadius: 12,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Center(
-                      child: Text(
-                        "YES, I RELOCATED",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
+                  GestureDetector(
+                    onTap: () async {
+                      Navigator.pop(dialogContext);
+                      await _handleRelocationConfirmed(newProvince);
+                    },
+                    child: NeumorphicContainer(
+                      color: theme.primaryColor,
+                      borderRadius: 12,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Center(
+                        child: Text(
+                          "YES, I RELOCATED",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.setBool(
-                      visitingKey,
-                      true,
-                    ); // Don't ask again for this province
-                    if (mounted) Navigator.pop(dialogContext);
-                  },
-                  child: Text(
-                    "No, I am just visiting",
-                    style: TextStyle(
-                      color: theme.hintColor,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool(visitingKey, true);
+                      if (mounted) Navigator.pop(dialogContext);
+                    },
+                    child: Text(
+                      "No, I am just visiting",
+                      style: TextStyle(
+                        color: theme.hintColor,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -533,7 +523,6 @@ class _MotherPageState extends State<MotherPage>
   Future<void> _handleRelocationConfirmed(String newProvince) async {
     Api().showLoading(context);
     try {
-      // 1. Check if there are ANY overseers in the new province
       final url = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?province=$newProvince',
       );
@@ -542,7 +531,7 @@ class _MotherPageState extends State<MotherPage>
         headers: {'Content-Type': 'application/json'},
       );
 
-      Navigator.pop(context); // close loading
+      Navigator.pop(context);
 
       bool hasOverseers = false;
       if (response.statusCode == 200) {
@@ -555,7 +544,6 @@ class _MotherPageState extends State<MotherPage>
       }
 
       if (!hasOverseers) {
-        // AUTOMATIC EXTERNAL MEMBER CONVERSION
         Api().showMessage(
           context,
           "No Overseers Found",
@@ -564,14 +552,13 @@ class _MotherPageState extends State<MotherPage>
         );
         await _updateToExternalMember(physicalProvince: newProvince);
       } else {
-        // OVERSEERS EXIST: Pre-select province and open the standard update popup
         setState(() {
           selectedProvince = newProvince;
         });
         _showUpdateOverseerPopup(isNewAddition: false, lockProvince: true);
       }
     } catch (e) {
-      Navigator.pop(context); // close loading
+      Navigator.pop(context);
       Api().showMessage(
         context,
         "Error",
@@ -732,27 +719,29 @@ class _MotherPageState extends State<MotherPage>
         context: context,
         builder: (BuildContext context) => Container(
           padding: const EdgeInsets.all(16.0),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-                const Divider(),
-                ...actions.map((item) {
-                  return ListTile(
-                    title: Text(item),
-                    onTap: () {
-                      onSelected(item);
-                      Navigator.pop(context);
-                    },
-                  );
-                }).toList(),
-              ],
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  const Divider(),
+                  ...actions.map((item) {
+                    return ListTile(
+                      title: Text(item),
+                      onTap: () {
+                        onSelected(item);
+                        Navigator.pop(context);
+                      },
+                    );
+                  }).toList(),
+                ],
+              ),
             ),
           ),
         ),
@@ -780,21 +769,27 @@ class _MotherPageState extends State<MotherPage>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: theme.textTheme.bodyMedium?.color,
-                  fontSize: 14,
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: theme.textTheme.bodyMedium?.color,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    constraints: const BoxConstraints(maxWidth: 150),
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.35,
+                    ),
                     child: Text(
                       trailingText,
                       overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                       style: TextStyle(
                         color: theme.primaryColor,
                         fontWeight: FontWeight.bold,
@@ -966,13 +961,8 @@ class _MotherPageState extends State<MotherPage>
     );
     bool isSaving = false;
 
-    // If locked (e.g. from relocation auto-trigger), fetch overseers automatically
     if (lockProvince && selectedProvince != null && _overseersList.isEmpty) {
-      // Small delay to let the dialog build first before running setStateModal
-      Future.delayed(Duration(milliseconds: 100), () {
-        // A bit hacky to call it without the explicit setStateDialog of the builder,
-        // but fetching it gracefully handles state updates via the parent.
-      });
+      Future.delayed(Duration(milliseconds: 100), () {});
     }
 
     showDialog(
@@ -981,7 +971,6 @@ class _MotherPageState extends State<MotherPage>
       builder: (BuildContext dialogContext) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
-            // Auto fetch if locked and empty
             if (lockProvince &&
                 selectedProvince != null &&
                 _overseersList.isEmpty &&
@@ -1003,11 +992,11 @@ class _MotherPageState extends State<MotherPage>
               backgroundColor: Colors.transparent,
               elevation: 0,
               insetPadding: const EdgeInsets.all(20),
-              child: NeumorphicContainer(
-                color: neumoBaseColor,
-                borderRadius: 24,
-                padding: const EdgeInsets.all(24),
-                child: SingleChildScrollView(
+              child: SingleChildScrollView(
+                child: NeumorphicContainer(
+                  color: neumoBaseColor,
+                  borderRadius: 24,
+                  padding: const EdgeInsets.all(24),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1051,7 +1040,6 @@ class _MotherPageState extends State<MotherPage>
                         onTap: lockProvince
                             ? () {}
                             : () {
-                                // Disable tap if locked
                                 _buildActionSheet(
                                   context: context,
                                   title: 'Select your Province',
@@ -1235,7 +1223,6 @@ class _MotherPageState extends State<MotherPage>
                             ? null
                             : () async {
                                 setStateDialog(() => isSaving = true);
-                                // Pass the locked province if they relocated
                                 bool success = await _updateToExternalMember(
                                   physicalProvince: lockProvince
                                       ? selectedProvince
@@ -1344,7 +1331,6 @@ class _MotherPageState extends State<MotherPage>
 
       final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/$userId/');
 
-      // If they were an external member, reset them to standard Member unless they are a Seller
       String currentRole = _userData['role']?.toString() ?? 'Member';
       String newRole = currentRole.toLowerCase() == 'external member'
           ? 'Member'
@@ -1419,96 +1405,98 @@ class _MotherPageState extends State<MotherPage>
             return Dialog(
               backgroundColor: Colors.transparent,
               elevation: 0,
-              child: NeumorphicContainer(
-                color: neumoBaseColor,
-                borderRadius: 24,
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Icon(
-                      Icons.person_pin_circle_outlined,
-                      size: 60,
-                      color: theme.primaryColor,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      "Complete Your Profile",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+              child: SingleChildScrollView(
+                child: NeumorphicContainer(
+                  color: neumoBaseColor,
+                  borderRadius: 24,
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Icon(
+                        Icons.person_pin_circle_outlined,
+                        size: 60,
                         color: theme.primaryColor,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Please select your gender to continue using the application.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: theme.hintColor, fontSize: 14),
-                    ),
-                    const SizedBox(height: 24),
-
-                    _buildGenderOption(
-                      "Male",
-                      localSelectedGender == "Male",
-                      neumoBaseColor,
-                      theme,
-                      () {
-                        setStateDialog(() => localSelectedGender = "Male");
-                      },
-                    ),
-                    _buildGenderOption(
-                      "Female",
-                      localSelectedGender == "Female",
-                      neumoBaseColor,
-                      theme,
-                      () {
-                        setStateDialog(() => localSelectedGender = "Female");
-                      },
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    GestureDetector(
-                      onTap: localSelectedGender == null || isSaving
-                          ? null
-                          : () async {
-                              setStateDialog(() => isSaving = true);
-                              await _updateGender(localSelectedGender!);
-                              if (mounted) {
-                                Navigator.pop(dialogContext);
-                              }
-                            },
-                      child: NeumorphicContainer(
-                        color: localSelectedGender == null
-                            ? theme.hintColor.withOpacity(0.3)
-                            : theme.primaryColor,
-                        borderRadius: 12,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        child: Center(
-                          child: isSaving
-                              ? SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(
-                                  "SAVE & CONTINUE",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.2,
-                                  ),
-                                ),
+                      const SizedBox(height: 16),
+                      Text(
+                        "Complete Your Profile",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: theme.primaryColor,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        "Please select your gender to continue using the application.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: theme.hintColor, fontSize: 14),
+                      ),
+                      const SizedBox(height: 24),
+
+                      _buildGenderOption(
+                        "Male",
+                        localSelectedGender == "Male",
+                        neumoBaseColor,
+                        theme,
+                        () {
+                          setStateDialog(() => localSelectedGender = "Male");
+                        },
+                      ),
+                      _buildGenderOption(
+                        "Female",
+                        localSelectedGender == "Female",
+                        neumoBaseColor,
+                        theme,
+                        () {
+                          setStateDialog(() => localSelectedGender = "Female");
+                        },
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      GestureDetector(
+                        onTap: localSelectedGender == null || isSaving
+                            ? null
+                            : () async {
+                                setStateDialog(() => isSaving = true);
+                                await _updateGender(localSelectedGender!);
+                                if (mounted) {
+                                  Navigator.pop(dialogContext);
+                                }
+                              },
+                        child: NeumorphicContainer(
+                          color: localSelectedGender == null
+                              ? theme.hintColor.withOpacity(0.3)
+                              : theme.primaryColor,
+                          borderRadius: 12,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Center(
+                            child: isSaving
+                                ? SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    "SAVE & CONTINUE",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -1674,7 +1662,7 @@ class _MotherPageState extends State<MotherPage>
   }
 
   // ===========================================================================
-  // 📱 MOBILE LAYOUT
+  // 📱 PREMIUM MOBILE LAYOUT (Overflow Safe)
   // ===========================================================================
   Widget _buildMobileLayout(
     ThemeData theme,
@@ -1725,7 +1713,7 @@ class _MotherPageState extends State<MotherPage>
             ),
           ),
 
-          // --- ANIMATED NEUMORPHIC DOCK ---
+          // --- ⭐️ PREMIUM ANIMATED NEUMORPHIC DOCK (Overflow Safe) ---
           Positioned(
             left: 0,
             right: 0,
@@ -1734,34 +1722,60 @@ class _MotherPageState extends State<MotherPage>
               offset: _isBottomNavVisible ? Offset(0, 0) : Offset(0, 1.2),
               duration: const Duration(milliseconds: 400),
               curve: Curves.fastOutSlowIn,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AdManager().bannerAdWidget(),
-                  Container(
-                    height: 100,
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 25),
-                    child: NeumorphicContainer(
-                      color: neumoBaseColor,
-                      borderRadius: 25,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AdManager().bannerAdWidget(),
+                    Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
                         vertical: 10,
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildNavItem(Ionicons.home, 0, theme),
-                          _buildNavItem(Ionicons.calendar, 1, theme),
-                          _buildNavItem(Icons.local_mall_outlined, 2, theme),
-                          _buildNavItem(Icons.history_outlined, 3, theme),
-                          if (_isSeller)
-                            _buildNavItem(Ionicons.storefront, 4, theme),
-                        ],
+                      child: NeumorphicContainer(
+                        color: neumoBaseColor,
+                        borderRadius: 25,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            Expanded(
+                              child: _buildNavItem(Ionicons.home, 0, theme),
+                            ),
+                            Expanded(
+                              child: _buildNavItem(Ionicons.calendar, 1, theme),
+                            ),
+                            Expanded(
+                              child: _buildNavItem(
+                                Icons.local_mall_outlined,
+                                2,
+                                theme,
+                              ),
+                            ),
+                            Expanded(
+                              child: _buildNavItem(
+                                Icons.history_outlined,
+                                3,
+                                theme,
+                              ),
+                            ),
+                            if (_isSeller)
+                              Expanded(
+                                child: _buildNavItem(
+                                  Ionicons.storefront,
+                                  4,
+                                  theme,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1779,7 +1793,8 @@ class _MotherPageState extends State<MotherPage>
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.all(10),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFF2563EB) : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
@@ -1803,7 +1818,7 @@ class _MotherPageState extends State<MotherPage>
   }
 
   // ===========================================================================
-  // ⭐️⭐️ NEW PREMIUM "WOW" APP BAR ⭐️⭐️
+  // ⭐️⭐️ NEW PREMIUM "WOW" APP BAR (Overflow Safe) ⭐️⭐️
   // ===========================================================================
   Widget _buildWowAppBar(ThemeData theme, Color neumoBaseColor) {
     final Color contentColor = theme.brightness == Brightness.dark
@@ -1821,7 +1836,7 @@ class _MotherPageState extends State<MotherPage>
     if (isHomePage) {
       topLine = _getGreeting();
       String name = _userData['name'] ?? 'Guest';
-      bottomLine = name.length > 15 ? "${name.substring(0, 15)}..." : name;
+      bottomLine = name;
     } else {
       topLine = "Browsing";
       bottomLine = _getNavItems()[_currentIndex]['label'].toUpperCase();
@@ -1829,6 +1844,7 @@ class _MotherPageState extends State<MotherPage>
     String initials = _userData['name'] != null && _userData['surname'] != null
         ? "${_userData['name'].toString().substring(0, 1)}${_userData['surname'].toString().substring(0, 1)}"
         : 'GC';
+
     return Container(
       padding: EdgeInsets.fromLTRB(20, 10, 20, 25),
       decoration: BoxDecoration(
@@ -1850,12 +1866,17 @@ class _MotherPageState extends State<MotherPage>
               baseColor: neumoBaseColor,
             ),
 
+            SizedBox(width: 16),
+
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
                     topLine.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 10,
                       letterSpacing: 1.5,
@@ -1872,6 +1893,8 @@ class _MotherPageState extends State<MotherPage>
                     ).createShader(bounds),
                     child: Text(
                       bottomLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
@@ -1883,6 +1906,8 @@ class _MotherPageState extends State<MotherPage>
                 ],
               ),
             ),
+
+            SizedBox(width: 16),
 
             if (!_isSeller && isLoggedIn)
               _buildNeuIconButton(
@@ -2251,13 +2276,15 @@ class _MotherPageState extends State<MotherPage>
               size: 20,
             ),
             SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                color: isDestructive ? Colors.redAccent : theme.hintColor,
-                fontSize: 13,
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: isDestructive ? Colors.redAccent : theme.hintColor,
+                  fontSize: 13,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -2272,125 +2299,130 @@ class _MotherPageState extends State<MotherPage>
 
     return Drawer(
       backgroundColor: neumoBaseColor,
-      child: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.only(top: 60, bottom: 30),
-            width: double.infinity,
-            child: Column(
-              children: [
-                NeumorphicContainer(
-                  color: neumoBaseColor,
-                  borderRadius: 100,
-                  padding: EdgeInsets.all(15),
-                  child: CircleAvatar(
-                    radius: 35,
-                    backgroundImage: AssetImage('assets/dankie_logo.PNG'),
-                    backgroundColor: Colors.white,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.only(top: 20, bottom: 30),
+              width: double.infinity,
+              child: Column(
+                children: [
+                  NeumorphicContainer(
+                    color: neumoBaseColor,
+                    borderRadius: 100,
+                    padding: EdgeInsets.all(15),
+                    child: CircleAvatar(
+                      radius: 35,
+                      backgroundImage: AssetImage('assets/dankie_logo.PNG'),
+                      backgroundColor: Colors.white,
+                    ),
                   ),
-                ),
-                SizedBox(height: 15),
-                Text(
-                  "Dankie Mobile",
-                  style: TextStyle(
-                    color: theme.primaryColor,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                  SizedBox(height: 15),
+                  Text(
+                    "Dankie Mobile",
+                    style: TextStyle(
+                      color: theme.primaryColor,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              children: [
-                if (!isGuest)
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                children: [
+                  if (!isGuest)
+                    _buildDrawerTile(
+                      theme,
+                      neumoBaseColor,
+                      Ionicons.person,
+                      "Profile",
+                      () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => MyProfile()),
+                        );
+                      },
+                    ),
                   _buildDrawerTile(
                     theme,
                     neumoBaseColor,
-                    Ionicons.person,
-                    "Profile",
-                    () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => MyProfile()),
-                      );
-                    },
+                    theme.brightness == Brightness.light
+                        ? Icons.dark_mode_outlined
+                        : Icons.light_mode_outlined,
+                    theme.brightness == Brightness.light
+                        ? "Dark Mode"
+                        : "Light Mode",
+                    () => _handleThemeChange(
+                      theme.brightness == Brightness.light,
+                    ),
                   ),
-                _buildDrawerTile(
-                  theme,
-                  neumoBaseColor,
-                  theme.brightness == Brightness.light
-                      ? Icons.dark_mode_outlined
-                      : Icons.light_mode_outlined,
-                  theme.brightness == Brightness.light
-                      ? "Dark Mode"
-                      : "Light Mode",
-                  () =>
-                      _handleThemeChange(theme.brightness == Brightness.light),
-                ),
-                Divider(color: theme.hintColor.withOpacity(0.2)),
-                _buildDrawerTile(
-                  theme,
-                  neumoBaseColor,
-                  Icons.description_outlined,
-                  "Terms & Conditions",
-                  () => _launchLegalUrl(
-                    "https://dankiemobile.org.za/terms-and-conditions",
+                  Divider(color: theme.hintColor.withOpacity(0.2)),
+                  _buildDrawerTile(
+                    theme,
+                    neumoBaseColor,
+                    Icons.description_outlined,
+                    "Terms & Conditions",
+                    () => _launchLegalUrl(
+                      "https://dankiemobile.org.za/terms-and-conditions",
+                    ),
                   ),
-                ),
-                _buildDrawerTile(
-                  theme,
-                  neumoBaseColor,
-                  Icons.shield_outlined,
-                  "Privacy Policy",
-                  () => _launchLegalUrl(
-                    "https://dankiemobile.org.za/policy-privacy",
+                  _buildDrawerTile(
+                    theme,
+                    neumoBaseColor,
+                    Icons.shield_outlined,
+                    "Privacy Policy",
+                    () => _launchLegalUrl(
+                      "https://dankiemobile.org.za/policy-privacy",
+                    ),
                   ),
-                ),
-                _buildDrawerTile(
-                  theme,
-                  neumoBaseColor,
-                  Icons.help_outline,
-                  "Report Issue",
-                  () =>_launchLegalUrl(
-                    "https://dankiemobile.org.za/contact-us",
+                  _buildDrawerTile(
+                    theme,
+                    neumoBaseColor,
+                    Icons.help_outline,
+                    "Report Issue",
+                    () => _launchLegalUrl(
+                      "https://dankiemobile.org.za/contact-us",
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: GestureDetector(
-              onTap: () => _logout(context),
-              child: NeumorphicContainer(
-                color: neumoBaseColor,
-                borderRadius: 15,
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      isGuest ? Icons.login : Icons.logout,
-                      color: isGuest ? theme.primaryColor : Colors.redAccent,
-                    ),
-                    SizedBox(width: 10),
-                    Text(
-                      isGuest ? "Sign In" : "Logout",
-                      style: TextStyle(
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: GestureDetector(
+                onTap: () => _logout(context),
+                child: NeumorphicContainer(
+                  color: neumoBaseColor,
+                  borderRadius: 15,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isGuest ? Icons.login : Icons.logout,
                         color: isGuest ? theme.primaryColor : Colors.redAccent,
-                        fontWeight: FontWeight.bold,
                       ),
-                    ),
-                  ],
+                      SizedBox(width: 10),
+                      Text(
+                        isGuest ? "Sign In" : "Logout",
+                        style: TextStyle(
+                          color: isGuest
+                              ? theme.primaryColor
+                              : Colors.redAccent,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2414,11 +2446,14 @@ class _MotherPageState extends State<MotherPage>
             children: [
               Icon(icon, color: theme.hintColor),
               SizedBox(width: 15),
-              Text(
-                title,
-                style: TextStyle(
-                  color: theme.hintColor,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: theme.hintColor,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -2432,92 +2467,5 @@ class _MotherPageState extends State<MotherPage>
   Future<void> _logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-  }
-
-  void _showHelpBottomSheet() {
-    final theme = Theme.of(context);
-    final neumoBaseColor = Color.alphaBlend(
-      theme.primaryColor.withOpacity(0.08),
-      theme.scaffoldBackgroundColor,
-    );
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: neumoBaseColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          top: 30,
-          left: 20,
-          right: 20,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Report an Issue',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: theme.primaryColor,
-              ),
-            ),
-            SizedBox(height: 20),
-            NeumorphicContainer(
-              color: neumoBaseColor,
-              isPressed: true,
-              borderRadius: 12,
-              child: TextField(
-                controller: issueTitle,
-                decoration: InputDecoration(
-                  hintText: 'Subject',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(15),
-                ),
-              ),
-            ),
-            SizedBox(height: 15),
-            NeumorphicContainer(
-              color: neumoBaseColor,
-              isPressed: true,
-              borderRadius: 12,
-              child: TextField(
-                controller: issueDescription,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: 'Description',
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.all(15),
-                ),
-              ),
-            ),
-            SizedBox(height: 25),
-            GestureDetector(
-              onTap: () {
-                Navigator.pop(context);
-                _reportIssue();
-              },
-              child: NeumorphicContainer(
-                color: theme.primaryColor,
-                borderRadius: 12,
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text(
-                    'Submit',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

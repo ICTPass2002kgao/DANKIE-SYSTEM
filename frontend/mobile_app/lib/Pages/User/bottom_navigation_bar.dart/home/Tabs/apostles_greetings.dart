@@ -16,7 +16,6 @@ class ApostlesGreetings extends StatefulWidget {
   State<ApostlesGreetings> createState() => _ApostlesGreetingsState();
 }
 
-// Added AutomaticKeepAliveClientMixin to preserve state when switching tabs
 class _ApostlesGreetingsState extends State<ApostlesGreetings>
     with AutomaticKeepAliveClientMixin {
   @override
@@ -47,7 +46,7 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings>
   @override
   void dispose() {
     _debounce?.cancel();
-    _searchController.dispose(); // Fixed memory leak by disposing controller
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -79,36 +78,72 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings>
     }
   }
 
-  List<dynamic> get filteredGreetings {
-    if (_searchQuery.isEmpty) return _allGreetings;
-    final query = _searchQuery.toLowerCase().trim();
-    return _allGreetings.where((greeting) {
-      // Search by apostle and year
-      final apostle = greeting['apostle'].toString().toLowerCase();
-      final year = greeting['year'].toString().toLowerCase();
-      if (apostle.contains(query) || year.contains(query)) return true;
+  // Returns a map of greeting -> matching language code (null if no match)
+  Map<dynamic, String?> _findMatchingLanguage(
+    List<dynamic> greetings,
+    String query,
+  ) {
+    final q = query.toLowerCase().trim();
+    if (q.isEmpty) return {for (var g in greetings) g: null};
 
-      // Search in all language content (title and message)
+    final Map<dynamic, String?> matches = {};
+    for (final greeting in greetings) {
       final contentMap = greeting['content_json'] is String
           ? jsonDecode(greeting['content_json'])
           : greeting['content_json'];
+      String? matchLang;
       if (contentMap is Map) {
-        for (final langContent in contentMap.values) {
+        for (final langCode in _supportedLanguages.values) {
+          final langContent = contentMap[langCode];
           if (langContent is Map) {
             final title = langContent['title']?.toString().toLowerCase() ?? '';
             final message =
                 langContent['message']?.toString().toLowerCase() ?? '';
-            if (title.contains(query) || message.contains(query)) return true;
+            if (title.contains(q) || message.contains(q)) {
+              matchLang = langCode;
+              break;
+            }
           }
         }
       }
-      return false;
-    }).toList();
+      matches[greeting] = matchLang;
+    }
+    return matches;
+  }
+
+  List<dynamic> get filteredGreetings {
+    if (_searchQuery.isEmpty) return _allGreetings;
+    final q = _searchQuery.toLowerCase().trim();
+    final matchMap = _findMatchingLanguage(_allGreetings, q);
+    return _allGreetings.where((g) => matchMap[g] != null).toList();
+  }
+
+  // Helper to get matching language for a specific greeting (used in card)
+  String? _getMatchingLangForGreeting(dynamic greeting) {
+    if (_searchQuery.isEmpty) return null;
+    final q = _searchQuery.toLowerCase().trim();
+    final contentMap = greeting['content_json'] is String
+        ? jsonDecode(greeting['content_json'])
+        : greeting['content_json'];
+    if (contentMap is Map) {
+      for (final langCode in _supportedLanguages.values) {
+        final langContent = contentMap[langCode];
+        if (langContent is Map) {
+          final title = langContent['title']?.toString().toLowerCase() ?? '';
+          final message =
+              langContent['message']?.toString().toLowerCase() ?? '';
+          if (title.contains(q) || message.contains(q)) {
+            return langCode;
+          }
+        }
+      }
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    super.build(context);
     final theme = Theme.of(context);
     final Color neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.1),
@@ -144,7 +179,6 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings>
                       child: TextField(
                         controller: _searchController,
                         onChanged: (value) {
-                          // Implemented debouncing to prevent UI jank while typing
                           if (_debounce?.isActive ?? false) _debounce!.cancel();
                           _debounce = Timer(
                             const Duration(milliseconds: 300),
@@ -288,23 +322,16 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings>
                       itemCount: filteredGreetings.length,
                       itemBuilder: (context, index) {
                         final greeting = filteredGreetings[index];
-                        final Map<String, dynamic> contentMap =
-                            greeting['content_json'] is String
-                            ? jsonDecode(greeting['content_json'])
-                            : greeting['content_json'];
-                        Map<String, dynamic>? localizedContent =
-                            contentMap[_selectedLang];
-                        if (localizedContent == null) {
-                          localizedContent =
-                              contentMap['en'] ?? contentMap['zu'];
-                        }
+                        // Find matching language for this greeting (if any)
+                        final matchLang = _getMatchingLangForGreeting(greeting);
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 25.0),
                           child: GreetingExpandableCard(
                             greetingData: greeting,
-                            localizedContent: localizedContent!
-                                .cast<String, String>(),
                             baseColor: neumoBaseColor,
+                            searchQuery: _searchQuery,
+                            selectedLang: _selectedLang, // Added parameter
+                            matchingLang: matchLang,
                           ),
                         );
                       },
@@ -319,14 +346,22 @@ class _ApostlesGreetingsState extends State<ApostlesGreetings>
 
 class GreetingExpandableCard extends StatefulWidget {
   final Map<String, dynamic> greetingData;
-  final Map<String, String> localizedContent;
   final Color baseColor;
+  final String searchQuery;
+  final String
+  selectedLang; // Required parameter added for explicit language selection
+  final String?
+  matchingLang; // Language that matches the search query (null if none)
+
   const GreetingExpandableCard({
     Key? key,
     required this.greetingData,
-    required this.localizedContent,
     required this.baseColor,
+    required this.searchQuery,
+    required this.selectedLang,
+    this.matchingLang,
   }) : super(key: key);
+
   @override
   State<GreetingExpandableCard> createState() => _GreetingExpandableCardState();
 }
@@ -343,10 +378,39 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
   @override
   void initState() {
     super.initState();
-    _greetingId = widget.greetingData['id'].toString(); // Ensure string
+    _greetingId = widget.greetingData['id'].toString();
     _likes = widget.greetingData['likes'] ?? 0;
     _views = widget.greetingData['views'] ?? 0;
     _loadStatus();
+    // Auto‑expand if there's a search match
+    if (widget.searchQuery.trim().isNotEmpty && widget.matchingLang != null) {
+      _isExpanded = true;
+      // Register view once expanded (delayed to avoid build errors)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_hasViewed) _registerView();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(GreetingExpandableCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re‑evaluate expansion if search query or matching language changes
+    if (oldWidget.searchQuery != widget.searchQuery ||
+        oldWidget.matchingLang != widget.matchingLang) {
+      final shouldExpand =
+          widget.searchQuery.trim().isNotEmpty && widget.matchingLang != null;
+      if (shouldExpand && !_isExpanded) {
+        setState(() => _isExpanded = true);
+        if (!_hasViewed) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _registerView();
+          });
+        }
+      } else if (!shouldExpand && _isExpanded) {
+        setState(() => _isExpanded = false);
+      }
+    }
   }
 
   Future<void> _loadStatus() async {
@@ -378,12 +442,10 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
   }
 
   Future<void> _registerView() async {
-    // Prevent multiple views
     final prefs = await SharedPreferences.getInstance();
     List<String> viewed = prefs.getStringList('viewed_greetings') ?? [];
-    if (viewed.contains(_greetingId)) return; // already viewed
+    if (viewed.contains(_greetingId)) return;
 
-    // Update local state
     setState(() {
       _hasViewed = true;
       _views++;
@@ -391,7 +453,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
     viewed.add(_greetingId);
     await prefs.setStringList('viewed_greetings', viewed);
 
-    // Send to backend
     try {
       final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken();
@@ -412,10 +473,8 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
   }
 
   Future<void> _toggleLike() async {
-    // Prevent multiple likes
     if (_hasLiked) return;
 
-    // Update local state
     setState(() {
       _hasLiked = true;
       _likes++;
@@ -425,7 +484,6 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
     liked.add(_greetingId);
     await prefs.setStringList('liked_greetings', liked);
 
-    // Send like to backend
     try {
       final user = FirebaseAuth.instance.currentUser;
       final token = await user?.getIdToken();
@@ -446,17 +504,73 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
   }
 
   void _shareGreeting() {
+    // Get content in the matching language (or selected language)
+    final content = _getContent();
     final textToShare =
-        "${widget.localizedContent['title']}\n\n${widget.localizedContent['message']}\n\n-- ${widget.greetingData['apostle']} (${widget.greetingData['year']})\n\nShared via Dankie App";
+        "${content['title']}\n\n${content['message']}\n\n-- ${widget.greetingData['apostle']} (${widget.greetingData['year']})\n\nShared via Dankie App";
     Share.share(textToShare, subject: "Apostolic Greeting");
+  }
+
+  // Helper to get the appropriate content map (matching lang if available, else selected)
+  Map<String, String> _getContent() {
+    final contentMap = widget.greetingData['content_json'] is String
+        ? jsonDecode(widget.greetingData['content_json'])
+        : widget.greetingData['content_json'];
+
+    // Fixed logic: Use matching language if searched, otherwise default to the selected language tab
+    final langToUse = widget.matchingLang ?? widget.selectedLang;
+
+    Map<String, dynamic>? langContent = contentMap[langToUse];
+    if (langContent == null) {
+      // fallback to English if the translation doesn't exist
+      langContent = contentMap['en'] ?? {};
+    }
+    return {
+      'title': langContent?['title'] ?? 'Greeting',
+      'message': langContent?['message'] ?? '',
+    };
+  }
+
+  Widget _buildHighlightedText(String text, TextStyle style) {
+    final query = widget.searchQuery.trim();
+    if (query.isEmpty || text.isEmpty) {
+      return Text(text, style: style);
+    }
+
+    final List<TextSpan> spans = [];
+    final RegExp regExp = RegExp(RegExp.escape(query), caseSensitive: false);
+    int start = 0;
+    for (final match in regExp.allMatches(text)) {
+      if (match.start > start) {
+        spans.add(
+          TextSpan(text: text.substring(start, match.start), style: style),
+        );
+      }
+      spans.add(
+        TextSpan(
+          text: match.group(0),
+          style: style.copyWith(
+            backgroundColor: Colors.yellow,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+      start = match.end;
+    }
+    if (start < text.length) {
+      spans.add(TextSpan(text: text.substring(start), style: style));
+    }
+    return Text.rich(TextSpan(children: spans));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final content = _getContent();
     String imgUrl =
         widget.greetingData['image_url'] ?? 'assets/profile_placeholder.png';
     bool isNetworkImg = imgUrl.startsWith('http');
+
     return NeumorphicContainer(
       color: widget.baseColor,
       isPressed: false,
@@ -514,6 +628,27 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
                           color: theme.hintColor,
                         ),
                       ),
+                      // Show language indicator if we're using matching language
+                      if (widget.matchingLang != null)
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${widget.matchingLang!.toUpperCase()} match',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green[800],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -536,9 +671,9 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
           SizedBox(height: 20),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5.0),
-            child: Text(
-              widget.localizedContent['title'] ?? 'Greeting',
-              style: TextStyle(
+            child: _buildHighlightedText(
+              content['title'] ?? 'Greeting',
+              TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
                 color: theme.primaryColor.withOpacity(0.85),
@@ -569,9 +704,9 @@ class _GreetingExpandableCardState extends State<GreetingExpandableCard> {
                         size: 30,
                       ),
                       SizedBox(height: 8),
-                      Text(
-                        widget.localizedContent['message'] ?? '',
-                        style: TextStyle(
+                      _buildHighlightedText(
+                        content['message'] ?? '',
+                        TextStyle(
                           fontSize: 14.5,
                           height: 1.6,
                           fontWeight: FontWeight.w500,

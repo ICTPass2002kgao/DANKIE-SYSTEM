@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/BibleVerseRepository.dart';
@@ -32,7 +33,7 @@ class EventsTab extends StatefulWidget {
 class _EventsTabState extends State<EventsTab>
     with AutomaticKeepAliveClientMixin {
   @override
-  bool get wantKeepAlive => true; // Prevents reloading when switching tabs
+  bool get wantKeepAlive => true;
 
   Future<List<dynamic>>? _eventsFuture;
   int _selectedCategoryIndex = 0;
@@ -44,16 +45,19 @@ class _EventsTabState extends State<EventsTab>
     "Gala",
   ];
 
-  // Music Banner Variables
   Timer? _musicTimer;
   List<dynamic> _songsList = [];
   Map<String, dynamic>? _currentSong;
+
+  List<dynamic> _notices = [];
+  bool _noticesLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _loadEvents();
     _loadSongs();
+    _loadNotices();
   }
 
   @override
@@ -66,6 +70,71 @@ class _EventsTabState extends State<EventsTab>
     setState(() {
       _eventsFuture = _fetchEventsFromDjango();
     });
+  }
+
+  Future<void> _loadNotices() async {
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => _noticesLoaded = true);
+        return;
+      }
+
+      String token = await user.getIdToken() ?? '';
+      final headers = {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      };
+
+      final userResp = await http.get(
+        Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/?uid=${user.uid}'),
+        headers: headers,
+      );
+      if (userResp.statusCode != 200) {
+        setState(() => _noticesLoaded = true);
+        return;
+      }
+      final userData = json.decode(userResp.body);
+      if (userData is! List || userData.isEmpty) {
+        setState(() => _noticesLoaded = true);
+        return;
+      }
+      final overseerUid = userData[0]['overseer_uid'];
+      if (overseerUid == null || overseerUid.isEmpty) {
+        setState(() => _noticesLoaded = true);
+        return;
+      }
+
+      final commResp = await http.get(
+        Uri.parse(
+          '${Api().BACKEND_BASE_URL_DEBUG}/overseer_communications/?overseer_uid=$overseerUid&is_published=true',
+        ),
+        headers: headers,
+      );
+      if (commResp.statusCode != 200) {
+        setState(() => _noticesLoaded = true);
+        return;
+      }
+      final commData = json.decode(commResp.body);
+      if (commData is List) {
+        commData.sort((a, b) {
+          final aDate =
+              DateTime.tryParse(a['created_at'] ?? '') ?? DateTime.now();
+          final bDate =
+              DateTime.tryParse(b['created_at'] ?? '') ?? DateTime.now();
+          return bDate.compareTo(aDate);
+        });
+        setState(() {
+          _notices = commData.take(3).toList();
+          _noticesLoaded = true;
+        });
+      } else {
+        setState(() => _noticesLoaded = true);
+      }
+    } catch (e) {
+      print('Error loading notices: $e');
+      setState(() => _noticesLoaded = true);
+    }
   }
 
   Future<void> _loadSongs() async {
@@ -135,6 +204,9 @@ class _EventsTabState extends State<EventsTab>
   }
 
   DateTime _parseEventDate(dynamic event) {
+    if (event.containsKey('event_date') && event['event_date'] != null) {
+      return DateTime.parse(event['event_date']);
+    }
     String dayStr = (event['day']?.toString() ?? '').toLowerCase();
     String monthStr = (event['month']?.toString() ?? '').toLowerCase();
     int year = event['year'] != null
@@ -153,104 +225,105 @@ class _EventsTabState extends State<EventsTab>
 
   Future<List<dynamic>> _fetchEventsFromDjango() async {
     final prefs = await SharedPreferences.getInstance();
+    User? user = FirebaseAuth.instance.currentUser;
+
+    // [PRODUCTION FIX]: Wait a moment for Firebase Auth to restore the session
+    if (user == null) {
+      try {
+        await FirebaseAuth.instance.authStateChanges().first.timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {},
+        );
+        user = FirebaseAuth.instance.currentUser;
+      } catch (_) {}
+    }
+
+    // If user still null, fallback to cache
+    if (user == null) {
+      final cached = prefs.getString('saved_combined_events_data');
+      return cached != null ? json.decode(cached).take(3).toList() : [];
+    }
 
     try {
-      String? cachedEvents = prefs.getString('saved_combined_events_data');
-      if (cachedEvents != null) {
-        print("⚡ Loading events instantly from Local Storage");
-      }
-
-      User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        if (cachedEvents != null) {
-          return json.decode(cachedEvents).take(3).toList();
-        }
-        return [];
-      }
-
-      String? token = await user.getIdToken();
-      if (token == null) {
-        if (cachedEvents != null) {
-          return json.decode(cachedEvents).take(3).toList();
-        }
-        return [];
-      }
-
-      final eventsUrl = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/events/');
-      final diaryUrl = Uri.parse(
-        '${Api().BACKEND_BASE_URL_DEBUG}/event_diary/',
-      );
-
+      final token = await user.getIdToken();
       final headers = {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       };
 
-      final responses = await Future.wait([
-        http
-            .get(eventsUrl, headers: headers)
-            .timeout(const Duration(seconds: 10)),
-        http
-            .get(diaryUrl, headers: headers)
-            .timeout(const Duration(seconds: 10)),
-      ]);
-
-      List<dynamic> combinedEvents = [];
-
-      List<dynamic> extractData(http.Response res) {
-        if (res.statusCode == 200) {
-          final decoded = json.decode(res.body);
-          if (decoded is Map<String, dynamic> &&
-              decoded.containsKey('results')) {
-            return decoded['results'];
-          }
-          if (decoded is List) return decoded;
+      // Fetch user's profile to get their overseer_uid
+      String? overseerUid;
+      final userResp = await http.get(
+        Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/users/?uid=${user.uid}'),
+        headers: headers,
+      );
+      if (userResp.statusCode == 200) {
+        final userData = json.decode(userResp.body);
+        if (userData is List && userData.isNotEmpty) {
+          overseerUid = userData[0]['overseer_uid'];
         }
-        return [];
       }
 
-      combinedEvents.addAll(extractData(responses[0]));
-      combinedEvents.addAll(extractData(responses[1]));
+      // Build the filtered URL for the overseer-specific events
+      String overseerDiaryUrl =
+          '${Api().BACKEND_BASE_URL_DEBUG}/overseer_diary_events/';
+      if (overseerUid != null && overseerUid.isNotEmpty) {
+        overseerDiaryUrl += '?overseer_uid=$overseerUid';
+      }
+
+      final responses = await Future.wait([
+        http.get(
+          Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/events/'),
+          headers: headers,
+        ),
+        http.get(
+          Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/event_diary/'),
+          headers: headers,
+        ),
+        http.get(Uri.parse(overseerDiaryUrl), headers: headers),
+      ]);
+
+      List<dynamic> combined = [];
+      for (var res in responses) {
+        if (res.statusCode == 200) {
+          final body = json.decode(res.body);
+          if (body is List)
+            combined.addAll(body);
+          else if (body is Map && body.containsKey('results'))
+            combined.addAll(body['results']);
+        }
+      }
 
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
 
-      combinedEvents = combinedEvents.where((event) {
+      combined = combined.where((event) {
         DateTime eventDate = _parseEventDate(event);
         return eventDate.isAfter(today.subtract(const Duration(days: 1)));
       }).toList();
 
-      combinedEvents.sort((a, b) {
-        DateTime dateA = _parseEventDate(a);
-        DateTime dateB = _parseEventDate(b);
+      combined.sort((a, b) {
+        final dateA = _parseEventDate(a);
+        final dateB = _parseEventDate(b);
         return dateA.compareTo(dateB);
       });
 
-      if (combinedEvents.isNotEmpty) {
-        await prefs.setString(
-          'saved_combined_events_data',
-          json.encode(combinedEvents),
-        );
-        print("💾 Fresh merged events saved to Local Storage");
-      }
+      await prefs.setString(
+        'saved_combined_events_data',
+        json.encode(combined),
+      );
 
-      return combinedEvents.take(3).toList();
+      return combined.take(3).toList();
     } catch (e) {
-      print("Network Error: $e");
-      String? cachedEvents = prefs.getString('saved_combined_events_data');
-      if (cachedEvents != null) {
-        print("📴 No internet! Showing offline cached events.");
-        return json.decode(cachedEvents).take(3).toList();
-      }
-      return [];
+      final cached = prefs.getString('saved_combined_events_data');
+      return cached != null ? json.decode(cached).take(3).toList() : [];
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    super.build(context);
     final theme = Theme.of(context);
-    final dailyVerse = GreetingsQuoteRepository.getDailyQuote();
 
     final Color neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.05),
@@ -263,15 +336,15 @@ class _EventsTabState extends State<EventsTab>
         onRefresh: () async {
           _loadEvents();
           _loadSongs();
+          _loadNotices();
         },
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
           physics: const BouncingScrollPhysics(),
           children: [
-            _buildNeumorphicDailyVerse(theme, neumoBaseColor, dailyVerse),
+            _buildImportantNotices(theme, neumoBaseColor),
             const SizedBox(height: 20),
 
-            // Only show banner if a song is loaded
             if (_currentSong != null) ...[
               NeumorphicContainer(
                 color: neumoBaseColor,
@@ -324,6 +397,84 @@ class _EventsTabState extends State<EventsTab>
     );
   }
 
+  Widget _buildImportantNotices(ThemeData theme, Color baseColor) {
+    if (!_noticesLoaded) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: isIOSPlatform
+              ? CupertinoActivityIndicator()
+              : CircularProgressIndicator(),
+        ),
+      );
+    }
+    if (_notices.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.campaign, color: Colors.red, size: 24),
+            const SizedBox(width: 12),
+            Text(
+              'Important Notices',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: Colors.red.shade700,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ..._notices.map((notice) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: NeumorphicContainer(
+              color: baseColor,
+              isPressed: false,
+              borderRadius: 16,
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    notice['subject'] ?? 'Announcement',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: theme.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    notice['message_body'] ?? '',
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: theme.textTheme.bodyMedium?.color),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    notice['created_at'] != null
+                        ? DateTime.parse(
+                            notice['created_at'],
+                          ).toLocal().toString().split(' ')[0]
+                        : '',
+                    style: TextStyle(fontSize: 11, color: theme.hintColor),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ],
+    );
+  }
+
   Widget _buildEventsList(
     ThemeData theme,
     Color neumoBaseColor,
@@ -334,17 +485,24 @@ class _EventsTabState extends State<EventsTab>
         int index = entry.key;
         var event = entry.value;
 
+        // Parse date properly from event_date field
+        String day = event['day']?.toString() ?? '';
+        String month = event['month']?.toString() ?? '';
+
+        if (event.containsKey('event_date') && event['event_date'] != null) {
+          try {
+            DateTime dt = DateTime.parse(event['event_date']);
+            day = DateFormat('dd').format(dt);
+            month = DateFormat('MMM').format(dt);
+          } catch (_) {}
+        }
+
         bool isNextUpcoming = index == 0;
         Color textColor = isNextUpcoming
             ? theme.primaryColor
             : theme.textTheme.bodyMedium!.color!;
-        IconData statusIcon = isNextUpcoming
-            ? Icons.play_arrow_rounded
-            : Icons.calendar_today_rounded;
         Color iconColor = isNextUpcoming ? theme.primaryColor : theme.hintColor;
 
-        String day = event['day']?.toString() ?? '';
-        String month = event['month']?.toString() ?? '';
         String title = event['title'] ?? 'No Title';
         String description =
             event['description'] ?? 'Event details to be communicated.';
@@ -375,14 +533,16 @@ class _EventsTabState extends State<EventsTab>
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  // --- 🔥 LEFT: SQUARE DATE BOX ---
                   NeumorphicContainer(
                     color: isNextUpcoming
                         ? theme.primaryColor.withOpacity(0.1)
                         : neumoBaseColor,
                     isPressed: true,
-                    borderRadius: 15,
-                    padding: EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                    borderRadius: 8, // Makes it a square box
+                    padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         day.toLowerCase().contains("communicated")
@@ -391,34 +551,44 @@ class _EventsTabState extends State<EventsTab>
                                 color: isNextUpcoming
                                     ? theme.primaryColor
                                     : textColor,
+                                size: 20,
                               )
-                            : Text(
-                                day.split('-')[0].trim(),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 18,
-                                  color: isNextUpcoming
-                                      ? theme.primaryColor
-                                      : textColor,
-                                ),
-                                textAlign: TextAlign.center,
+                            : Column(
+                                children: [
+                                  Text(
+                                    day.split('-')[0].trim(),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 18,
+                                      color: isNextUpcoming
+                                          ? theme.primaryColor
+                                          : textColor,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  if (month.isNotEmpty &&
+                                      !month.toLowerCase().contains(
+                                        "communicated",
+                                      ))
+                                    Text(
+                                      month.split(' ')[0].toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: isNextUpcoming
+                                            ? theme.primaryColor
+                                            : theme.hintColor,
+                                      ),
+                                    ),
+                                ],
                               ),
-                        if (month.isNotEmpty &&
-                            !month.toLowerCase().contains("communicated"))
-                          Text(
-                            month.split(' ')[0].toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: isNextUpcoming
-                                  ? theme.primaryColor
-                                  : theme.hintColor,
-                            ),
-                          ),
                       ],
                     ),
                   ),
+
                   SizedBox(width: 16),
+
+                  // --- MIDDLE: TITLE & DURATION ---
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,12 +620,45 @@ class _EventsTabState extends State<EventsTab>
                       ],
                     ),
                   ),
+
                   SizedBox(width: 10),
+
+                  // --- 🔥 RIGHT: POSTER THUMBNAIL (Replaces Play Icon) ---
                   NeumorphicContainer(
-                    color: neumoBaseColor,
-                    isPressed: false,
-                    padding: EdgeInsets.all(8),
-                    child: Icon(statusIcon, color: iconColor, size: 20),
+                    isPressed: true,
+                    borderRadius: 8,
+                    padding: EdgeInsets.all(2),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: posterUrl.isNotEmpty
+                          ? Image.network(
+                              posterUrl,
+                              width: 55,
+                              height: 55,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                    width: 55,
+                                    height: 55,
+                                    color: Colors.grey[200],
+                                    child: Icon(
+                                      Icons.image_not_supported,
+                                      size: 24,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                            )
+                          : Container(
+                              width: 55,
+                              height: 55,
+                              color: Colors.grey[200],
+                              child: Icon(
+                                Icons.image_not_supported,
+                                size: 24,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                    ),
                   ),
                 ],
               ),
@@ -516,69 +719,6 @@ class _EventsTabState extends State<EventsTab>
     );
   }
 
-  Widget _buildNeumorphicDailyVerse(
-    ThemeData theme,
-    Color baseColor,
-    Map<String, String> verseData,
-  ) {
-    return NeumorphicContainer(
-      color: baseColor,
-      isPressed: false,
-      borderRadius: 25,
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome, color: Colors.amber, size: 22),
-              SizedBox(width: 12),
-              Text(
-                'Daily Verse',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: theme.primaryColor.withOpacity(0.7),
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 10),
-          Text(
-            '"${verseData['text']}"',
-            style: TextStyle(
-              fontStyle: FontStyle.italic,
-              height: 1.6,
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
-              color: theme.primaryColor,
-              fontFamily: 'serif',
-            ),
-          ),
-          const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: NeumorphicContainer(
-              color: theme.primaryColor,
-              borderRadius: 12,
-              isPressed: false,
-              padding: EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-              child: Text(
-                verseData['ref']!,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMusicBanner(BuildContext context) {
     if (_currentSong == null) return const SizedBox.shrink();
 
@@ -595,7 +735,7 @@ class _EventsTabState extends State<EventsTab>
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 3000),
         child: Container(
-          key: ValueKey<String>(songId), // ensures animation triggers on change
+          key: ValueKey<String>(songId),
           width: double.infinity,
           decoration: BoxDecoration(
             gradient: const LinearGradient(

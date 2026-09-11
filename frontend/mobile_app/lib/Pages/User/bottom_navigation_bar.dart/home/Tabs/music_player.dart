@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart'; // For kIsWeb
-import 'package:flutter/material.dart'; 
+import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AdBanner.dart';
@@ -462,9 +462,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage>
                                                 ? CupertinoIcons
                                                       .cloud_download_fill
                                                 : Icons.download_done_rounded)
-                                          : (isIOSPlatform
-                                                ? CupertinoIcons.cloud_download
-                                                : Icons.download_rounded),
+                                          : (Icons.download_rounded),
                                       isActive: _isDownloaded,
                                       onTap: () {
                                         if (!_isDownloaded) {

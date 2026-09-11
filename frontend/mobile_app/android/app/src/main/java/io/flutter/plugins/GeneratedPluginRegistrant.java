@@ -51,6 +51,11 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin cloud_functions, io.flutter.plugins.firebase.functions.FlutterFirebaseFunctionsPlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new dev.fluttercommunity.plus.connectivity.ConnectivityPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin connectivity_plus, dev.fluttercommunity.plus.connectivity.ConnectivityPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new dev.fluttercommunity.plus.device_info.DeviceInfoPlusPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin device_info_plus, dev.fluttercommunity.plus.device_info.DeviceInfoPlusPlugin", e);
@@ -91,6 +96,11 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin flutter_face_liveness, com.cerisetechsolutions.flutter_face_liveness.FlutterFaceLivenessPlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new com.jrai.flutter_keyboard_visibility_temp_fork.FlutterKeyboardVisibilityTempForkPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin flutter_keyboard_visibility_temp_fork, com.jrai.flutter_keyboard_visibility_temp_fork.FlutterKeyboardVisibilityTempForkPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new com.dexterous.flutterlocalnotifications.FlutterLocalNotificationsPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin flutter_local_notifications, com.dexterous.flutterlocalnotifications.FlutterLocalNotificationsPlugin", e);
@@ -109,6 +119,11 @@ public final class GeneratedPluginRegistrant {
       flutterEngine.getPlugins().add(new com.tundralabs.fluttertts.FlutterTtsPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin flutter_tts, com.tundralabs.fluttertts.FlutterTtsPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new com.cloudwebrtc.webrtc.FlutterWebRTCPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin flutter_webrtc, com.cloudwebrtc.webrtc.FlutterWebRTCPlugin", e);
     }
     try {
       flutterEngine.getPlugins().add(new com.baseflow.geocoding.GeocodingPlugin());
@@ -161,6 +176,16 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin just_audio, com.ryanheise.just_audio.JustAudioPlugin", e);
     }
     try {
+      flutterEngine.getPlugins().add(new io.livekit.plugin.LiveKitPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin livekit_client, io.livekit.plugin.LiveKitPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new dev.steenbakker.mobile_scanner.MobileScannerPlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin mobile_scanner, dev.steenbakker.mobile_scanner.MobileScannerPlugin", e);
+    }
+    try {
       flutterEngine.getPlugins().add(new dev.fluttercommunity.plus.packageinfo.PackageInfoPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin package_info_plus, dev.fluttercommunity.plus.packageinfo.PackageInfoPlugin", e);
@@ -179,6 +204,11 @@ public final class GeneratedPluginRegistrant {
       flutterEngine.getPlugins().add(new net.nfet.flutter.printing.PrintingPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin printing, net.nfet.flutter.printing.PrintingPlugin", e);
+    }
+    try {
+      flutterEngine.getPlugins().add(new dev.flutterquill.quill_native_bridge.QuillNativeBridgePlugin());
+    } catch (Exception e) {
+      Log.e(TAG, "Error registering plugin quill_native_bridge_android, dev.flutterquill.quill_native_bridge.QuillNativeBridgePlugin", e);
     }
     try {
       flutterEngine.getPlugins().add(new dev.fluttercommunity.plus.share.SharePlusPlugin());

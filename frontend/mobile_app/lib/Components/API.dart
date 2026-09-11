@@ -14,6 +14,7 @@ import 'package:toastification/toastification.dart';
 import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/NeumorphicUtils.dart';
 import 'package:ttact/Components/song.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'CustomOutlinedButton.dart';
 
 class Api {
@@ -34,63 +35,56 @@ class Api {
         defaultTargetPlatform == TargetPlatform.fuchsia;
   }
 
-  // String BACKEND_BASE_URL_DEBUG = "https://dankie.up.railway.app/api";
-  // ---String BACKEND_BASE_URL_DEBUG =  CONFIGURATION ---
-  // If you are on Android Emulator use 'http://10.0.2.2:8000/api'
-  // If you are on Real Device use your PC IP 'http://192.168.x.x:8000/api'
+  String BACKEND_BASE_URL_DEBUG = "https://dankie.up.railway.app/api";
 
-  String BACKEND_BASE_URL_DEBUG = kIsWeb
-      ? 'http://127.0.0.1:8000/api'
-      : 'http://172.20.10.8:8000/api';
-
-  String BACKEND_NODE_JS = 'https://api-7gbt42tr6q-uc.a.run.app';
-
+  // String BACKEND_BASE_URL_DEBUG = kIsWeb
+  //     ? 'http://127.0.0.1:8000/api'
+  //     : 'http://172.20.10.8:8000/api';
+  
   Future<bool> sendEmail(
-    String email,
+    String recipientEmail,
     String subject,
-    String message,
+    String messageBody,
     BuildContext context,
   ) async {
     try {
-      final url = Uri.parse('$BACKEND_NODE_JS/sendCustomEmail');
+      var user = FirebaseAuth.instance.currentUser;
+ 
+      if(user == null) {
+        print("User not authenticated. Attempting anonymous sign-in...");
+        final userCredential = await FirebaseAuth.instance.signInAnonymously();
+        user = userCredential.user;
+      }
+
+      if (user == null) {
+        print("Email Error: Failed to authenticate anonymously.");
+        return false;
+      }
+
+      final String token = await user.getIdToken() ?? '';
 
       final response = await http.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "to": email,
-          "subject": subject,
-          "body": message,
-          "attachmentUrl": "",
+        Uri.parse('$BACKEND_BASE_URL_DEBUG/send-email/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'to': recipientEmail,
+          'subject': subject,
+          'body': messageBody,
         }),
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['success'] == true;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print("Email sent successfully via Django backend.");
+        return true;
       } else {
-        Navigator.pop(context);
-
-        String errorMessage = "Unknown Server Error";
-        try {
-          final errorData = jsonDecode(response.body);
-          if (errorData != null && errorData['error'] != null) {
-            errorMessage = errorData['error'];
-          } else {
-            errorMessage = response.body;
-          }
-        } catch (_) {
-          errorMessage = response.body;
-        }
-
-        print('Server Error: $errorMessage');
-        showMessage(context, errorMessage, "Error", Colors.red);
+        print("Failed to send email via backend: ${response.body}");
         return false;
       }
     } catch (e) {
-      Navigator.pop(context);
-      print('Exception: $e');
-      showMessage(context, "Connection Failed: $e", "Error", Colors.red);
+      print("Network error while sending email: $e");
       return false;
     }
   }
@@ -152,6 +146,16 @@ class Api {
     }
   }
 
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  // --- SHARED LEGAL LAUNCHER ---
+  Future<void> launchUrlD(String url, BuildContext context) async {
+    final Uri uri = Uri.parse(url);
+    if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+      Navigator.pop(context);
+    }
+    await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+  }
+
   // ⭐️ HYBRID SIGN UP: Firebase Auth + Django DB
   Future<Map<String, dynamic>?> signUp(
     String gender,
@@ -171,9 +175,59 @@ class Api {
     required String accountNumber,
   }) async {
     User? firebaseUser;
-    // Define uid outside try block for access in catch/rollback
     String? uid;
 
+    // --------------------------------------------------------------
+    // 1. DUPLICATE CHECK: name + surname
+    // --------------------------------------------------------------
+    try {
+      final checkUrl = Uri.parse(
+        '$BACKEND_BASE_URL_DEBUG/users/?name=$name&surname=$surname',
+      );
+      final checkResponse = await http.get(checkUrl);
+
+      if (checkResponse.statusCode == 200) {
+        final List<dynamic> existing = jsonDecode(checkResponse.body);
+        if (existing.isNotEmpty) {
+          if (context.mounted) {
+            Api().showMessage(
+              context,
+              'A user with this name and surname already exists. Please contact the support center.',
+              'Duplicate Account',
+              Colors.orange,
+              showContactSupport: true,
+            );
+          }
+          return null;
+        }
+      } else {
+        print('Duplicate check failed: ${checkResponse.statusCode}');
+        if (context.mounted) {
+          Api().showMessage(
+            context,
+            'Unable to verify account. Please try again later.',
+            'Error',
+            Colors.red,
+          );
+        }
+        return null;
+      }
+    } catch (e) {
+      print('Error during duplicate check: $e');
+      if (context.mounted) {
+        Api().showMessage(
+          context,
+          'Network error while checking duplicates. Please try again.',
+          'Error',
+          Colors.red,
+        );
+      }
+      return null;
+    }
+
+    // --------------------------------------------------------------
+    // 2. PROCEED WITH FIREBASE + DJANGO CREATION
+    // --------------------------------------------------------------
     try {
       final color = Theme.of(context);
 
@@ -185,11 +239,9 @@ class Api {
       if (firebaseUser == null) throw Exception("Firebase Auth failed.");
 
       uid = firebaseUser.uid;
-      // CRITICAL: Get the token immediately for authorized backend requests (DELETE/PATCH)
       String idToken = await firebaseUser.getIdToken() ?? "";
 
       // --- 2. PREPARE DATA FOR DJANGO ---
-      // Ensure keys match your Django Serializer (snake_case)
       final url = Uri.parse('$BACKEND_BASE_URL_DEBUG/users/');
 
       final Map<String, dynamic> requestBody = {
@@ -213,9 +265,8 @@ class Api {
         "week4": "0.00",
       };
 
-      // Handle Seller Specifics
       if (role == 'Seller') {
-        requestBody['seller_paystack_account'] = ''; // Placeholder
+        requestBody['seller_paystack_account'] = '';
         requestBody['account_verified'] = false;
       }
 
@@ -225,7 +276,6 @@ class Api {
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $idToken",
-          // // Uncomment if your POST /users/ requires auth
         },
         body: jsonEncode(requestBody),
       );
@@ -249,13 +299,11 @@ class Api {
               updateUrl,
               headers: {
                 "Content-Type": "application/json",
-                "Authorization":
-                    "Bearer $idToken", // Authorization required for PATCH
+                "Authorization": "Bearer $idToken",
               },
               body: jsonEncode({"seller_paystack_account": subaccountCode}),
             );
 
-            // C. Send Success Emails
             if (context.mounted) {
               sendEmail(
                 email,
@@ -295,7 +343,6 @@ class Api {
               print("Rollback Error (Django): $djangoError");
             }
 
-            // 2. Delete Firebase User
             try {
               await firebaseUser.delete();
             } catch (fbError) {
@@ -329,8 +376,6 @@ class Api {
         }
 
         // --- SUCCESS UI ---
-        // Only show ads or navigate if the widget is still on screen
-
         if (context.mounted) {
           AdManager().showRewardedInterstitialAd((ad, reward) {
             print('User earned reward: ${reward.amount} ${reward.type}');
@@ -349,13 +394,11 @@ class Api {
         return userData;
       } else {
         // --- DJANGO CREATION FAILED (Status 400/500) ---
-        // We only need to delete the Firebase user, as Django user wasn't created.
         await firebaseUser.delete();
 
         String errorMsg = response.body;
         try {
           final errJson = jsonDecode(response.body);
-          // Try to extract a specific error message if available
           if (errJson is Map && errJson.containsKey('error')) {
             errorMsg = errJson['error'].toString();
           } else {
@@ -371,10 +414,8 @@ class Api {
       // --- CATASTROPHIC FAILURE HANDLER ---
       print("Sign Up Error: $e");
 
-      // Attempt to clean up Firebase if it exists and wasn't cleaned up above
       if (firebaseUser != null) {
         try {
-          // Refresh user to check if it still exists before deleting
           await firebaseUser.reload();
           await firebaseUser.delete();
         } catch (k) {
@@ -394,60 +435,147 @@ class Api {
     BuildContext context,
     String message,
     String title,
-    Color? box_color,
-  ) {
+    Color? box_color, {
+    bool showContactSupport = false,
+  }) {
     final color = Theme.of(context);
 
-    toastification.dismissAll();
-
-    toastification.show(
+    showGeneralDialog(
       context: context,
-      type: ToastificationType.warning,
-      autoCloseDuration: const Duration(seconds: 5),
-      title: Text(
-        title,
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-      ),
-      description: RichText(
-        text: TextSpan(
-          text: message,
-          style: TextStyle(color: Colors.white),
-        ),
-      ),
-      alignment: Alignment.bottomCenter,
-      animationDuration: const Duration(milliseconds: 500),
-      icon: const Icon(Icons.check),
-      showIcon: true,
-      primaryColor: color.scaffoldBackgroundColor,
-      backgroundColor: box_color ?? color.scaffoldBackgroundColor,
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.15),
-          offset: const Offset(10, 10),
-          blurRadius: 20,
-        ),
-        BoxShadow(
-          color: Colors.white.withOpacity(0.9),
-          offset: const Offset(-10, -10),
-          blurRadius: 20,
-        ),
-      ],
-      showProgressBar: true,
-      progressBarTheme: ProgressIndicatorThemeData(
-        color: color.scaffoldBackgroundColor,
-      ),
-      closeButton: ToastCloseButton(
-        showType: CloseButtonShowType.onHover,
-        buttonBuilder: (context, onClose) {
-          return OutlinedButton.icon(
-            onPressed: onClose,
-            icon: const Icon(Icons.close, size: 20, color: Colors.white),
-            label: const Text('Close', style: TextStyle(color: Colors.white)),
-          );
-        },
-      ),
-      closeOnClick: true,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.6),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.85,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: box_color ?? color.scaffoldBackgroundColor,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    offset: const Offset(10, 10),
+                    blurRadius: 30,
+                  ),
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.1),
+                    offset: const Offset(-5, -5),
+                    blurRadius: 20,
+                  ),
+                ],
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.2),
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.15),
+                    ),
+                    child: const Icon(
+                      Icons.info_outline,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 16,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.white.withOpacity(0.15),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: Colors.white.withOpacity(0.4),
+                          ),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (showContactSupport) ...[
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          backgroundColor: Theme.of(context).primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.4),
+                            ),
+                          ),
+                        ),
+                        onPressed: () => launchUrlD(
+                          "https://dankiemobile.org.za/contact-us",
+                          context,
+                        ),
+                        child: const Text(
+                          'Contact Support',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+          child: FadeTransition(opacity: animation, child: child),
+        );
+      },
     );
   }
 

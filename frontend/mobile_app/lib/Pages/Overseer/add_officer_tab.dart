@@ -109,6 +109,14 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
             _districtsList = tempDistricts;
             _communitiesList = tempCommunities;
           });
+
+        OverseerAuditLogs.logAction(
+          action: "ADDED",
+          details: "Created officer ${officerNameController.text.trim()}",
+          committeeMemberName: widget.committeeMemberName,
+          committeeMemberRole: widget.committeeMemberRole,
+          universityCommitteeFace: widget.faceUrl,
+        );
         }
       }
     } catch (e) {
@@ -201,8 +209,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context) { 
     final baseColor = Api().neumoBaseColor(context);
 
     return SingleChildScrollView(
@@ -280,8 +287,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
       ),
     );
   }
-
-  // --- FORM 1: ADD NEW (With dynamic community fields) ---
+ 
   Widget _buildAddNewForm() {
     final theme = Theme.of(context);
     return Column(
@@ -297,8 +303,7 @@ class _AddOfficerTabState extends State<AddOfficerTab> {
           context,
           controller: officerNameController,
           placeholder: "District Elder Name *",
-        ),
-        // Community Fields Section
+        ), 
         Column(
           children: [
             Row(

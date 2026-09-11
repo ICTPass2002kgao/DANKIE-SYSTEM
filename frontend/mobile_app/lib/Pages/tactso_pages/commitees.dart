@@ -6,7 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ionicons/flutter_ionicons.dart';
-import 'package:http/http.dart' as http; 
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ttact/Components/API.dart';
@@ -48,6 +48,9 @@ class _CommitteeTabState extends State<CommitteeTab> {
       TextEditingController();
   final TextEditingController _committeeEmailController =
       TextEditingController();
+  final TextEditingController _committeePhoneController =
+      TextEditingController();
+  final TextEditingController _customRoleController = TextEditingController();
 
   String? _selectedRole;
   XFile? _committeeFaceImage;
@@ -60,6 +63,7 @@ class _CommitteeTabState extends State<CommitteeTab> {
     'Deputy Secretary',
     'Treasurer',
     'Additional Member',
+    'Other',
   ];
 
   Color get _primaryColor => Theme.of(context).primaryColor;
@@ -74,6 +78,8 @@ class _CommitteeTabState extends State<CommitteeTab> {
   void dispose() {
     _committeeNameController.dispose();
     _committeeEmailController.dispose();
+    _committeePhoneController.dispose();
+    _customRoleController.dispose();
     super.dispose();
   }
 
@@ -85,7 +91,6 @@ class _CommitteeTabState extends State<CommitteeTab> {
 
   Future<List<dynamic>> _getCommitteeData() async {
     final user = FirebaseAuth.instance.currentUser;
-    // FIXED: Using clean String? syntax
     final String? token = await user?.getIdToken();
 
     final response = await http.get(
@@ -102,14 +107,12 @@ class _CommitteeTabState extends State<CommitteeTab> {
       var decoded = json.decode(response.body);
       List<dynamic> allMembers = [];
 
-      // Safely handle both paginated and unpaginated Django responses
       if (decoded is Map<String, dynamic> && decoded.containsKey('results')) {
         allMembers = decoded['results'];
       } else if (decoded is List) {
         allMembers = decoded;
       }
 
-      // ⭐️ STRICT LOCAL FILTER: Keep only members assigned to THIS specific branch ID
       return allMembers.where((member) {
         return member['branch'].toString() == widget.branchId.toString();
       }).toList();
@@ -127,11 +130,15 @@ class _CommitteeTabState extends State<CommitteeTab> {
   }
 
   Future<void> _addCommitteeMember() async {
-    if (_committeeNameController.text.isEmpty || _selectedRole == null) {
+    String finalRole = _selectedRole == 'Other'
+        ? _customRoleController.text.trim()
+        : _selectedRole ?? '';
+
+    if (_committeeNameController.text.isEmpty || finalRole.isEmpty) {
       Api().showMessage(
         context,
         "Missing Info",
-        "Please fill all fields.",
+        "Please fill all required fields including role.",
         Colors.orange,
       );
       return;
@@ -147,7 +154,6 @@ class _CommitteeTabState extends State<CommitteeTab> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("User not logged in");
 
-      // FIXED: Using clean String? syntax
       final String? token = await user.getIdToken();
 
       var request = http.MultipartRequest(
@@ -157,11 +163,11 @@ class _CommitteeTabState extends State<CommitteeTab> {
 
       request.headers['Authorization'] = 'Bearer $token';
 
-      // FIXED: Field name must be 'full_name' to match Django backend model TactsoCommitteeMember
       request.fields['full_name'] = _committeeNameController.text.trim();
       request.fields['email'] = _committeeEmailController.text.trim();
+      request.fields['phone'] = _committeePhoneController.text.trim();
       request.fields['role'] = 'Tactso Branch';
-      request.fields['portfolio'] = _selectedRole!;
+      request.fields['portfolio'] = finalRole;
       request.fields['branch'] = widget.branchId;
 
       if (kIsWeb) {
@@ -187,7 +193,7 @@ class _CommitteeTabState extends State<CommitteeTab> {
       if (response.statusCode == 201) {
         await TactsoAuditLogs.logAction(
           action: "ADD_COMMITTEE_MEMBER",
-          details: "Added ${_committeeNameController.text} as $_selectedRole",
+          details: "Added ${_committeeNameController.text} as $finalRole",
           referenceId: "N/A",
           universityName: widget.universityName,
           universityLogo: widget.universityLogoUrl,
@@ -195,11 +201,14 @@ class _CommitteeTabState extends State<CommitteeTab> {
           committeeMemberRole: widget.loggedMemberRole ?? "Education Officer",
           universityCommitteeFace: widget.universityCommitteeFace,
           targetMemberName: _committeeNameController.text,
-          targetMemberRole: _selectedRole,
+          targetMemberRole: finalRole,
         );
 
         _committeeNameController.clear();
         _committeeEmailController.clear();
+        _committeePhoneController.clear();
+        _customRoleController.clear();
+
         setState(() {
           _selectedRole = null;
           _committeeFaceImage = null;
@@ -214,6 +223,203 @@ class _CommitteeTabState extends State<CommitteeTab> {
       setState(() => _isUploadingCommittee = false);
       Api().showMessage(context, "Error", e.toString(), Colors.red);
     }
+  }
+
+  Future<bool> _updateCommitteeMember(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception("User not logged in");
+      final String? token = await user.getIdToken();
+
+      final response = await http
+          .patch(
+            Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/branch_committee/$id/'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(data),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => throw Exception("Connection timed out."),
+          );
+      Navigator.pop(context); // Close the loading dialog
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        _fetchCommittee();
+        Api().showMessage(
+          context,
+          "Success",
+          "Member updated successfully.",
+          Colors.green,
+        );
+        return true;
+      } else {
+        Api().showMessage(
+          context,
+          "Error",
+          "Server returned: ${response.statusCode}",
+          Colors.red,
+        );
+        return false;
+      }
+    } catch (e) {
+      Api().showMessage(context, "Network Error", "$e", Colors.red);
+      return false;
+    }
+  }
+
+  void _showEditDialog(dynamic member) {
+    final TextEditingController editEmailController = TextEditingController(
+      text: member['email'] ?? '',
+    );
+    final TextEditingController editPhoneController = TextEditingController(
+      text: member['phone'] ?? '',
+    );
+    final TextEditingController editPortfolioController = TextEditingController(
+      text: member['portfolio'] ?? member['role'] ?? '',
+    );
+    bool isUpdating = false;
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.3),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+            child: NeumorphicContainer(
+              color: widget.neumoColor,
+              borderRadius: 24,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    "Edit Member",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueGrey[800],
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    member['full_name'] ??
+                        member['fullname'] ??
+                        member['name'] ??
+                        '',
+                    style: TextStyle(fontSize: 14, color: Colors.blueGrey[400]),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 24),
+                  _buildNeumorphicTextField(
+                    controller: editPortfolioController,
+                    placeholder: "Portfolio / Role",
+                    baseColor: widget.neumoColor,
+                    prefixIcon: Icons.badge,
+                  ),
+                  SizedBox(height: 16),
+                  _buildNeumorphicTextField(
+                    controller: editEmailController,
+                    placeholder: "Email Address",
+                    baseColor: widget.neumoColor,
+                    prefixIcon: Icons.email,
+                  ),
+                  SizedBox(height: 16),
+                  _buildNeumorphicTextField(
+                    controller: editPhoneController,
+                    placeholder: "Phone Number",
+                    baseColor: widget.neumoColor,
+                    prefixIcon: Icons.phone,
+                  ),
+                  SizedBox(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      GestureDetector(
+                        onTap: isUpdating ? null : () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          child: Text(
+                            "Cancel",
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: isUpdating
+                            ? null
+                            : () async {
+                                setDialogState(() => isUpdating = true);
+                                try {
+                                  bool success = await _updateCommitteeMember(
+                                    member['id'].toString(),
+                                    {
+                                      'portfolio': editPortfolioController.text
+                                          .trim(),
+                                      'email': editEmailController.text.trim(),
+                                      'phone': editPhoneController.text.trim(),
+                                    },
+                                  );
+                                  if (mounted && success) {
+                                    Navigator.pop(context);
+                                  }
+                                } finally {
+                                  if (mounted) {
+                                    setDialogState(() => isUpdating = false);
+                                  }
+                                }
+                              },
+                        child: NeumorphicContainer(
+                          color: _primaryColor,
+                          borderRadius: 12,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          child: isUpdating
+                              ? SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(
+                                  "Save Changes",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _deleteCommitteeMember(
@@ -246,13 +452,12 @@ class _CommitteeTabState extends State<CommitteeTab> {
                 );
                 return;
               }
-              Navigator.pop(context); // Close the confirmation dialog
-              Api().showLoading(context); // Open loading dialog
+              Navigator.pop(context);
+              Api().showLoading(context);
               try {
                 final user = FirebaseAuth.instance.currentUser;
                 if (user == null) throw Exception("User not logged in");
 
-                // FIXED: Using clean String? syntax
                 final String? token = await user.getIdToken();
 
                 final url = Uri.parse(
@@ -280,7 +485,7 @@ class _CommitteeTabState extends State<CommitteeTab> {
                   );
 
                   _fetchCommittee();
-                  Navigator.pop(context); // Close loading dialog on success
+                  Navigator.pop(context);
                   Api().showMessage(
                     context,
                     "Deleted",
@@ -288,8 +493,7 @@ class _CommitteeTabState extends State<CommitteeTab> {
                     Colors.grey,
                   );
                 } else {
-                  // FIX: Handle API errors appropriately to stop the infinite loading
-                  Navigator.pop(context); // Close loading dialog on error
+                  Navigator.pop(context);
                   Api().showMessage(
                     context,
                     "Error",
@@ -298,7 +502,7 @@ class _CommitteeTabState extends State<CommitteeTab> {
                   );
                 }
               } catch (e) {
-                Navigator.pop(context); // Close loading dialog on exception
+                Navigator.pop(context);
                 Api().showMessage(context, "Error", "$e", Colors.red);
               }
             },
@@ -313,120 +517,177 @@ class _CommitteeTabState extends State<CommitteeTab> {
   Widget build(BuildContext context) {
     bool isSmall = MediaQuery.of(context).size.width < 600;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        NeumorphicContainer(
-          color: widget.neumoColor,
-          padding: EdgeInsets.all(isSmall ? 16 : 20),
-          borderRadius: 16,
-          child: Column(
-            children: [
-              Text(
-                "Add Member",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 15),
-              isSmall
-                  ? Column(
-                      children: _buildFormChildren(widget.neumoColor, isSmall),
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: _buildFormChildren(widget.neumoColor, isSmall),
-                    ),
-            ],
-          ),
-        ),
-        SizedBox(height: 20),
-        FutureBuilder<List<dynamic>>(
-          future: _committeeFuture,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return CupertinoActivityIndicator();
-            if (snapshot.data!.isEmpty) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Text(
-                    "No committee members found for this branch.",
-                    style: TextStyle(color: Colors.grey),
-                  ),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NeumorphicContainer(
+            color: widget.neumoColor,
+            padding: EdgeInsets.all(isSmall ? 16 : 20),
+            borderRadius: 16,
+            child: Column(
+              children: [
+                Text(
+                  "Add Member",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-              );
-            }
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 400,
-                mainAxisExtent: 90,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-              ),
-              itemCount: snapshot.data!.length,
-              itemBuilder: (context, index) {
-                var data = snapshot.data![index];
-                var faceUrl = data['face_url'] ?? data['faceUrl'];
-
-                return NeumorphicContainer(
-                  color: widget.neumoColor,
-                  padding: EdgeInsets.all(10),
-                  borderRadius: 12,
-                  child: Row(
-                    children: [
-                      NeumorphicContainer(
-                        child: Icon(
-                          Ionicons.person,
-                          size: 20,
-                          color: Theme.of(context).primaryColor,
+                SizedBox(height: 15),
+                isSmall
+                    ? Column(
+                        children: _buildFormChildren(
+                          widget.neumoColor,
+                          isSmall,
+                        ),
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _buildFormChildren(
+                          widget.neumoColor,
+                          isSmall,
                         ),
                       ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
+              ],
+            ),
+          ),
+          SizedBox(height: 20),
+          FutureBuilder<List<dynamic>>(
+            future: _committeeFuture,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return CupertinoActivityIndicator();
+              if (snapshot.data!.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Text(
+                      "No committee members found for this branch.",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                );
+              }
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 400,
+                  mainAxisExtent:
+                      105, // Increased height slightly to fit phone number
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: snapshot.data!.length,
+                itemBuilder: (context, index) {
+                  var data = snapshot.data![index];
+                  var faceUrl = data['face_url'] ?? data['faceUrl'];
+                  var phone = data['phone'] ?? '';
+
+                  return NeumorphicContainer(
+                    color: widget.neumoColor,
+                    padding: EdgeInsets.all(10),
+                    borderRadius: 12,
+                    child: Row(
+                      children: [
+                        NeumorphicContainer(
+                          child: Icon(
+                            Ionicons.person,
+                            size: 20,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                data['full_name'] ??
+                                    data['fullname'] ??
+                                    data['name'] ??
+                                    '',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                data['portfolio'] ?? data['role'] ?? '',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: _primaryColor,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              if (phone.isNotEmpty) ...[
+                                SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.phone,
+                                      size: 10,
+                                      color: Colors.grey[600],
+                                    ),
+                                    SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        phone,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Ensure frontend falls back if the backend object has `full_name` instead of `fullname`
-                            Text(
-                              data['full_name'] ??
-                                  data['fullname'] ??
-                                  data['name'] ??
-                                  '',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
+                            IconButton(
+                              icon: Icon(
+                                Icons.edit,
+                                color: Colors.blue,
+                                size: 18,
                               ),
+                              onPressed: () => _showEditDialog(data),
+                              padding: EdgeInsets.zero,
+                              constraints: BoxConstraints(),
                             ),
-                            Text(
-                              data['portfolio'] ?? data['role'] ?? '',
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: _primaryColor,
-                                fontSize: 10,
+                            SizedBox(width: 10),
+                            IconButton(
+                              icon: Icon(
+                                Icons.delete,
+                                color: Colors.red,
+                                size: 18,
                               ),
+                              onPressed: () => _deleteCommitteeMember(
+                                data['id'].toString(),
+                                faceUrl,
+                                data['full_name'] ??
+                                    data['fullname'] ??
+                                    data['name'],
+                                data['portfolio'] ?? data['role'],
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: BoxConstraints(),
                             ),
                           ],
                         ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.delete, color: Colors.red, size: 18),
-                        onPressed: () => _deleteCommitteeMember(
-                          data['id'].toString(),
-                          faceUrl,
-                          data['full_name'] ?? data['fullname'] ?? data['name'],
-                          data['portfolio'] ?? data['role'],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
-        ),
-      ],
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -445,6 +706,13 @@ class _CommitteeTabState extends State<CommitteeTab> {
           placeholder: "Email",
           baseColor: neumoColor,
           prefixIcon: Icons.email,
+        ),
+        SizedBox(height: 10),
+        _buildNeumorphicTextField(
+          controller: _committeePhoneController,
+          placeholder: "Phone",
+          baseColor: neumoColor,
+          prefixIcon: Icons.phone,
         ),
         SizedBox(height: 10),
         Row(
@@ -504,6 +772,15 @@ class _CommitteeTabState extends State<CommitteeTab> {
             ),
           ],
         ),
+        if (_selectedRole == 'Other') ...[
+          SizedBox(height: 10),
+          _buildNeumorphicTextField(
+            controller: _customRoleController,
+            placeholder: "Enter Custom Role",
+            baseColor: neumoColor,
+            prefixIcon: Icons.badge,
+          ),
+        ],
       ],
     );
 

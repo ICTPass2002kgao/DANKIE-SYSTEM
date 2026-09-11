@@ -1,16 +1,19 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, avoid_print
 
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:mobile_scanner/mobile_scanner.dart'; // 🔥 ADDED FOR QR SCANNER
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/NeuDesign.dart';
 import 'package:ttact/Pages/tactso_pages/components/dialogs.dart';
 import 'package:ttact/Pages/tactso_pages/components/full_attendance_reports.dart';
 import 'package:ttact/Pages/tactso_pages/components/spiritual_pdf_generated.dart';
 import 'package:ttact/Pages/tactso_pages/components/utilis.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 class SpiritualManagementTab extends StatefulWidget {
   final String branchId;
@@ -53,6 +56,9 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
 
   // Date filter state
   DateTime _selectedDate = DateTime.now();
+
+  // Tracks which user's attendance is being saved (to show loading spinner)
+  Set<String> _savingUserIds = {};
 
   Color get _primaryColor => Theme.of(context).primaryColor;
 
@@ -214,7 +220,7 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
           final map = Map<String, dynamic>.from(m as Map);
           map['isVisitor'] = false;
           map['visitor_category'] = 'Registered';
-          map['ui_id'] = map['uid'];
+          map['uid'] = map['uid'];
           map['isPresent'] = false;
           return map;
         }).toList();
@@ -235,7 +241,7 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
           final map = Map<String, dynamic>.from(v as Map);
           map['isVisitor'] = true;
           map['visitor_category'] = map['visitor_category'] ?? 'Testify';
-          map['ui_id'] = map['id'];
+          map['uid'] = map['id'];
           map['isPresent'] = false;
           return map;
         }).toList();
@@ -270,11 +276,11 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
         final decoded = json.decode(res.body);
         List data = decoded['data'] ?? [];
         for (var item in data) {
-          String uiId = item['ui_id'].toString();
+          String uiId = item['uid'].toString();
           Map<String, dynamic> attMap = item['attendance'] ?? {};
           bool isPresentOnDay = attMap[_selectedDate.day.toString()] == true;
 
-          int idx = _usersList.indexWhere((u) => u['ui_id'].toString() == uiId);
+          int idx = _usersList.indexWhere((u) => u['uid'].toString() == uiId);
           if (idx != -1) {
             _usersList[idx]['isPresent'] = isPresentOnDay;
           }
@@ -296,18 +302,23 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  // ----------------- ATTENDANCE TOGGLE (with revert on error) -----------------
   Future<void> _toggleUserAttendance(
     String uiId,
-    bool isPresent,
+    bool newValue,
     bool isVisitor,
   ) async {
     if (!_isEditableDay) return;
 
-    final index = _usersList.indexWhere((u) => u['ui_id'] == uiId);
+    // Store previous state in case the API call fails
+    final index = _usersList.indexWhere((u) => u['uid'] == uiId);
     if (index == -1) return;
+    final bool oldValue = _usersList[index]['isPresent'] ?? false;
 
+    // Optimistically update UI
     setState(() {
-      _usersList[index]['isPresent'] = isPresent;
+      _usersList[index]['isPresent'] = newValue;
+      _savingUserIds.add(uiId); // show loading spinner
     });
 
     try {
@@ -318,19 +329,49 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
       String formattedDate =
           "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}";
 
-      await http.patch(
+      final response = await http.patch(
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}$endpoint'),
         headers: {
           'Authorization': 'Bearer $token',
           "Content-Type": "application/json",
         },
         body: jsonEncode({
-          'attendance_status': isPresent ? 'Present' : 'Absent',
+          'attendance_status': newValue ? 'Present' : 'Absent',
           'date': formattedDate,
         }),
       );
+
+      if (response.statusCode >= 400) {
+        // API error – revert the switch
+        setState(() {
+          _usersList[index]['isPresent'] = oldValue;
+        });
+        Api().showMessage(
+          context,
+          "Failed to update attendance. Please try again.",
+          "Error",
+          Colors.red,
+        );
+      } else {
+        // Success – keep the new state
+        // (no extra action needed)
+      }
     } catch (e) {
+      // Network / other error – revert
+      setState(() {
+        _usersList[index]['isPresent'] = oldValue;
+      });
       debugPrint("Error saving attendance: $e");
+      Api().showMessage(
+        context,
+        "Network error. Please check your connection.",
+        "Error",
+        Colors.red,
+      );
+    } finally {
+      setState(() {
+        _savingUserIds.remove(uiId);
+      });
     }
   }
 
@@ -435,6 +476,55 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
     }
   }
 
+
+  // ----------------- NEW: EXPORT MEMBER LIST -----------------
+  void _exportMemberList(bool includeSignature) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final token = user != null ? await user.getIdToken() ?? "" : "";
+
+    // Fetch overseer signature (optional footer)
+    Uint8List? signatureBytes;
+    if (widget.overseerId != null) {
+      try {
+        final res = await http.get(
+          Uri.parse(
+            '${Api().BACKEND_BASE_URL_DEBUG}/overseers/${widget.overseerId}/',
+          ),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final sigStr = data['signature_base64'];
+          if (sigStr != null && sigStr.isNotEmpty) {
+            signatureBytes = base64Decode(sigStr);
+          }
+        }
+      } catch (e) {
+        print("Error fetching signature: $e");
+      }
+    }
+
+    // Load logo from assets
+    Uint8List? logoBytes;
+    try {
+      final ByteData data = await rootBundle.load('assets/tact_logo.PNG');
+      logoBytes = data.buffer.asUint8List();
+    } catch (_) {}
+
+    SpiritualPdfGenerator.exportMemberListPDF(
+      context: context,
+      members: _filteredUsers,
+      includeSignature: includeSignature,
+      universityName: widget.universityName,
+      universityLogoUrl: widget.universityLogoUrl,
+      loggedMemberName: widget.loggedMemberName ?? 'Authorized Officer',
+      loggedMemberRole: widget.loggedMemberRole ?? '',
+      logoBytes: logoBytes,
+      signatureBytes: signatureBytes,
+    );
+  }
+  // -----------------------------------------------------------
+
   // ----------------- UI BUILD -----------------
   @override
   Widget build(BuildContext context) {
@@ -526,8 +616,8 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
                       ),
                       const SizedBox(height: 32),
 
-                      // Date Filter
-                      _buildDateFilter(),
+                      // --- 🔥 SINGLE COMMUNITY FILTER (Matches Overseer Layout) ---
+                      _buildSingleCommunityFilters(),
                       const SizedBox(height: 16),
 
                       if (!_isEditableDay)
@@ -606,19 +696,23 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
                       _buildDashboardChart(constraints.maxWidth),
                       const SizedBox(height: 32),
 
+                      // --- 🔥 DIGITAL REGISTER HEADER WITH QR SCANNER ---
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
                             child: buildSectionHeader(
-                              "Digital Register",
+                              "Register",
                               CupertinoIcons.list_bullet,
                               _primaryColor,
                             ),
                           ),
+                          _buildQrScanButton(), // QR SCANNER
+                          SizedBox(width: 10),
                           _buildDownloadMenu(),
                         ],
                       ),
+
                       const SizedBox(height: 16),
                       _buildSearchBar(),
                       const SizedBox(height: 24),
@@ -638,7 +732,7 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
                                 ),
                               ),
                             )
-                          : _buildPaginatedTable(constraints.maxWidth),
+                          : _buildPaginatedTable(), // Now matches Overseer styling exactly
                     ],
                   ),
                 ),
@@ -651,34 +745,94 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
     );
   }
 
-  // ----------------- DATE FILTER -----------------
-  Widget _buildDateFilter() {
+  // --- 🔥 SINGLE COMMUNITY FILTERS (Matches Overseer 3-col layout) ---
+  Widget _buildSingleCommunityFilters() {
     return NeumorphicContainer(
       color: widget.neumoColor,
       borderRadius: 16,
       padding: const EdgeInsets.all(16),
-      child: InkWell(
-        onTap: _pickDate,
-        child: Row(
-          children: [
-            Icon(CupertinoIcons.calendar, color: _primaryColor, size: 20),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                "Attendance Date: ${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}",
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.blueGrey[800],
+      child: Row(
+        children: [
+          // Date Picker
+          Expanded(
+            flex: 2,
+            child: InkWell(
+              onTap: _pickDate,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blueGrey[800],
+                      ),
+                    ),
+                    Icon(
+                      CupertinoIcons.chevron_down,
+                      size: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ],
                 ),
               ),
             ),
-            Icon(
-              CupertinoIcons.chevron_down,
-              size: 14,
-              color: Colors.grey[600],
+          ),
+          SizedBox(width: 12),
+          // Community Name (Static)
+          Expanded(
+            flex: 3,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Center(
+                child: Text(
+                  widget.universityName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.blueGrey[800],
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+          SizedBox(width: 12),
+          // Status (Static)
+          Expanded(
+            flex: 3,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Center(
+                child: Text(
+                  "Active Branch",
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[600],
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -703,10 +857,128 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
     }
   }
 
+  // ----------------- QR SCANNER FEATURES -----------------
+  // QR SCANNER BUTTON WIDGET
+  Widget _buildQrScanButton() {
+    return GestureDetector(
+      onTap: _openQRScanner,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.purple,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.purple.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.qr_code_scanner, color: Colors.white, size: 18),
+            SizedBox(width: 6),
+            Text(
+              "SCAN QR",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // QR SCANNER LOGIC
+  void _openQRScanner() async {
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: SizedBox(
+              width: 300,
+              height: 300,
+              child: MobileScanner(
+                controller: MobileScannerController(
+                  detectionSpeed: DetectionSpeed.noDuplicates,
+                  facing: CameraFacing.back,
+                ),
+                onDetect: (capture) async {
+                  final List<Barcode> barcodes = capture.barcodes;
+                  if (barcodes.isNotEmpty) {
+                    final String? code = barcodes.first.rawValue;
+                    if (code != null) {
+                      _processScannedQR(code);
+                    }
+                  }
+                },
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // LOGIC TO PROCESS SCANNED QR DATA
+  void _processScannedQR(String code) async {
+    final userIndex = _usersList.indexWhere(
+      (u) => u['uid']?.toString() == code,
+    );
+    if (userIndex == -1) {
+      if (mounted) {
+        Api().showMessage(
+          context,
+          "User with this ID not found in the register.",
+          "Not Found",
+          Colors.orange,
+        );
+      }
+      return;
+    }
+
+    final user = _usersList[userIndex];
+    final bool isVisitor = user['isVisitor'] ?? false;
+    final bool isPresent = user['isPresent'] ?? false;
+
+    if (isPresent) {
+      if (mounted) {
+        Api().showMessage(
+          context,
+          "${user['name'] ?? 'User'} is already marked present.",
+          "Already Scanned",
+          Colors.yellow,
+        );
+      }
+    } else {
+      _toggleUserAttendance(user['uid'], true, isVisitor);
+      if (mounted) {
+        Api().showMessage(
+          context,
+          "${user['name'] ?? 'User'} marked present successfully!",
+          "Checked In",
+          Colors.green,
+        );
+      }
+    }
+  }
+
   // ----------------- DOWNLOAD MENU -----------------
   Widget _buildDownloadMenu() {
     return PopupMenuButton<String>(
-      onSelected: (value) {
+      onSelected: (value) async {
         if (value == 'Monthly') {
           showMonthPickerForReport(context, widget.neumoColor, _primaryColor, (
             month,
@@ -739,6 +1011,80 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
               );
             });
           });
+        } else if (value == 'MemberList') {
+          // NEW: Show dialog with signature toggle
+          bool includeSignature = false;
+          await showDialog(
+            context: context,
+            builder: (dialogContext) {
+              return StatefulBuilder(
+                builder: (context, setState) {
+                  return AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    title: Row(
+                      children: [
+                        Icon(
+                          CupertinoIcons.person_2_fill,
+                          color: _primaryColor,
+                        ),
+                        const SizedBox(width: 10),
+                        const Text('Export Member List'),
+                      ],
+                    ),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'This will export the current filtered members list as a PDF.',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Include Signature Column',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            CupertinoSwitch(
+                              value: includeSignature,
+                              activeColor: _primaryColor,
+                              onChanged: (val) {
+                                setState(() => includeSignature = val);
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton.icon(
+                        icon: const Icon(CupertinoIcons.doc_text_fill),
+                        label: const Text('Download'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(dialogContext);
+                          _exportMemberList(includeSignature);
+                        },
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          );
         } else {
           showSignatureDialog(context, widget.neumoColor, _primaryColor, (
             signatureBytes,
@@ -831,6 +1177,24 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: Colors.blue,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        // NEW: Member List option
+        const PopupMenuItem(
+          value: 'MemberList',
+          child: Row(
+            children: [
+              Icon(CupertinoIcons.list_bullet, color: Colors.green, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'Export Member List',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: Colors.green,
                 ),
               ),
             ],
@@ -1020,7 +1384,8 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
     );
   }
 
-  Widget _buildPaginatedTable(double screenWidth) {
+  // --- 🔥 PAGINATED TABLE (Matches Overseer Flex Layout exactly) ---
+  Widget _buildPaginatedTable() {
     int totalPages = (_filteredUsers.length / _rowsPerPage).ceil();
     if (_currentPage >= totalPages && totalPages > 0) {
       _currentPage = totalPages - 1;
@@ -1033,154 +1398,108 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
 
     List<dynamic> paginatedData = _filteredUsers.sublist(startIndex, endIndex);
 
-    // Fixed column widths for horizontal scroll safety
-    const double minMemberCol = 120;
-    const double minContactCol = 80;
-    const double minAttendanceCol = 80;
-    const double minActionCol = 50;
-    const double totalMin =
-        minMemberCol + minContactCol + minAttendanceCol + minActionCol;
-    final double availableWidth = screenWidth - 32; // outer padding
-    final double tableWidth = totalMin > availableWidth
-        ? totalMin
-        : availableWidth;
-
-    final double memberColWidth = tableWidth * 0.4;
-    final double contactColWidth = tableWidth * 0.25;
-    final double attendanceColWidth = tableWidth * 0.2;
-    final double actionColWidth = tableWidth * 0.15;
-
     return NeumorphicContainer(
       color: widget.neumoColor,
       borderRadius: 20,
       padding: const EdgeInsets.all(0),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Container(
-          width: tableWidth,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.5),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 4,
+                  child: Text("MEMBER INFO", style: _tableHeaderStyle()),
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.5),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade200),
+                Expanded(
+                  flex: 1,
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: Text("ATTENDANCE", style: _tableHeaderStyle()),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: memberColWidth,
-                      child: Text("MEMBER INFO", style: _tableHeaderStyle()),
-                    ),
-                    SizedBox(
-                      width: contactColWidth,
-                      child: Text("CONTACT", style: _tableHeaderStyle()),
-                    ),
-                    SizedBox(
-                      width: attendanceColWidth,
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: Text("ATTENDANCE", style: _tableHeaderStyle()),
-                      ),
-                    ),
-                    SizedBox(
-                      width: actionColWidth,
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Text("ACTION", style: _tableHeaderStyle()),
-                      ),
-                    ),
-                  ],
+                Expanded(
+                  flex: 1,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Text("ACTION", style: _tableHeaderStyle()),
+                  ),
                 ),
+              ],
+            ),
+          ),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: paginatedData.length,
+            separatorBuilder: (_, __) =>
+                Divider(height: 1, thickness: 1, color: Colors.grey.shade200),
+            itemBuilder: (_, index) => _buildTableRow(paginatedData[index]),
+          ),
+          if (totalPages > 1)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(20),
+                ),
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
               ),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: paginatedData.length,
-                separatorBuilder: (_, __) => Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: Colors.grey.shade200,
-                ),
-                itemBuilder: (_, index) => _buildTableRow(
-                  paginatedData[index],
-                  memberColWidth,
-                  contactColWidth,
-                  attendanceColWidth,
-                  actionColWidth,
-                ),
-              ),
-              if (totalPages > 1)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.5),
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(20),
-                    ),
-                    border: Border(
-                      top: BorderSide(color: Colors.grey.shade200),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Showing ${startIndex + 1} - $endIndex of ${_filteredUsers.length}",
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Row(
                     children: [
+                      IconButton(
+                        icon: Icon(
+                          CupertinoIcons.chevron_left_circle_fill,
+                          color: _currentPage > 0
+                              ? _primaryColor
+                              : Colors.grey.shade300,
+                        ),
+                        onPressed: _currentPage > 0
+                            ? () => setState(() => _currentPage--)
+                            : null,
+                      ),
                       Text(
-                        "Showing ${startIndex + 1} - $endIndex of ${_filteredUsers.length}",
+                        "Page ${_currentPage + 1} of $totalPages",
                         style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blueGrey[800],
                         ),
                       ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              CupertinoIcons.chevron_left_circle_fill,
-                              color: _currentPage > 0
-                                  ? _primaryColor
-                                  : Colors.grey.shade300,
-                            ),
-                            onPressed: _currentPage > 0
-                                ? () => setState(() => _currentPage--)
-                                : null,
-                          ),
-                          Text(
-                            "Page ${_currentPage + 1} of $totalPages",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blueGrey[800],
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(
-                              CupertinoIcons.chevron_right_circle_fill,
-                              color: _currentPage < totalPages - 1
-                                  ? _primaryColor
-                                  : Colors.grey.shade300,
-                            ),
-                            onPressed: _currentPage < totalPages - 1
-                                ? () => setState(() => _currentPage++)
-                                : null,
-                          ),
-                        ],
+                      IconButton(
+                        icon: Icon(
+                          CupertinoIcons.chevron_right_circle_fill,
+                          color: _currentPage < totalPages - 1
+                              ? _primaryColor
+                              : Colors.grey.shade300,
+                        ),
+                        onPressed: _currentPage < totalPages - 1
+                            ? () => setState(() => _currentPage++)
+                            : null,
                       ),
                     ],
                   ),
-                ),
-            ],
-          ),
-        ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1194,13 +1513,8 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
     );
   }
 
-  Widget _buildTableRow(
-    Map<String, dynamic> user,
-    double memberWidth,
-    double contactWidth,
-    double attendanceWidth,
-    double actionWidth,
-  ) {
+  // --- 🔥 TABLE ROW (Matches Overseer Row Code completely) ---
+  Widget _buildTableRow(Map<String, dynamic> user) {
     final fullName = "${user['name'] ?? ''} ${user['surname'] ?? ''}".trim();
     final isPresent = user['isPresent'] ?? false;
     final isVisitor = user['isVisitor'] ?? false;
@@ -1238,11 +1552,13 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
       );
     }
 
+    final bool isSaving = _savingUserIds.contains(user['uid']);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: _isEditableDay
-            ? () => _toggleUserAttendance(user['ui_id'], !isPresent, isVisitor)
+            ? () => _toggleUserAttendance(user['uid'], !isPresent, isVisitor)
             : null,
         splashColor: _primaryColor.withOpacity(0.1),
         highlightColor: _primaryColor.withOpacity(0.05),
@@ -1250,9 +1566,11 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
           decoration: rowDecoration,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              SizedBox(
-                width: memberWidth,
+              // MEMBER INFO (flex 4)
+              Expanded(
+                flex: 4,
                 child: Row(
                   children: [
                     Container(
@@ -1335,7 +1653,9 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
                               child: Text(
                                 tagLabel,
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: tagColor == Colors.white
+                                      ? Colors.black
+                                      : Colors.white,
                                   fontSize: 8,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1348,32 +1668,9 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
                   ],
                 ),
               ),
-              SizedBox(
-                width: contactWidth,
-                child: Row(
-                  children: [
-                    Icon(
-                      CupertinoIcons.phone_fill,
-                      size: 14,
-                      color: Colors.grey.shade400,
-                    ),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        user['phone'] ?? user['email'] ?? 'N/A',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                width: attendanceWidth,
+              // ATTENDANCE (flex 1)
+              Expanded(
+                flex: 1,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1390,30 +1687,41 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
                       ),
                     ),
                     SizedBox(height: 4),
-                    SizedBox(
-                      height: 20,
-                      child: Transform.scale(
-                        scale: 0.8,
-                        alignment: Alignment.center,
-                        child: CupertinoSwitch(
-                          value: isPresent,
-                          activeColor: _primaryColor,
-                          trackColor: Colors.grey.shade300,
-                          onChanged: _isEditableDay
-                              ? (val) => _toggleUserAttendance(
-                                  user['ui_id'],
-                                  val,
-                                  isVisitor,
-                                )
-                              : null,
+                    if (isSaving)
+                      SizedBox(
+                        height: 14,
+                        width: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _primaryColor,
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        height: 20,
+                        child: Transform.scale(
+                          scale: 0.8,
+                          alignment: Alignment.center,
+                          child: CupertinoSwitch(
+                            value: isPresent,
+                            activeColor: _primaryColor,
+                            trackColor: Colors.grey.shade300,
+                            onChanged: _isEditableDay
+                                ? (val) => _toggleUserAttendance(
+                                    user['uid'],
+                                    val,
+                                    isVisitor,
+                                  )
+                                : null,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
-              SizedBox(
-                width: actionWidth,
+              // ACTION (flex 1)
+              Expanded(
+                flex: 1,
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: canEdit
@@ -1445,279 +1753,3 @@ class _SpiritualManagementTabState extends State<SpiritualManagementTab> {
     );
   }
 }
-
-// // ====================== FULL REPORTS PAGE (inline) ======================
-// class _SpiritualFullReportsPage extends StatefulWidget {
-//   final List<dynamic> usersList;
-//   final String universityName;
-//   final Color neumoColor;
-//   final Color primaryColor;
-//   final DateTime selectedDate;
-
-//   const _SpiritualFullReportsPage({
-//     Key? key,
-//     required this.usersList,
-//     required this.universityName,
-//     required this.neumoColor,
-//     required this.primaryColor,
-//     required this.selectedDate,
-//   }) : super(key: key);
-
-//   @override
-//   State<_SpiritualFullReportsPage> createState() =>
-//       _SpiritualFullReportsPageState();
-// }
-
-// class _SpiritualFullReportsPageState extends State<_SpiritualFullReportsPage> {
-//   String _statusFilter = 'All';
-//   String _genderFilter = 'All';
-
-//   List<dynamic> get _filteredData {
-//     return widget.usersList.where((u) {
-//       if (_statusFilter == 'Present' && u['isPresent'] != true) return false;
-//       if (_statusFilter == 'Absent' && u['isPresent'] == true) return false;
-//       if (_genderFilter != 'All') {
-//         final g = (u['gender'] ?? '').toString().toLowerCase();
-//         if (_genderFilter == 'Male' && g != 'male') return false;
-//         if (_genderFilter == 'Female' && g != 'female') return false;
-//       }
-//       return true;
-//     }).toList();
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final fd = _filteredData;
-//     int tot = fd.length;
-//     int pres = fd.where((e) => e['isPresent'] == true).length;
-//     int abs = tot - pres;
-//     int bros = fd
-//         .where((e) => (e['gender'] ?? '').toString().toLowerCase() == 'male')
-//         .length;
-//     int sises = fd
-//         .where((e) => (e['gender'] ?? '').toString().toLowerCase() == 'female')
-//         .length;
-//     int visitors = fd.where((e) => e['isVisitor'] == true).length;
-//     int testifies = fd
-//         .where(
-//           (e) =>
-//               e['isVisitor'] == true &&
-//               e['visitor_category'] != 'Mother' &&
-//               e['visitor_category'] != 'Father',
-//         )
-//         .length;
-
-//     return Scaffold(
-//       backgroundColor: widget.neumoColor,
-//       body: Column(
-//         children: [
-//           Api().buildAppBar(context, "Full Report - ${widget.universityName}")!,
-//           Expanded(
-//             child: SingleChildScrollView(
-//               padding: EdgeInsets.all(16),
-//               child: Column(
-//                 crossAxisAlignment: CrossAxisAlignment.start,
-//                 children: [
-//                   NeumorphicContainer(
-//                     borderRadius: 12,
-//                     padding: EdgeInsets.all(16),
-//                     color: widget.neumoColor,
-//                     child: Row(
-//                       children: [
-//                         Icon(
-//                           CupertinoIcons.calendar,
-//                           color: widget.primaryColor,
-//                         ),
-//                         SizedBox(width: 12),
-//                         Text(
-//                           "Report For: ${widget.selectedDate.day}/${widget.selectedDate.month}/${widget.selectedDate.year}",
-//                           style: TextStyle(
-//                             fontWeight: FontWeight.bold,
-//                             fontSize: 16,
-//                             color: Colors.grey[800],
-//                           ),
-//                         ),
-//                       ],
-//                     ),
-//                   ),
-//                   SizedBox(height: 16),
-//                   Wrap(
-//                     spacing: 12,
-//                     runSpacing: 12,
-//                     children: [
-//                       _buildDropdown(
-//                         "Status",
-//                         ['All', 'Present', 'Absent'],
-//                         _statusFilter,
-//                         (v) => setState(() => _statusFilter = v!),
-//                       ),
-//                       _buildDropdown(
-//                         "Gender",
-//                         ['All', 'Male', 'Female'],
-//                         _genderFilter,
-//                         (v) => setState(() => _genderFilter = v!),
-//                       ),
-//                     ],
-//                   ),
-//                   SizedBox(height: 24),
-//                   Wrap(
-//                     spacing: 16,
-//                     runSpacing: 16,
-//                     children: [
-//                       _metricTile(
-//                         "Total Queried",
-//                         tot.toString(),
-//                         CupertinoIcons.person_3_fill,
-//                         Colors.blueGrey,
-//                       ),
-//                       _metricTile(
-//                         "Present",
-//                         pres.toString(),
-//                         CupertinoIcons.check_mark_circled_solid,
-//                         Colors.green,
-//                       ),
-//                       _metricTile(
-//                         "Absent",
-//                         abs.toString(),
-//                         CupertinoIcons.xmark_circle_fill,
-//                         Colors.red,
-//                       ),
-//                       _metricTile(
-//                         "Brothers",
-//                         bros.toString(),
-//                         CupertinoIcons.person_solid,
-//                         Colors.blue,
-//                       ),
-//                       _metricTile(
-//                         "Sisters",
-//                         sises.toString(),
-//                         CupertinoIcons.person_solid,
-//                         Colors.pink,
-//                       ),
-//                       _metricTile(
-//                         "Total Visitors/Guests",
-//                         visitors.toString(),
-//                         CupertinoIcons.person_crop_circle_badge_exclam,
-//                         Colors.orange,
-//                       ),
-//                       _metricTile(
-//                         "Total Testifies",
-//                         testifies.toString(),
-//                         CupertinoIcons.book_fill,
-//                         Colors.purple,
-//                       ),
-//                     ],
-//                   ),
-//                   SizedBox(height: 24),
-//                   ..._filteredData.map((u) {
-//                     final fullName = "${u['name'] ?? ''} ${u['surname'] ?? ''}"
-//                         .trim();
-//                     final isPresent = u['isPresent'] == true;
-//                     final type = u['isVisitor'] == true ? "Visitor" : "Member";
-//                     final comm = u['community_name'] ?? widget.universityName;
-//                     final gender = u['gender'] ?? 'Unknown';
-//                     return ListTile(
-//                       leading: Icon(
-//                         isPresent
-//                             ? CupertinoIcons.check_mark_circled_solid
-//                             : CupertinoIcons.xmark_circle_fill,
-//                         color: isPresent ? Colors.green : Colors.red,
-//                       ),
-//                       title: Text(
-//                         fullName,
-//                         style: TextStyle(fontWeight: FontWeight.bold),
-//                       ),
-//                       subtitle: Text("$comm | $gender | $type"),
-//                     );
-//                   }),
-//                 ],
-//               ),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-
-//   Widget _buildDropdown(
-//     String label,
-//     List<String> items,
-//     String currentValue,
-//     Function(String?) onChanged,
-//   ) {
-//     return SizedBox(
-//       width: (MediaQuery.of(context).size.width / 2) - 24,
-//       child: NeumorphicContainer(
-//         isPressed: true,
-//         borderRadius: 12,
-//         padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-//         color: widget.neumoColor,
-//         child: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             Text(
-//               label,
-//               style: TextStyle(
-//                 fontSize: 10,
-//                 color: Colors.grey[600],
-//                 fontWeight: FontWeight.bold,
-//               ),
-//             ),
-//             DropdownButtonHideUnderline(
-//               child: DropdownButton<String>(
-//                 isExpanded: true,
-//                 value: currentValue,
-//                 dropdownColor: widget.neumoColor,
-//                 style: TextStyle(
-//                   color: Colors.grey[800],
-//                   fontSize: 13,
-//                   fontWeight: FontWeight.w600,
-//                 ),
-//                 items: items
-//                     .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-//                     .toList(),
-//                 onChanged: onChanged,
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-
-//   Widget _metricTile(String title, String val, IconData icon, Color color) {
-//     return SizedBox(
-//       width: (MediaQuery.of(context).size.width / 2) - 24,
-//       child: NeumorphicContainer(
-//         isPressed: true,
-//         borderRadius: 16,
-//         padding: EdgeInsets.all(16),
-//         color: widget.neumoColor,
-//         child: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             Icon(icon, color: color, size: 24),
-//             SizedBox(height: 8),
-//             Text(
-//               val,
-//               style: TextStyle(
-//                 fontSize: 22,
-//                 fontWeight: FontWeight.bold,
-//                 color: Colors.grey[800],
-//               ),
-//             ),
-//             SizedBox(height: 4),
-//             Text(
-//               title,
-//               style: TextStyle(
-//                 fontSize: 12,
-//                 fontWeight: FontWeight.w600,
-//                 color: Colors.grey[600],
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }

@@ -737,7 +737,7 @@ class MusicTabState extends State<MusicTab>
             child: TextField(
               controller: _musicSearchController,
               decoration: InputDecoration(
-                hintText: 'Search songs...',
+                hintText: 'Search songs by name or TACTSO university...',
                 hintStyle: TextStyle(color: theme.hintColor),
                 border: InputBorder.none,
                 icon: Icon(

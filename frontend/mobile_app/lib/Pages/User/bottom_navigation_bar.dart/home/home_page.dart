@@ -3,7 +3,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_ionicons/flutter_ionicons.dart';
-  import 'package:ttact/Components/AdBanner.dart';
+import 'package:ttact/Components/AdBanner.dart';
 import 'package:ttact/Components/HomePageHelpers.dart';
 import 'package:ttact/Components/NotificationService.dart';
 import 'package:ttact/Pages/User/bottom_navigation_bar.dart/home/Tabs/apostles_greetings.dart';
@@ -42,9 +42,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       _tabController.animateTo(musicTabIndex);
       setState(() => _currentIndex = musicTabIndex);
       // Give the TabBarView time to animate and build the MusicTab
-      await Future.delayed(Duration(milliseconds: 600)); 
+      await Future.delayed(Duration(milliseconds: 600));
     }
-    
+
     MotherPage.deepLinkSongIdNotifier.value = null;
     // Now call the function
     if (_musicTabKey.currentState != null) {
@@ -135,34 +135,28 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
         ),
       ),
     );
-  }
-
-  // ⭐️ THE ADVANCED SCROLLABLE TAB BAR ⭐️
+  } 
   Widget _buildPremiumTabSwitcher(ThemeData theme, Color baseColor) {
     final tabs = [
       {'icon': Ionicons.calendar, 'label': 'EVENTS'},
       {'icon': Icons.near_me_outlined, 'label': 'FIND NEARBY'},
       {'icon': Ionicons.musical_notes, 'label': 'MUSIC'},
-      {'icon': Ionicons.business, 'label': 'BRANCHES'},
-      {'icon': Ionicons.briefcase, 'label': 'CAREER'},
+      {'icon': Ionicons.business, 'label': 'TACTSO'},
+      {'icon': Ionicons.briefcase, 'label': 'CAREER HUB'},
       {'icon': Icons.message_outlined, 'label': 'APOSTLES GREETINGS'},
     ];
-
-    // Increased height to accommodate the card size + shadows
+ 
     return Container(
       height: 70,
-      width: double.infinity,
-      // No margin here so scrolling hits the edges
-      child: ListView.separated(
-        // ⭐️ Padding inside list ensures shadows aren't clipped
+      width: double.infinity, 
+      child: ListView.separated( 
         padding: const EdgeInsets.symmetric(horizontal: 20),
         scrollDirection: Axis.horizontal,
         physics: const ScrollPhysics(),
         itemCount: tabs.length,
         separatorBuilder: (context, index) => const SizedBox(width: 15),
         itemBuilder: (context, index) {
-          final isSelected = _currentIndex == index;
-          // Get distinct color per card
+          final isSelected = _currentIndex == index; 
           final accentColor = NeumorphicUtils.getAccentColor(index);
 
           return GestureDetector(
@@ -172,11 +166,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              width: 130, // ⭐️ Fixed width ensures perfect shape & no overflow
+              width: 130, 
               decoration: NeumorphicUtils.decoration(
                 context: context,
                 radius: 18,
-                isPressed: isSelected, // Pressed IN when selected
+                isPressed: isSelected,  
                 isDark: theme.brightness == Brightness.dark,
               ),
               child: ClipRRect(
@@ -185,8 +179,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // ⭐️ VERTICAL ACCENT LINE (Thicker & Gradient)
+                      children: [ 
                         Container(
                           width: 8,
                           decoration: BoxDecoration(
@@ -201,8 +194,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             ),
                           ),
                         ),
-
-                        // TAB CONTENT
                         Expanded(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -212,7 +203,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                 color: isSelected
                                     ? theme.primaryColor
                                     : theme.hintColor,
-                                size: 32, // Large, clear icon
+                                size: 32,  
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -235,8 +226,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
-
-                    // Optional: Subtle active indicator dot on top right
                     if (isSelected)
                       Positioned(
                         top: 8,

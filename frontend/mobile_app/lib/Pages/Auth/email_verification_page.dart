@@ -32,7 +32,6 @@ class VerificationScreen extends StatefulWidget {
   final String gender;
 
   const VerificationScreen({
-    
     Key? key,
     required this.expectedCode,
     required this.name,
@@ -47,7 +46,8 @@ class VerificationScreen extends StatefulWidget {
     required this.bankCode,
     required this.province,
     required this.districtElder,
-    required this.communityName, required this.gender,
+    required this.communityName,
+    required this.gender,
   }) : super(key: key);
 
   @override
@@ -105,23 +105,16 @@ class _VerificationScreenState extends State<VerificationScreen> {
         widget.contacts,
         widget.selectedOverseerUid,
         widget.role,
-        accountNumber: widget.accountNumber,
-        bankCode: widget.bankCode,
         widget.province,
         widget.districtElder,
         widget.communityName,
         context,
+        accountNumber: widget.accountNumber,
+        bankCode: widget.bankCode,
       );
       setState(() {
         _isLoading = false;
       });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Verification Successful!'),
-          backgroundColor: Colors.green,
-        ),
-      );
     } else {
       setState(() {
         _isLoading = false;
@@ -140,7 +133,6 @@ class _VerificationScreenState extends State<VerificationScreen> {
     final size = MediaQuery.of(context).size;
     final bool isSmallDevice = size.width < 600;
 
-    // TINT CALCULATION
     final Color neumoBaseColor = Color.alphaBlend(
       theme.primaryColor.withOpacity(0.08),
       theme.scaffoldBackgroundColor,
@@ -148,7 +140,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
 
     return Scaffold(
       backgroundColor: neumoBaseColor,
-      body: SafeArea( 
+      body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
           child: SingleChildScrollView(
@@ -159,9 +151,9 @@ class _VerificationScreenState extends State<VerificationScreen> {
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: 500),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.start, 
+                mainAxisAlignment: MainAxisAlignment.start,
                 crossAxisAlignment: CrossAxisAlignment.center,
-                children: [ 
+                children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: [
@@ -171,7 +163,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                           color: neumoBaseColor,
                           borderRadius: 50,
                           padding: const EdgeInsets.all(12),
-                          isPressed: false, 
+                          isPressed: false,
                           child: Icon(
                             Icons.arrow_back,
                             color: theme.primaryColor,
@@ -179,19 +171,19 @@ class _VerificationScreenState extends State<VerificationScreen> {
                         ),
                       ),
                     ],
-                  ), 
-                  SizedBox(height: isSmallDevice ? 30 : 50), 
+                  ),
+                  SizedBox(height: isSmallDevice ? 30 : 50),
                   NeumorphicContainer(
                     color: neumoBaseColor,
-                    isPressed: false, 
+                    isPressed: false,
                     borderRadius: 30,
                     padding: const EdgeInsets.all(25),
                     child: Column(
-                      children: [ 
+                      children: [
                         NeumorphicContainer(
                           color: neumoBaseColor,
                           borderRadius: 100,
-                          isPressed: true, // Sunken Icon Well
+                          isPressed: true,
                           padding: const EdgeInsets.all(25),
                           child: Icon(
                             Icons.mark_email_read_outlined,
@@ -252,7 +244,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                                 },
                                 child: NeumorphicContainer(
                                   color: neumoBaseColor,
-                                  isPressed: true, // ⭐️ Sunken Input Box
+                                  isPressed: true,
                                   borderRadius: 10,
                                   padding: EdgeInsets.zero,
                                   child: Center(
@@ -347,7 +339,7 @@ class _VerificationScreenState extends State<VerificationScreen> {
                           child: NeumorphicContainer(
                             color: theme.primaryColor,
                             borderRadius: 15,
-                            isPressed: false, // Convex Button
+                            isPressed: false,
                             padding: EdgeInsets.symmetric(vertical: 16),
                             child: Center(
                               child: _isLoading
@@ -380,7 +372,6 @@ class _VerificationScreenState extends State<VerificationScreen> {
                   // Resend Code
                   TextButton(
                     onPressed: () async {
-                      // ... (Keep existing Resend Logic) ...
                       isIOSPlatform
                           ? Api().showIosLoading(context)
                           : Api().showLoading(context);

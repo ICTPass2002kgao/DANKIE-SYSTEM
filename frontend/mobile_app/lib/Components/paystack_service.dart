@@ -8,9 +8,9 @@ class PaystackService {
   static String backendUrl =
       "${Api().BACKEND_BASE_URL_DEBUG}/initialize-subscription/";
 
-  static const String planTier1 = "PLN_46b9pjpmkuni447"; // 50 - 299 members
-  static const String planTier2 = "PLN_ror17qu33rhb5qp"; // 300 - 499 members
-  static const String planTier3 = "PLN_p0euzaur4kkurpr"; // 500+ members
+  static const String planTier1 = "PLN_46b9pjpmkuni447"; 
+  static const String planTier2 = "PLN_ror17qu33rhb5qp";  
+  static const String planTier3 = "PLN_p0euzaur4kkurpr"; 
 
   /// Logic: Returns the specific Paystack Plan Code required.
   /// Returns NULL if they are in the Free Tier (< 50 members).
@@ -39,7 +39,7 @@ class PaystackService {
         body: jsonEncode({
           'email': email,
           'uid': user.uid,
-          'plan_code': planCode, // <--- IMPORTANT: Sending Plan Code
+          'plan_code': planCode, 
           'member_count': memberCount,
         }),
       );

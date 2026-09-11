@@ -44,7 +44,12 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
       TextEditingController();
 
   // --- STATE ---
-  String? _selectedRole;
+  String? _selectedPortfolio;
+
+  // New conditional church office state
+  String? _selectedTitle; // Brother, Sister, Mother, Father, Other
+  String? _selectedSpecificOffice; // Deacon, Priest, Community Elder
+
   XFile? _committeeFaceImage;
   final ImagePicker _picker = ImagePicker();
   bool _isUploadingCommittee = false;
@@ -53,7 +58,7 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
   List<dynamic> _committeeMembers = [];
   bool _isLoadingMembers = true;
 
-  // These roles map to the 'portfolio' field in your Django model
+  // Portfolios
   final List<String> _committeeRoles = [
     'Chairperson',
     'Deputy Chairperson',
@@ -65,6 +70,18 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
     'District Elder',
     'Additional Member',
   ];
+
+  // Honorific Titles
+  final List<String> _churchTitles = [
+    'Brother',
+    'Sister',
+    'Mother',
+    'Father',
+    'Other',
+  ];
+
+  // Specific Offices (only for Mother/Father)
+  final List<String> _specificOffices = ['Deacon', 'Priest', 'Community Elder'];
 
   @override
   void initState() {
@@ -89,7 +106,6 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
 
       final String? token = await user.getIdToken();
 
-      // A. Get Overseer ID via Email
       final profileUrl = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?email=${user.email}',
       );
@@ -103,7 +119,6 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
         if (data.isNotEmpty) {
           final overseerId = data[0]['id'];
 
-          // B. Get Committee Members for this Overseer
           final url = Uri.parse(
             '${Api().BACKEND_BASE_URL_DEBUG}/committee_members/?overseer=$overseerId',
           );
@@ -139,7 +154,7 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
 
   // --- 2. ADD MEMBER (DJANGO POST MULTIPART) ---
   Future<void> _addCommitteeMemberTab() async {
-    if (_committeeNameController.text.isEmpty || _selectedRole == null) {
+    if (_committeeNameController.text.isEmpty || _selectedPortfolio == null) {
       Api().showMessage(
         context,
         "Missing Info",
@@ -157,6 +172,26 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
       );
       return;
     }
+    if (_selectedTitle == null) {
+      Api().showMessage(
+        context,
+        "Missing Info",
+        "Please select a Church Title.",
+        Colors.orange,
+      );
+      return;
+    }
+    // If Mother/Father, must select a specific office
+    if ((_selectedTitle == 'Mother' || _selectedTitle == 'Father') &&
+        _selectedSpecificOffice == null) {
+      Api().showMessage(
+        context,
+        "Missing Info",
+        "Please select a specific office for $_selectedTitle.",
+        Colors.orange,
+      );
+      return;
+    }
 
     setState(() => _isUploadingCommittee = true);
 
@@ -166,7 +201,6 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
 
       final String? token = await user.getIdToken();
 
-      // 1. Get Overseer ID
       final profileUrl = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?email=${user.email}',
       );
@@ -182,23 +216,25 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
 
       final overseerId = data[0]['id'].toString();
 
-      // 2. Prepare Multipart Request
+      // Construct the final church_office string
+      String finalChurchOffice = _selectedTitle!;
+      if (_selectedTitle == 'Mother' || _selectedTitle == 'Father') {
+        finalChurchOffice = "$_selectedTitle $_selectedSpecificOffice";
+      }
+
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/committee_members/'),
       );
 
-      // FIXED: Missing auth header for multipart request causing 403 Forbidden
       request.headers.addAll({'Authorization': 'Bearer $token'});
 
-      // UPDATED: Fields match OverseerCommitteeMember model
       request.fields['overseer'] = overseerId;
       request.fields['full_name'] = _committeeNameController.text.trim();
       request.fields['email'] = _committeeEmailController.text.trim();
-      request.fields['portfolio'] = _selectedRole!;
+      request.fields['portfolio'] = _selectedPortfolio!;
+      request.fields['church_office'] = finalChurchOffice;
 
-      // 3. Add Image File
-      // Backend should be configured to handle 'face_image' and convert it to 'face_url'
       if (kIsWeb) {
         final bytes = await _committeeFaceImage!.readAsBytes();
         request.files.add(
@@ -217,12 +253,10 @@ class _AddCommitteeMemberTabState extends State<AddCommitteeMemberTab> {
         );
       }
 
-      // 4. Send Request
       var streamedResponse = await request.send();
       var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 201) {
-        // --- SEND EMAIL NOTIFICATION ---
         if (_committeeEmailController.text.trim().isNotEmpty) {
           try {
             await Api().sendEmail(
@@ -233,8 +267,9 @@ Hello ${_committeeNameController.text.trim()},
 
 Welcome to the team! You have successfully been added as a Committee Member.
 
-Your Role Details:
-Portfolio: $_selectedRole
+Your Details:
+Portfolio: $_selectedPortfolio
+Church Office: $finalChurchOffice
 
 Thank you for your dedication to serving the community. We look forward to working with you.
 
@@ -243,14 +278,10 @@ The Leadership Team
 ''',
               context,
             );
-            print("✅ [DEBUG] Email sent successfully.");
           } catch (emailError) {
-            print(
-              "⚠️ [DEBUG] Email failed to send, but user was created. Error: $emailError",
-            );
+            print("⚠️ Email error: $emailError");
           }
         }
-        // --- END EMAIL NOTIFICATION ---
 
         OverseerAuditLogs.logAction(
           action: "CREATED",
@@ -264,7 +295,9 @@ The Leadership Team
         _committeeNameController.clear();
         _committeeEmailController.clear();
         setState(() {
-          _selectedRole = null;
+          _selectedPortfolio = null;
+          _selectedTitle = null;
+          _selectedSpecificOffice = null;
           _committeeFaceImage = null;
           _isUploadingCommittee = false;
         });
@@ -292,10 +325,7 @@ The Leadership Team
   }
 
   // --- 3. DELETE MEMBER (DJANGO DELETE) ---
-  Future<void> _deleteCommitteeMember(
-    String memberId, // Django UUID is a string in Dart
-    String name,
-  ) async {
+  Future<void> _deleteCommitteeMember(String memberId, String name) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception("User not logged in");
@@ -306,7 +336,6 @@ The Leadership Team
         '${Api().BACKEND_BASE_URL_DEBUG}/committee_members/$memberId/',
       );
 
-      // FIXED: Missing auth header for delete request causing 403 Forbidden
       final response = await http.delete(
         url,
         headers: {'Authorization': 'Bearer $token'},
@@ -326,9 +355,280 @@ The Leadership Team
     }
   }
 
+  // --- 4. PARSE CHURCH OFFICE STRING ---
+  // Parses "Mother Deacon" -> title: "Mother", specific: "Deacon"
+  // Parses "Brother" -> title: "Brother", specific: null
+  (String? title, String? specific) _parseChurchOffice(String? office) {
+    if (office == null || office.isEmpty) return (null, null);
+    List<String> parts = office.trim().split(' ');
+    if (parts.length == 2) {
+      if (_churchTitles.contains(parts[0]) &&
+          _specificOffices.contains(parts[1])) {
+        return (parts[0], parts[1]);
+      }
+    }
+    if (_churchTitles.contains(office)) {
+      return (office, null);
+    }
+    return (null, null);
+  }
+
+  // --- 5. EDIT CHURCH OFFICE (NEUMORPHIC DIALOG) ---
+  Future<void> _editChurchOffice(String memberId, String? currentOffice) async {
+    // Parse the current combined string
+    var (initialTitle, initialSpecific) = _parseChurchOffice(currentOffice);
+
+    String? newTitle = initialTitle;
+    String? newSpecific = initialSpecific;
+    final Color baseColor = Api().neumoBaseColor(context);
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            // Helper to reset specific when title changes
+            void onTitleChanged(String? val) {
+              setDialogState(() {
+                newTitle = val;
+                // If new title is not Mother/Father, clear specific
+                if (val != 'Mother' && val != 'Father') {
+                  newSpecific = null;
+                } else {
+                  // If switching from one to the other, preserve specific if valid
+                  if (!_specificOffices.contains(newSpecific)) {
+                    newSpecific = null;
+                  }
+                }
+              });
+            }
+
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              backgroundColor: Colors.transparent,
+              child: NeumorphicContainer(
+                borderRadius: 24,
+                padding: EdgeInsets.all(24),
+                color: baseColor,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Update Church Office",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey[800],
+                      ),
+                    ),
+                    SizedBox(height: 20),
+
+                    // Title Dropdown
+                    NeumorphicContainer(
+                      isPressed: true,
+                      borderRadius: 12,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      color: baseColor,
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: newTitle,
+                          isExpanded: true,
+                          hint: Text(
+                            "Select Title",
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                          dropdownColor: baseColor,
+                          icon: Icon(
+                            Icons.arrow_drop_down,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                          items: _churchTitles.map((title) {
+                            return DropdownMenuItem(
+                              value: title,
+                              child: Text(title),
+                            );
+                          }).toList(),
+                          onChanged: onTitleChanged,
+                        ),
+                      ),
+                    ),
+
+                    // Specific Office Dropdown (Conditional)
+                    if (newTitle == 'Mother' || newTitle == 'Father') ...[
+                      SizedBox(height: 12),
+                      NeumorphicContainer(
+                        isPressed: true,
+                        borderRadius: 12,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        color: baseColor,
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: newSpecific,
+                            isExpanded: true,
+                            hint: Text(
+                              "Select Specific Office",
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                            dropdownColor: baseColor,
+                            icon: Icon(
+                              Icons.arrow_drop_down,
+                              color: Theme.of(context).primaryColor,
+                            ),
+                            items: _specificOffices.map((office) {
+                              return DropdownMenuItem(
+                                value: office,
+                                child: Text(office),
+                              );
+                            }).toList(),
+                            onChanged: (val) =>
+                                setDialogState(() => newSpecific = val),
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // Cancel button
+                        GestureDetector(
+                          onTap: () => Navigator.pop(dialogContext),
+                          child: NeumorphicContainer(
+                            isPressed: true,
+                            borderRadius: 12,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            color: baseColor,
+                            child: Text(
+                              "Cancel",
+                              style: TextStyle(color: Colors.grey[700]),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        // Save button
+                        GestureDetector(
+                          onTap: () async {
+                            // Ensure we have a valid selection
+                            if (newTitle == null) {
+                              Api().showMessage(
+                                dialogContext,
+                                "Error",
+                                "Please select a title",
+                                Colors.red,
+                              );
+                              return;
+                            }
+                            // If Mother/Father, must select specific
+                            if ((newTitle == 'Mother' ||
+                                    newTitle == 'Father') &&
+                                newSpecific == null) {
+                              Api().showMessage(
+                                dialogContext,
+                                "Error",
+                                "Please select a specific office",
+                                Colors.red,
+                              );
+                              return;
+                            }
+
+                            // Construct the combined string
+                            String finalOffice = newTitle!;
+                            if (newTitle == 'Mother' || newTitle == 'Father') {
+                              finalOffice = "$newTitle $newSpecific";
+                            }
+
+                            // Check if actually changed
+                            if (finalOffice == currentOffice) {
+                              Navigator.pop(dialogContext);
+                              return;
+                            }
+
+                            Navigator.pop(dialogContext);
+                            await _updateChurchOffice(memberId, finalOffice);
+                          },
+                          child: NeumorphicContainer(
+                            borderRadius: 12,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
+                            color: baseColor,
+                            child: Text(
+                              "Save",
+                              style: TextStyle(
+                                color: Theme.of(context).primaryColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // --- 6. UPDATE CHURCH OFFICE (PATCH) ---
+  Future<void> _updateChurchOffice(String memberId, String newOffice) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception("User not logged in");
+      final String? token = await user.getIdToken();
+      final url = Uri.parse(
+        '${Api().BACKEND_BASE_URL_DEBUG}/committee_members/$memberId/',
+      );
+
+      final response = await http.patch(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({'church_office': newOffice}),
+      );
+
+      if (response.statusCode == 200) {
+        _fetchCommitteeMembers();
+        if (mounted) {
+          Api().showMessage(
+            context,
+            "Updated",
+            "Church office changed to $newOffice",
+            Colors.green,
+          );
+        }
+      } else {
+        print("Update failed: ${response.body}");
+        throw Exception("Update failed: ${response.statusCode}");
+      }
+    } catch (e) {
+      if (mounted) {
+        Api().showMessage(context, "Error", e.toString(), Colors.red);
+      }
+    }
+  }
+
   String _getSecureImageUrl(String originalUrl) {
     if (originalUrl.isEmpty) return "";
-    // Check if it's already a full URL or an encrypted path
     if (originalUrl.startsWith('http') && !originalUrl.contains('.enc'))
       return originalUrl;
     return '${Api().BACKEND_BASE_URL_DEBUG}/serve_image/?url=${Uri.encodeComponent(originalUrl)}';
@@ -426,6 +726,7 @@ The Leadership Team
           ),
           SizedBox(height: 20),
 
+          // --- ADD MEMBER FORM ---
           NeumorphicContainer(
             padding: EdgeInsets.all(24),
             borderRadius: 16,
@@ -487,6 +788,7 @@ The Leadership Team
                 ),
                 SizedBox(height: 15),
 
+                // Row 1: Portfolio and Church Title
                 Row(
                   children: [
                     Expanded(
@@ -496,7 +798,7 @@ The Leadership Team
                         padding: EdgeInsets.symmetric(horizontal: 12),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                            value: _selectedRole,
+                            value: _selectedPortfolio,
                             hint: Text(
                               "Select Portfolio",
                               style: TextStyle(color: hintColor),
@@ -514,13 +816,104 @@ The Leadership Team
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) => setState(() => _selectedRole = v),
+                            onChanged: (v) =>
+                                setState(() => _selectedPortfolio = v),
                           ),
                         ),
                       ),
                     ),
                     SizedBox(width: 15),
+                    Expanded(
+                      child: NeumorphicContainer(
+                        isPressed: true,
+                        borderRadius: 12,
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedTitle,
+                            hint: Text(
+                              "Title",
+                              style: TextStyle(color: hintColor),
+                            ),
+                            dropdownColor: baseColor,
+                            icon: Icon(
+                              Icons.arrow_drop_down,
+                              color: primaryColor,
+                            ),
+                            items: _churchTitles
+                                .map(
+                                  (t) => DropdownMenuItem(
+                                    value: t,
+                                    child: Text(t),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) {
+                              setState(() {
+                                _selectedTitle = v;
+                                if (v != 'Mother' && v != 'Father') {
+                                  _selectedSpecificOffice = null;
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
 
+                // Row 2: Specific Office (Conditional)
+                if (_selectedTitle == 'Mother' ||
+                    _selectedTitle == 'Father') ...[
+                  SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: NeumorphicContainer(
+                          isPressed: true,
+                          borderRadius: 12,
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedSpecificOffice,
+                              isExpanded: true,
+                              hint: Text(
+                                "Select Office (Deacon, Priest, Elder)",
+                                style: TextStyle(
+                                  color: hintColor,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              dropdownColor: baseColor,
+                              icon: Icon(
+                                Icons.arrow_drop_down,
+                                color: primaryColor,
+                              ),
+                              items: _specificOffices
+                                  .map(
+                                    (o) => DropdownMenuItem(
+                                      value: o,
+                                      child: Text(o),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) =>
+                                  setState(() => _selectedSpecificOffice = v),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                SizedBox(height: 15),
+
+                // Add button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
                     GestureDetector(
                       onTap: _isUploadingCommittee
                           ? null
@@ -559,6 +952,7 @@ The Leadership Team
 
           SizedBox(height: 30),
 
+          // --- LIST OF MEMBERS ---
           _isLoadingMembers
               ? Center(child: CupertinoActivityIndicator())
               : _committeeMembers.isEmpty
@@ -588,6 +982,7 @@ The Leadership Team
                     String? secureUrl = (faceUrl != null && faceUrl.isNotEmpty)
                         ? _getSecureImageUrl(faceUrl)
                         : null;
+                    String? churchOffice = data['church_office'];
 
                     return NeumorphicContainer(
                       borderRadius: 12,
@@ -633,14 +1028,26 @@ The Leadership Team
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  data['portfolio'] ?? 'No Portfolio',
+                                  "${data['portfolio'] ?? 'No Portfolio'} • ${churchOffice ?? ''}",
                                   style: TextStyle(
                                     color: primaryColor,
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.edit_outlined,
+                              color: Colors.blue.shade300,
+                            ),
+                            onPressed: () => _editChurchOffice(
+                              data['id'].toString(),
+                              churchOffice,
                             ),
                           ),
                           IconButton(

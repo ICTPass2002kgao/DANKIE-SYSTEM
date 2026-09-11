@@ -8,6 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ttact/Pages/Overseer/add_overseer_diary_of_events.dart';
+import 'package:ttact/Pages/Overseer/meeting_minutes_tab.dart';
+import 'package:ttact/Pages/Overseer/member_skills_tab.dart';
+import 'package:ttact/Pages/Overseer/overseer_communications_tab.dart';
 import 'package:ttact/Pages/Overseer/subscription_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -99,10 +103,15 @@ class _OverseerPageState extends State<OverseerPage>
   }
 
   void _initTabController() {
-    int tabCount = 8; // Base tabs
+    // Base tabs: Dashboard, Add Member, All Members, Communication, Add events,
+    // Digital Register, Add Committee, Add Officer, Reports, Constitution
+    int tabCount = 10;
+
     if (_isChairperson) tabCount++; // Songs Agreement
     if (_isSignatory) tabCount++; // Signatures
-    tabCount += 2; // Audit, Billing
+
+    // Audit Logs and Billing are always present
+    tabCount += 2;
 
     _tabController = TabController(length: tabCount, vsync: this);
     _tabController.addListener(() {
@@ -118,18 +127,18 @@ class _OverseerPageState extends State<OverseerPage>
         "Dashboard",
         Icons.dashboard,
         // Inside _getTabs() method, where DashboardTab is created:
-DashboardTab(
-  isLargeScreen: isLargeScreen,
-  committeeMemberName: committeeMemberName,
-  committeeMemberRole: committeeMemberRole,
-  faceUrl: secureFaceUrl,
-  onNavigateToTab: (int tabIndex) {
-    setState(() {
-      _selectedIndex = tabIndex;
-      _tabController.animateTo(tabIndex);
-    });
-  },
-),
+        DashboardTab(
+          isLargeScreen: isLargeScreen,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+          onNavigateToTab: (int tabIndex) {
+            setState(() {
+              _selectedIndex = tabIndex;
+              _tabController.animateTo(tabIndex);
+            });
+          },
+        ),
       ),
       _TabDefinition(
         "Add Member",
@@ -149,6 +158,24 @@ DashboardTab(
           committeeMemberName: committeeMemberName,
           committeeMemberRole: committeeMemberRole,
           faceUrl: secureFaceUrl,
+        ),
+      ),
+      _TabDefinition(
+        "Communication",
+        Icons.message,
+        OverseerCommunicationsTab(
+          overseerUid: FirebaseAuth.instance.currentUser?.uid ?? '',
+          isLargeScreen: isLargeScreen,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+        ),
+      ),
+      _TabDefinition(
+        "Add events",
+        Icons.event_available_outlined,
+        OverseerDiaryTab(
+          overseerUid: FirebaseAuth.instance.currentUser?.uid ?? '',
         ),
       ),
       _TabDefinition(
@@ -174,6 +201,17 @@ DashboardTab(
           faceUrl: secureFaceUrl,
         ),
       ),
+      // In _getTabs method, add:
+      _TabDefinition(
+        "Meeting Minutes",
+        Icons.description,
+        OverseerMeetingMinutesTab(
+          isLargeScreen: isLargeScreen,
+          committeeMemberName: committeeMemberName,
+          committeeMemberRole: committeeMemberRole,
+          faceUrl: secureFaceUrl,
+        ),
+      ),
       _TabDefinition(
         "Add Officer",
         Icons.admin_panel_settings,
@@ -184,6 +222,16 @@ DashboardTab(
           faceUrl: secureFaceUrl,
         ),
       ),
+      _TabDefinition(
+  "Skills & Services",
+  Icons.psychology,
+  MemberSkillsTab(
+    isLargeScreen: isLargeScreen,
+    committeeMemberName: committeeMemberName,
+    committeeMemberRole: committeeMemberRole,
+    faceUrl: secureFaceUrl,
+  ),
+),
       _TabDefinition(
         "Reports",
         Icons.receipt_long,
@@ -847,10 +895,10 @@ DashboardTab(
     final now = DateTime.now();
     bool allowPayLater = true;
 
-    // Check if the free trial month (June 2026) has passed.
-    // If we are in July 2026 or later, standard billing enforcement applies.
-    if (now.year > 2026 || (now.year == 2026 && now.month > 6)) {
-      allowPayLater = now.day <= 5;
+    if (now.year > 2026 || (now.year == 2026 && now.month > 15)) {
+      allowPayLater =
+          now.day <=
+          6; // Allow pay later only for the first 6 days of the month
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
