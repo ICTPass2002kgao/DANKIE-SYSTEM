@@ -3,6 +3,20 @@ allprojects {
         google()
         mavenCentral()
     }
+
+    // Force a single CameraX version across all modules to prevent
+    // NoSuchFieldError: Camera2Config$Companion at runtime.
+    configurations.all {
+        resolutionStrategy {
+            val cameraXVersion = "1.3.4"
+            force("androidx.camera:camera-core:$cameraXVersion")
+            force("androidx.camera:camera-camera2:$cameraXVersion")
+            force("androidx.camera:camera-lifecycle:$cameraXVersion")
+            force("androidx.camera:camera-video:$cameraXVersion")
+            force("androidx.camera:camera-view:$cameraXVersion")
+            force("androidx.camera:camera-extensions:$cameraXVersion")
+        }
+    }
 }
 
 val newBuildDir: Directory = rootProject.layout.projectDirectory.dir("../build")

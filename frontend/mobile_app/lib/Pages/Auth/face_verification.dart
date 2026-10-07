@@ -147,6 +147,34 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
     }
   }
 
+  // --- Server-side Apple review bypass check ---
+  // No email addresses are stored in the client binary.
+  // The server decides based on APPLE_REVIEW_MODE env var (Railway).
+  Future<bool> _checkReviewBypass() async {
+    try {
+      User? user = FirebaseAuth.instance.currentUser;
+      String? token = await user?.getIdToken();
+
+      final response = await http.post(
+        Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/check_review_bypass/'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'email': widget.email.trim().toLowerCase()}),
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        return json['bypass_granted'] == true;
+      }
+    } catch (e) {
+      // If the check fails for any reason, fail safe — require face scan.
+      print("Bypass check error: $e");
+    }
+    return false;
+  }
+
   // --- Shared Backend Match Logic ---
   Future<void> _processBackendMatch(Uint8List capturedBytes) async {
     setState(() {
@@ -155,39 +183,27 @@ class _FaceVerificationScreenState extends State<FaceVerificationScreen>
 
     try {
       // --- 🟢 APPLE APP STORE REVIEW EXCEPTION ---
-      List<String> testAccounts = [
-        'test.admin@dankie.co.za',
-        'test.overseer@dankie.co.za',
-        'test.tactso@dankie.co.za',
-      ];
+      // Bypass decision is made server-side. APPLE_REVIEW_MODE must be True
+      // in Railway env vars for this to grant access. Flip it off after approval.
+      final bypassGranted = await _checkReviewBypass();
 
-      String typedEmail = widget.email.trim().toLowerCase();
-      bool isTestAccount = testAccounts.contains(typedEmail);
-      Map<String, String>? testIdentity;
-
-      if (isTestAccount) {
+      if (bypassGranted) {
+        // Find the identity whose email matches the signed-in account.
+        // Fall back to the first identity if no exact match (edge case).
+        Map<String, String>? identityToUse;
+        String typedEmail = widget.email.trim().toLowerCase();
         for (var identity in widget.identities) {
-          String? identityEmail = identity['email']?.trim().toLowerCase();
-          if (identityEmail == typedEmail) {
-            testIdentity = identity;
+          if (identity['email']?.trim().toLowerCase() == typedEmail) {
+            identityToUse = identity;
             break;
           }
         }
-      }
-
-      if (isTestAccount) {
-        print(
-          "Apple Test account confirmed. Bypassing strict face matching layers.",
-        );
-        Map<String, String>? identityToUse = testIdentity;
-        if (identityToUse == null && widget.identities.isNotEmpty) {
-          identityToUse = widget.identities.first;
-        }
+        identityToUse ??= widget.identities.isNotEmpty
+            ? widget.identities.first
+            : null;
 
         if (identityToUse != null) {
-          setState(() {
-            _processStatus = "Test Account Verified...";
-          });
+          setState(() => _processStatus = "Test Account Verified...");
           await Future.delayed(const Duration(milliseconds: 800));
           await _finalizeLogin(identityToUse);
           return;

@@ -22,6 +22,7 @@ fun getKeystoreProperties(key: String): String {
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -44,8 +45,8 @@ android {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 36
-        versionCode = 61
-        versionName = "1.0.61"
+        versionCode = 67
+        versionName = "1.0.67"
         
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
 
@@ -74,6 +75,23 @@ android {
             )
         }
     }
+
+    packaging {
+        jniLibs {
+            // ffmpeg_kit and other prebuilt .so files ship without debug symbols.
+            // Suppress the strip failure so the release build completes successfully.
+            useLegacyPackaging = false
+            keepDebugSymbols.add("**/*.so")
+        }
+    }
+
+    // Tell Crashlytics to upload native .so debug symbols on every release build.
+    // This resolves the Play Console "missing debug symbols" warning and makes
+    // crash stack traces show real function names instead of obfuscated addresses.
+    firebaseCrashlytics {
+        nativeSymbolUploadEnabled = true
+        unstrippedNativeLibsDir = "build/intermediates/merged_native_libs/release/out/lib"
+    }
 }
 
 flutter {
@@ -83,6 +101,16 @@ flutter {
 dependencies {
     implementation("com.google.android.gms:play-services-ads:22.6.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    // Force a consistent CameraX version across all transitive dependencies.
+    // Mixing versions causes NoSuchFieldError on Camera2Config$Companion at runtime.
+    val cameraXVersion = "1.3.4"
+    implementation("androidx.camera:camera-core:$cameraXVersion")
+    implementation("androidx.camera:camera-camera2:$cameraXVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
+    implementation("androidx.camera:camera-video:$cameraXVersion")
+    implementation("androidx.camera:camera-view:$cameraXVersion")
+    implementation("androidx.camera:camera-extensions:$cameraXVersion")
 }
  
 subprojects {

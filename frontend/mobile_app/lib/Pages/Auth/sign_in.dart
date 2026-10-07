@@ -198,25 +198,37 @@ class _Login_PageState extends State<Login_Page>
         );
       }
 
-      // Fallback 2: Check if they are a Committee Member for a branch
+      // Fallback 2: Check if they are a Committee Member for a branch.
+      // IMPORTANT: Only do this if the account does NOT also exist as a
+      // standard user — standard users who happen to be in branch_committee
+      // should be routed to the main menu, not to face verification.
       if (tactsoProfile == null) {
-        var committeeMemberCheck = await _fetchListFromDjango(
-          'branch_committee',
-          'email=$email',
-          filterKey: 'email',
-          filterValue: email, // Strict client-side filter
+        var standardUserCheck = await _fetchProfileFromDjango(
+          'users',
+          uid,
+          queryParam: 'uid',
         );
 
-        if (committeeMemberCheck.isNotEmpty) {
-          var branchId =
-              committeeMemberCheck[0]['branch'] ??
-              committeeMemberCheck[0]['branch_id'];
-          if (branchId != null) {
-            tactsoProfile = await _fetchProfileFromDjango(
-              'tactso_branches',
-              branchId.toString(),
-              queryParam: 'id',
-            );
+        // Only check branch committee if this is NOT a standard user account
+        if (standardUserCheck == null) {
+          var committeeMemberCheck = await _fetchListFromDjango(
+            'branch_committee',
+            'email=$email',
+            filterKey: 'email',
+            filterValue: email,
+          );
+
+          if (committeeMemberCheck.isNotEmpty) {
+            var branchId =
+                committeeMemberCheck[0]['branch'] ??
+                committeeMemberCheck[0]['branch_id'];
+            if (branchId != null) {
+              tactsoProfile = await _fetchProfileFromDjango(
+                'tactso_branches',
+                branchId.toString(),
+                queryParam: 'id',
+              );
+            }
           }
         }
       }

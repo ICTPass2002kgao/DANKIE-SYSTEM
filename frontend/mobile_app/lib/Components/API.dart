@@ -176,55 +176,7 @@ class Api {
   }) async {
     User? firebaseUser;
     String? uid;
-
-    // --------------------------------------------------------------
-    // 1. DUPLICATE CHECK: name + surname
-    // --------------------------------------------------------------
-    try {
-      final checkUrl = Uri.parse(
-        '$BACKEND_BASE_URL_DEBUG/users/?name=$name&surname=$surname',
-      );
-      final checkResponse = await http.get(checkUrl);
-
-      if (checkResponse.statusCode == 200) {
-        final List<dynamic> existing = jsonDecode(checkResponse.body);
-        if (existing.isNotEmpty) {
-          if (context.mounted) {
-            Api().showMessage(
-              context,
-              'A user with this name and surname already exists. Please contact the support center.',
-              'Duplicate Account',
-              Colors.orange,
-              showContactSupport: true,
-            );
-          }
-          return null;
-        }
-      } else {
-        print('Duplicate check failed: ${checkResponse.statusCode}');
-        if (context.mounted) {
-          Api().showMessage(
-            context,
-            'Unable to verify account. Please try again later.',
-            'Error',
-            Colors.red,
-          );
-        }
-        return null;
-      }
-    } catch (e) {
-      print('Error during duplicate check: $e');
-      if (context.mounted) {
-        Api().showMessage(
-          context,
-          'Network error while checking duplicates. Please try again.',
-          'Error',
-          Colors.red,
-        );
-      }
-      return null;
-    }
-
+ 
     // --------------------------------------------------------------
     // 2. PROCEED WITH FIREBASE + DJANGO CREATION
     // --------------------------------------------------------------
@@ -393,8 +345,7 @@ class Api {
 
         return userData;
       } else {
-        // --- DJANGO CREATION FAILED (Status 400/500) ---
-        await firebaseUser.delete();
+         await firebaseUser.delete();
 
         String errorMsg = response.body;
         try {
@@ -930,9 +881,7 @@ class LocalStorageService {
     }
 
     return playlistJsonList.map((e) => Song.fromMap(jsonDecode(e))).toList();
-  }
-
-  /// Removes a song from the playlist by its ID.
+  } 
   Future<void> removeFromPlaylist(String songId) async {
     final prefs = await SharedPreferences.getInstance();
 

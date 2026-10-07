@@ -37,6 +37,8 @@ frontend/mobile_app/.flutter-plugins-dependencies
 frontend/mobile_app/.pub-cache/
 frontend/mobile_app/.pub/
 frontend/mobile_app/build/
+frontend/mobile_app/android/key.properties
+
 
 # Symbolication related
 frontend/mobile_app/app.*.symbols
