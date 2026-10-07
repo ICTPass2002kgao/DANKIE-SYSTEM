@@ -199,6 +199,19 @@ FIREBASE_STORAGE_BUCKET = 'tact-3c612.firebasestorage.app'
 PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY')
 PAYSTACK_API_BASE = os.environ.get('PAYSTACK_API_BASE')
 
+# ==========================================
+# APPLE APP STORE REVIEW BYPASS
+# ==========================================
+# Set APPLE_REVIEW_MODE=True in your Railway env vars ONLY during an active
+# App Store review submission. Set it back to False immediately after approval.
+# This keeps the bypass logic off the client binary and under your control.
+APPLE_REVIEW_MODE = os.environ.get('APPLE_REVIEW_MODE', 'False') == 'True'
+APPLE_REVIEW_ACCOUNTS = [
+    'test.admin@dankie.co.za',
+    'test.overseer@dankie.co.za',
+    'test.tactso@dankie.co.za',
+]
+
 # System Misc
 APPEND_SLASH = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -224,7 +237,7 @@ CACHES = {
                 "max_connections": 50,
                 "retry_on_timeout": True,
             },
-            "IGNORE_EXCEPTIONS": False,
+            "IGNORE_EXCEPTIONS": True,
             "SOCKET_CONNECT_TIMEOUT": 5,
             "SOCKET_TIMEOUT": 5,
         },

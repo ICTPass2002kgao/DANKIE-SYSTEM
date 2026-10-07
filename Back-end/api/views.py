@@ -247,6 +247,43 @@ def perform_verification(live_path, ref_path, is_encrypted_ref):
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
 @permission_classes([IsFirebaseAuthenticated])
+def check_review_bypass(request):
+    """
+    Checks whether the signed-in account is an Apple review test account
+    and whether the bypass is currently enabled on the server.
+
+    The client sends the authenticated user's email. The server checks it
+    against the APPLE_REVIEW_ACCOUNTS list in settings and only grants the
+    bypass when APPLE_REVIEW_MODE=True is set in the Railway environment.
+
+    This means:
+      - The email list never appears in the app binary.
+      - You can disable the bypass instantly from Railway without a new release.
+      - Android users are never affected (the flag stays False except during iOS review).
+    """
+    email = request.data.get('email', '').strip().lower()
+
+    if not email:
+        return Response({'error': 'Missing email'}, status=400)
+
+    review_mode_enabled = getattr(settings, 'APPLE_REVIEW_MODE', False)
+    review_accounts = [
+        e.lower() for e in getattr(settings, 'APPLE_REVIEW_ACCOUNTS', [])
+    ]
+
+    bypass_granted = review_mode_enabled and email in review_accounts
+
+    logger.info(
+        f"Review bypass check — email: {email}, "
+        f"mode_enabled: {review_mode_enabled}, granted: {bypass_granted}"
+    )
+
+    return Response({'bypass_granted': bypass_granted})
+
+
+@api_view(['POST'])
+@authentication_classes([FirebaseAuthentication])
+@permission_classes([IsFirebaseAuthenticated])
 def recognize_face(request):
     live_file = request.FILES.get('live_image')
     ref_url = request.data.get('reference_url')
