@@ -90,10 +90,10 @@ ROOT_URLCONF = 'tact_api.urls' # Double check if your inner folder is named 'tac
 # ==========================================
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'api.views.FirebaseAuthentication',
+        'api.authentication.FirebaseAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'api.views.IsFirebaseAuthenticated',
+        'api.authentication.IsFirebaseAuthenticated',
     ],
 }
 

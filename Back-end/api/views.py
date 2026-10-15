@@ -110,33 +110,7 @@ if not firebase_admin._apps:
     else:
         logger.warning("⚠️ Warning: FIREBASE_SERVICE_ACCOUNT_JSON missing in .env")
 
-# ==========================================
-# 1.5 CUSTOM SECURITY MIDDLEWARE (FIREBASE AUTH)
-# ==========================================
-
-class FirebaseUser:
-    def __init__(self, uid, decoded_token):
-        self.uid = uid
-        self.decoded_token = decoded_token
-        self.is_authenticated = True
-
-class FirebaseAuthentication(BaseAuthentication):
-    def authenticate(self, request):
-        auth_header = request.META.get('HTTP_AUTHORIZATION')
-        if not auth_header:
-            return None
-        try:
-            token = auth_header.split(' ')[1]
-            decoded_token = firebase_auth.verify_id_token(token)
-            uid = decoded_token.get('uid')
-            user = FirebaseUser(uid, decoded_token)
-            return (user, token)
-        except Exception as e:
-            raise AuthenticationFailed(f"Invalid or expired Firebase Token: {str(e)}")
-
-class IsFirebaseAuthenticated(BasePermission):
-    def has_permission(self, request, view):
-        return bool(request.user and getattr(request.user, 'is_authenticated', False))
+from .authentication import FirebaseUser, FirebaseAuthentication, IsFirebaseAuthenticated
 
 # ================================================================================================
 # 2. HELPER FUNCTIONS (Security, AI, Email)
