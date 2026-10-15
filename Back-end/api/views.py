@@ -110,7 +110,7 @@ if not firebase_admin._apps:
     else:
         logger.warning("⚠️ Warning: FIREBASE_SERVICE_ACCOUNT_JSON missing in .env")
 
-from .authentication import FirebaseUser, FirebaseAuthentication, IsFirebaseAuthenticated
+from .authentication import FirebaseUser, FirebaseAuthentication, IsFirebaseAuthenticated, IsFullyAuthenticated
 
 # ================================================================================================
 # 2. HELPER FUNCTIONS (Security, AI, Email)
@@ -220,7 +220,7 @@ def perform_verification(live_path, ref_path, is_encrypted_ref):
 
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def check_review_bypass(request):
     """
     Checks whether the signed-in account is an Apple review test account
@@ -257,7 +257,7 @@ def check_review_bypass(request):
 
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def recognize_face(request):
     live_file = request.FILES.get('live_image')
     ref_url = request.data.get('reference_url')
@@ -319,7 +319,7 @@ def recognize_face(request):
         
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def upload_poster(request):
     """
     Uploads a poster image to Firebase Storage and returns the public URL.
@@ -370,7 +370,7 @@ def process_bulk_email_task(include_terms, include_policy):
 
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def send_legal_broadcast(request):
     inc_terms = request.data.get('include_terms', False)
     inc_policy = request.data.get('include_policy', False)
@@ -404,7 +404,7 @@ class ServeDecryptedImageView(APIView):
 
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def initialize_subscription(request):
     logger.info("----- DEBUG: SUBSCRIPTION REQUEST START -----")
     logger.info(f"Incoming Data: {request.data}") 
@@ -600,7 +600,7 @@ def paystack_webhook(request):
 
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def create_seller_subaccount(request):
     logger.info(f"Subaccount Request Data: {request.data}") 
     uid = request.data.get('uid') 
@@ -646,7 +646,7 @@ def create_seller_subaccount(request):
 
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def create_payment_link(request):
     try:
         email = request.data.get('email')
@@ -770,7 +770,7 @@ def batch_geocode_communities(community_ids):
 
 class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = OverseerMeetingMinutes.objects.select_related('overseer').all()
     serializer_class = OverseerMeetingMinutesSerializer
 
@@ -800,8 +800,14 @@ class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
         serializer.save()
         
 class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
+    # Anonymous Firebase tokens allowed on GET — needed for overseer browse during registration.
+    # All other methods (POST/PUT/DELETE) require a fully authenticated (non-anonymous) account.
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsFirebaseAuthenticated()]   # anonymous OK for read-only browse
+        return [IsFullyAuthenticated()]          # full account required for writes
     queryset = Overseer.objects.all()
     serializer_class = OverseerSerializer
 
@@ -892,7 +898,7 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
 # ⭐️ OPTIMIZED
 class CommunityViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = Community.objects.select_related('district', 'district__overseer').all()
     serializer_class = CommunitySerializer
         
@@ -908,7 +914,7 @@ class CommunityViewSet(CachedListMixin, viewsets.ModelViewSet):
     
 class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = AdminStaffMember.objects.all() 
     serializer_class = AdminStaffMemberSerializer
     def get_queryset(self):
@@ -949,7 +955,7 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
 
 class UsersViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = Users.objects.all()
     serializer_class = UsersSerializer
     lookup_field = 'uid'
@@ -979,7 +985,7 @@ class UsersViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     # In UsersViewSet (views.py)
 
-    @action(detail=False, methods=['post', 'put'], url_path='update_member_skills', permission_classes=[IsFirebaseAuthenticated])
+    @action(detail=False, methods=['post', 'put'], url_path='update_member_skills', permission_classes=[IsFullyAuthenticated])
     def update_skills(self, request):
         uid = request.data.get('uid')
         if not uid:
@@ -1067,7 +1073,7 @@ class UsersViewSet(viewsets.ModelViewSet):
 
 class VisitorViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = Visitor.objects.all()
     serializer_class = VisitorSerializer
     def get_queryset(self):
@@ -1103,7 +1109,7 @@ class VisitorViewSet(viewsets.ModelViewSet):
 
 @api_view(['GET'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def monthly_attendance_report(request):
     community = request.query_params.get('community_name')
     month = int(request.query_params.get('month'))
@@ -1147,7 +1153,7 @@ def monthly_attendance_report(request):
 
 class TactsoBranchViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = TactsoBranch.objects.all()
     serializer_class = TactsoBranchSerializer
     def get_queryset(self):
@@ -1198,7 +1204,7 @@ class TactsoBranchViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=201)
 class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = District.objects.select_related('overseer').prefetch_related('communities').all()
     serializer_class = DistrictSerializer
     def get_queryset(self):
@@ -1215,13 +1221,13 @@ class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
 
 class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = Songs.objects.all()
     serializer_class = SongSerializer
 
 class CatalogViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     filter_backends = [filters.SearchFilter]
@@ -1230,7 +1236,7 @@ class CatalogViewSet(viewsets.ModelViewSet):
 # ⭐️ OPTIMIZED
 class SellerInventoryViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     serializer_class = SellerListingSerializer
     queryset = SellerListing.objects.select_related('seller').all()
     def get_queryset(self):
@@ -1242,7 +1248,7 @@ class SellerInventoryViewSet(viewsets.ModelViewSet):
 
 class OrderViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     serializer_class = OrderSerializer 
     queryset = Order.objects.select_related('user').prefetch_related('items__product').all()
     def get_queryset(self):
@@ -1261,7 +1267,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     def perform_create(self, serializer): serializer.save()
-    @action(detail=True, methods=['get'], authentication_classes=[FirebaseAuthentication], permission_classes=[IsFirebaseAuthenticated])
+    @action(detail=True, methods=['get'], authentication_classes=[FirebaseAuthentication], permission_classes=[IsFullyAuthenticated])
     def verify_payment(self, request, pk=None):
         order = self.get_object()
         if order.status == 'paid' and order.is_paid: return Response(self.get_serializer(order).data)
@@ -1288,7 +1294,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 # ⭐️ OPTIMIZED
 class OverseerCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = OverseerCommitteeMember.objects.select_related('overseer').all()
     serializer_class = OverseerCommitteeMemberSerializer
     def create(self, request, *args, **kwargs):
@@ -1323,7 +1329,7 @@ class OverseerCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
 
 class OverseerExpenseReportViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = OverseerExpenseReport.objects.all()
     serializer_class = OverseerExpenseReportSerializer
     def get_queryset(self):
@@ -1340,20 +1346,20 @@ class OverseerExpenseReportViewSet(CachedListMixin, viewsets.ModelViewSet):
      
 class UpcomingEventViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = UpcomingEvent.objects.all()
     serializer_class = UpcomingEventSerializer
 
 class CareerOpportunityViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = CareerOpportunity.objects.all()
     serializer_class = CareerOpportunitySerializer
 
 # ⭐️ OPTIMIZED
 class BranchCommitteeMemberViewSet(CachedListMixin, viewsets.ModelViewSet): 
     authentication_classes = [FirebaseAuthentication] 
-    permission_classes = [IsFirebaseAuthenticated] 
+    permission_classes = [IsFullyAuthenticated] 
     queryset = TactsoCommitteeMember.objects.select_related('branch').all() 
     serializer_class = TactsoCommitteeMemberSerializer 
     
@@ -1388,7 +1394,7 @@ from .serializers import TactsoMeetingMinutesSerializer
 
 class TactsoMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = TactsoMeetingMinutes.objects.select_related('branch').all()
     serializer_class = TactsoMeetingMinutesSerializer
 
@@ -1410,7 +1416,7 @@ class TactsoMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
          
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication]) 
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def generate_tactso_livekit_token(request):
     
     # 1. Get the data directly from Flutter
@@ -1513,7 +1519,7 @@ def send_designed_email_via_node(recipient_email, subject, body_message, firebas
 
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def send_email(request):
     recipient = request.data.get('to')
     subject = request.data.get('subject')
@@ -1536,7 +1542,7 @@ def send_email(request):
 # ⭐️ OPTIMIZED
 class ApplicationRequestViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = ApplicationRequest.objects.select_related('branch', 'user').all()
     serializer_class = ApplicationRequestSerializer
     def get_queryset(self):
@@ -1569,13 +1575,13 @@ class ApplicationRequestViewSet(CachedListMixin, viewsets.ModelViewSet):
 
 class UserUniversityApplicationViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = UserUniversityApplication.objects.all()
     serializer_class = UserUniversityApplicationSerializer
  
 class AuditLogViewSet(viewsets.ModelViewSet): 
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = AuditLog.objects.all().order_by('-timestamp')
     serializer_class = AuditLogSerializer
     def get_queryset(self):
@@ -1587,7 +1593,7 @@ class AuditLogViewSet(viewsets.ModelViewSet):
 
 class ContributionHistoryViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = ContributionHistory.objects.all()
     serializer_class = ContributionHistorySerializer
     def get_queryset(self):
@@ -1606,7 +1612,7 @@ class ContributionHistoryViewSet(viewsets.ModelViewSet):
 
 class MonthlyReportViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = MonthlyReport.objects.all()
     serializer_class = MonthlyReportSerializer
     lookup_field = 'id'
@@ -1651,7 +1657,7 @@ class MonthlyReportViewSet(viewsets.ModelViewSet):
 
 @api_view(['GET'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def global_attendance_summary(request):
     """
     Returns aggregated attendance AND full attendee list for a given date.
@@ -1813,7 +1819,7 @@ def global_attendance_summary(request):
 
 class IssueReportViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = IssueReport.objects.all()
     serializer_class = IssueReportSerializer
     def get_queryset(self):
@@ -1824,7 +1830,7 @@ class IssueReportViewSet(viewsets.ModelViewSet):
 
 class EventDiaryViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = EventDiary.objects.all()
     serializer_class = EventDiarySerializer
     def get_queryset(self):
@@ -1836,7 +1842,7 @@ class EventDiaryViewSet(CachedListMixin, viewsets.ModelViewSet):
 # ⭐️ OPTIMIZED
 class EventContributionViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = EventContribution.objects.select_related('event', 'overseer').all()
     serializer_class = EventContributionSerializer
     def get_queryset(self):
@@ -1852,7 +1858,7 @@ from .serializers import ApostolicGreetingSerializer
 
 class ApostolicGreetingViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = ApostolicGreeting.objects.all()
     serializer_class = ApostolicGreetingSerializer
     lookup_field = 'id'
@@ -1871,7 +1877,7 @@ class ApostolicGreetingViewSet(viewsets.ModelViewSet):
     
 @api_view(['GET'])
 @authentication_classes([FirebaseAuthentication])
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def user_attendance(request):
     """
     Returns attendance stats and history for a specific user or visitor.
@@ -1926,7 +1932,7 @@ from .serializers import (
 )
 class OverseerDiaryEventViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = OverseerDiaryEvent.objects.select_related('overseer').all()
     serializer_class = OverseerDiaryEventSerializer
 
@@ -1991,7 +1997,7 @@ class OverseerDiaryEventViewSet(CachedListMixin, viewsets.ModelViewSet):
 
 class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = OverseerMeetingMinutes.objects.select_related('overseer').all()
     serializer_class = OverseerMeetingMinutesSerializer
 
@@ -2017,7 +2023,7 @@ class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
 import uuid
 @api_view(['POST'])
 @authentication_classes([FirebaseAuthentication]) # This fixes the AnonymousUser error
-@permission_classes([IsFirebaseAuthenticated])
+@permission_classes([IsFullyAuthenticated])
 def generate_livekit_token(request):
     
     # 1. Get the data directly from Flutter
@@ -2056,7 +2062,7 @@ def generate_livekit_token(request):
 # 3. Overseer Communications (Fixed select_related)
 class OverseerCommunicationViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = OverseerCommunication.objects.select_related('overseer').prefetch_related('read_statuses').all() # ✅ Removed 'created_by'
     serializer_class = OverseerCommunicationSerializer
 
@@ -2096,7 +2102,7 @@ class OverseerCommunicationViewSet(CachedListMixin, viewsets.ModelViewSet):
 # 4. Communication Read Status
 class CommunicationReadStatusViewSet(CachedListMixin, viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFirebaseAuthenticated]
+    permission_classes = [IsFullyAuthenticated]
     queryset = CommunicationReadStatus.objects.select_related('communication', 'user').all()
     serializer_class = CommunicationReadStatusSerializer
 

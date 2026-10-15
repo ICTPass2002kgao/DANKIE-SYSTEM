@@ -47,7 +47,31 @@ class FirebaseAuthentication(BaseAuthentication):
 
 
 class IsFirebaseAuthenticated(BasePermission):
-    """Allows access only to requests with a verified Firebase identity."""
+    """
+    Allows access to any verified Firebase identity — including anonymous users.
+    Use this only on endpoints that must be reachable before account creation
+    (e.g. browsing overseers during registration).
+    """
 
     def has_permission(self, request, view):
         return bool(request.user and getattr(request.user, 'is_authenticated', False))
+
+
+class IsFullyAuthenticated(BasePermission):
+    """
+    Requires a verified Firebase identity that is NOT anonymous.
+
+    This is the default permission for all protected endpoints. It blocks:
+    - Unauthenticated requests (no token)
+    - Anonymous Firebase sessions (sign_in_provider == 'anonymous')
+
+    Only users who have created a real email/password (or other non-anonymous)
+    Firebase account can pass this check.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user or not getattr(request.user, 'is_authenticated', False):
+            return False
+        decoded = getattr(request.user, 'decoded_token', {})
+        sign_in_provider = decoded.get('firebase', {}).get('sign_in_provider', '')
+        return sign_in_provider != 'anonymous'

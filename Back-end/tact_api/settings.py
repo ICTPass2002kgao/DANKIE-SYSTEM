@@ -93,7 +93,7 @@ REST_FRAMEWORK = {
         'api.authentication.FirebaseAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'api.authentication.IsFirebaseAuthenticated',
+        'api.authentication.IsFullyAuthenticated',  # blocks anonymous tokens globally
     ],
 }
 
