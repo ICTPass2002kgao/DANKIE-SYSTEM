@@ -13,7 +13,7 @@ frontend/mobile_app/.swiftpm/
 frontend/mobile_app/migrate_working_dir/
 frontend/mobile_app/*.pem
 # IntelliJ related
-
+/.agents
 frontend/mobile_app/*.iml
 frontend/mobile_app/*.ipr
 frontend/mobile_app/*.iws
