@@ -1,6 +1,7 @@
 // ignore_for_file: prefer_const_constructors, use_build_context_synchronously, avoid_print
 
 import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http; // Added for Django
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -45,7 +46,15 @@ class _SongsUpdateState extends State<SongsUpdate> {
     try {
       // URL: /api/tact_music/ (List all songs)
       final url = Uri.parse('${Api().BACKEND_BASE_URL_DEBUG}/tact_music/');
-      final response = await http.get(url);
+      final String _tok =
+          await FirebaseAuth.instance.currentUser?.getIdToken() ?? '';
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $_tok',
+          'Content-Type': 'application/json',
+        },
+      );
 
       if (response.statusCode == 200) {
         if (mounted) {

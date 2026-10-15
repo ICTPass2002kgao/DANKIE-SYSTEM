@@ -3,6 +3,7 @@
 import 'dart:io' if (dart.library.html) 'package:flutter/foundation.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -425,6 +426,13 @@ class _SignUpPageState extends State<SignUpPage> {
       _overseersList = [];
     });
 
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously();
+      currentUser = FirebaseAuth.instance.currentUser;
+    }
+    final String anonToken = await currentUser?.getIdToken() ?? '';
+
     final url = Uri.parse(
       '${Api().BACKEND_BASE_URL_DEBUG}/overseers/?province=$province',
     );
@@ -432,7 +440,10 @@ class _SignUpPageState extends State<SignUpPage> {
     try {
       final response = await http.get(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $anonToken',
+          'Content-Type': 'application/json',
+        },
       );
 
       if (response.statusCode == 200) {

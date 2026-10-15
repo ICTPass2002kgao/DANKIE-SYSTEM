@@ -449,7 +449,15 @@ class _DashboardTabState extends State<DashboardTab>
       final url = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/users/?overseer_uid=$uid',
       );
-      final response = await http.get(url);
+      final String _tok =
+          await FirebaseAuth.instance.currentUser?.getIdToken() ?? '';
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $_tok',
+          'Content-Type': 'application/json',
+        },
+      );
 
       if (response.statusCode != 200) return;
 
@@ -540,7 +548,15 @@ class _DashboardTabState extends State<DashboardTab>
       final url = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/users/?overseer_uid=$uid',
       );
-      final response = await http.get(url);
+      final String _tok1 =
+          await FirebaseAuth.instance.currentUser?.getIdToken() ?? '';
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $_tok1',
+          'Content-Type': 'application/json',
+        },
+      );
       if (response.statusCode == 200) {
         return (json.decode(response.body) as List).length;
       }
@@ -557,7 +573,15 @@ class _DashboardTabState extends State<DashboardTab>
       final distUrl = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/districts/?overseer_uid=$uid',
       );
-      final distResp = await http.get(distUrl);
+      final String _tok2 =
+          await FirebaseAuth.instance.currentUser?.getIdToken() ?? '';
+      final distResp = await http.get(
+        distUrl,
+        headers: {
+          'Authorization': 'Bearer $_tok2',
+          'Content-Type': 'application/json',
+        },
+      );
       if (distResp.statusCode == 200) {
         return (json.decode(distResp.body) as List).length;
       }
@@ -574,7 +598,15 @@ class _DashboardTabState extends State<DashboardTab>
       final commUrl = Uri.parse(
         '${Api().BACKEND_BASE_URL_DEBUG}/communities/?district__overseer_uid=$uid',
       );
-      final commResp = await http.get(commUrl);
+      final String _tok3 =
+          await FirebaseAuth.instance.currentUser?.getIdToken() ?? '';
+      final commResp = await http.get(
+        commUrl,
+        headers: {
+          'Authorization': 'Bearer $_tok3',
+          'Content-Type': 'application/json',
+        },
+      );
       if (commResp.statusCode == 200) {
         return (json.decode(commResp.body) as List).length;
       }
@@ -843,18 +875,18 @@ class _DashboardTabState extends State<DashboardTab>
                       theme.splashColor,
                       _getTotalOverseerDistrictCount,
                       width: cardWidth,
-                     onTap: () {
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => DistrictsScreen(
-        committeeMemberName: widget.committeeMemberName,
-        committeeMemberRole: widget.committeeMemberRole,
-        faceUrl: widget.faceUrl,
-      ),
-    ),
-  );
-},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DistrictsScreen(
+                              committeeMemberName: widget.committeeMemberName,
+                              committeeMemberRole: widget.committeeMemberRole,
+                              faceUrl: widget.faceUrl,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                     _buildStatCard(
                       "Total Branches",

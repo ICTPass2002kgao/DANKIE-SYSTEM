@@ -461,7 +461,15 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
         final uri = Uri.parse(
           '${Api().BACKEND_BASE_URL_DEBUG}/orders/$orderId/verify_payment/',
         );
-        final response = await http.get(uri);
+        final String _tok =
+            await FirebaseAuth.instance.currentUser?.getIdToken() ?? '';
+        final response = await http.get(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $_tok',
+            'Content-Type': 'application/json',
+          },
+        );
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);

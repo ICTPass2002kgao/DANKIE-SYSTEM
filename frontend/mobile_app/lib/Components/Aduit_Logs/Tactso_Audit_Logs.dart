@@ -17,16 +17,16 @@ class TactsoAuditLogs {
 
     // --- CONTEXT: THE ACTOR (Who is currently logged in) ---
     required String? committeeMemberName, // The person who clicked the button
-    required String? committeeMemberRole,  
-    required String? universityCommitteeFace, 
-    String? studentName,  
-    String? targetMemberName, 
-    String? targetMemberRole,  
+    required String? committeeMemberRole,
+    required String? universityCommitteeFace,
+    String? studentName,
+    String? targetMemberName,
+    String? targetMemberRole,
   }) async {
     final user = _auth.currentUser;
- 
-    final Map<String, dynamic> payload = { 
-      'timestamp': DateTime.now().toIso8601String(), 
+
+    final Map<String, dynamic> payload = {
+      'timestamp': DateTime.now().toIso8601String(),
       'device_time': DateTime.now().toIso8601String(),
 
       // ACCOUNT INFO (The Branch Account)
@@ -60,8 +60,8 @@ class TactsoAuditLogs {
         uri,
         headers: {
           'Content-Type': 'application/json',
-          // Add Authorization header if your API requires it
-          // 'Authorization': 'Bearer ...',
+          'Authorization':
+              'Bearer ${await FirebaseAuth.instance.currentUser?.getIdToken() ?? ""}',
         },
         body: json.encode(payload),
       );

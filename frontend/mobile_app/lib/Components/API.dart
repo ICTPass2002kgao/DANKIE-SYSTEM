@@ -40,7 +40,7 @@ class Api {
   // String BACKEND_BASE_URL_DEBUG = kIsWeb
   //     ? 'http://127.0.0.1:8000/api'
   //     : 'http://172.20.10.8:8000/api';
-  
+
   Future<bool> sendEmail(
     String recipientEmail,
     String subject,
@@ -49,8 +49,8 @@ class Api {
   ) async {
     try {
       var user = FirebaseAuth.instance.currentUser;
- 
-      if(user == null) {
+
+      if (user == null) {
         print("User not authenticated. Attempting anonymous sign-in...");
         final userCredential = await FirebaseAuth.instance.signInAnonymously();
         user = userCredential.user;
@@ -176,7 +176,7 @@ class Api {
   }) async {
     User? firebaseUser;
     String? uid;
- 
+
     // --------------------------------------------------------------
     // 2. PROCEED WITH FIREBASE + DJANGO CREATION
     // --------------------------------------------------------------
@@ -184,9 +184,20 @@ class Api {
       final color = Theme.of(context);
 
       // --- 1. CREATE USER IN FIREBASE AUTHENTICATION ---
-      UserCredential userCredential = await _auth
-          .createUserWithEmailAndPassword(email: email, password: password);
-      firebaseUser = userCredential.user;
+      User? existingUser = FirebaseAuth.instance.currentUser;
+      if (existingUser != null && existingUser.isAnonymous) {
+        // Upgrade anonymous account — preserve the UID
+        final credential = EmailAuthProvider.credential(
+          email: email,
+          password: password,
+        );
+        await existingUser.linkWithCredential(credential);
+        firebaseUser = FirebaseAuth.instance.currentUser;
+      } else {
+        UserCredential userCredential = await _auth
+            .createUserWithEmailAndPassword(email: email, password: password);
+        firebaseUser = userCredential.user;
+      }
 
       if (firebaseUser == null) throw Exception("Firebase Auth failed.");
 
@@ -345,7 +356,7 @@ class Api {
 
         return userData;
       } else {
-         await firebaseUser.delete();
+        await firebaseUser.delete();
 
         String errorMsg = response.body;
         try {
@@ -881,7 +892,8 @@ class LocalStorageService {
     }
 
     return playlistJsonList.map((e) => Song.fromMap(jsonDecode(e))).toList();
-  } 
+  }
+
   Future<void> removeFromPlaylist(String songId) async {
     final prefs = await SharedPreferences.getInstance();
 
