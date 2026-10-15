@@ -42,12 +42,7 @@ ALLOWED_HOSTS = [
 # ==================================================================================
 
 # CORS allows your Flutter app to make requests
-CORS_ALLOW_ALL_ORIGINS = False
-
-CORS_ALLOWED_ORIGINS = [
-    'https://mktechcloud.co.za',
-    'https://www.mktechcloud.co.za',
-]
+CORS_ALLOW_ALL_ORIGINS = True 
 
 # CSRF Trusted Origins (CRITICAL FOR RAILWAY)
 # Railway puts your app behind a proxy (HTTPS), so Django needs to know it's safe.
@@ -178,7 +173,7 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'setamict@gmail.com'
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_HOST_PASSWORD = 'owwa msaz ueit juum'
 DEFAULT_FROM_EMAIL = 'setamict@gmail.com'
 LIVEKIT_API_KEY = os.environ.get("LIVEKIT_API_KEY")
 LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET")

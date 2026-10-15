@@ -54,7 +54,7 @@ Future<void> _checkLiveKitPermissions() async {
   }
 }
 
-Future<void> main() async { 
+Future<void> main() async {
   runZonedGuarded<Future<void>>(
     () async {
       print("🟢 1. Starting initialization...");
@@ -72,6 +72,15 @@ Future<void> main() async {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         ).timeout(const Duration(seconds: 10));
+
+        // Explicitly enable Crashlytics collection on mobile.
+        // Without this, release builds on Android may silently drop crash reports.
+        if (!kIsWeb) {
+          await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+            true,
+          );
+        }
+
         print("🟢 Firebase Success");
       } catch (e) {
         print("🔴 Firebase Init Error / Timeout: $e");
@@ -80,7 +89,9 @@ Future<void> main() async {
       FlutterError.onError = (FlutterErrorDetails details) {
         print("🔴 FLUTTER UI ERROR: ${details.exception}");
         FlutterError.presentError(details);
-        FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+        if (!kIsWeb) {
+          FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+        }
       };
 
       print("🟢 4. Initializing Notifications...");
@@ -132,10 +143,17 @@ Future<void> main() async {
 
       print("🟢 9. Executing runApp()...");
       runApp(const MyApp());
-    },  (error, stackTrace) { 
+    },
+    (error, stackTrace) {
       print("🔥🔥🔥 FATAL ZONE ERROR CAUSING BLACK SCREEN: $error");
       print(stackTrace);
-      FirebaseCrashlytics.instance.recordError(error, stackTrace);
+      if (!kIsWeb) {
+        FirebaseCrashlytics.instance.recordError(
+          error,
+          stackTrace,
+          fatal: true,
+        );
+      }
     },
   );
 }
@@ -190,7 +208,7 @@ class _MyAppState extends State<MyApp> {
   // --- RESPONSIVE WEB BANNER ---
   Widget _buildWebBanner() {
     if (!_showWebBanner) return const SizedBox.shrink();
-    
+
     return Material(
       color: Colors.blue.shade900,
       elevation: 4,
@@ -202,25 +220,40 @@ class _MyAppState extends State<MyApp> {
 
             if (isSmallScreen) {
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12.0,
+                  vertical: 10.0,
+                ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.phone_android, color: Colors.white, size: 20),
+                        const Icon(
+                          Icons.phone_android,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         const Expanded(
                           child: Text(
                             "For the best experience, download our official mobile applications:",
-                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
                         GestureDetector(
                           onTap: () => setState(() => _showWebBanner = false),
-                          child: const Icon(Icons.close, color: Colors.white, size: 20),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                       ],
                     ),
@@ -231,28 +264,52 @@ class _MyAppState extends State<MyApp> {
                       alignment: WrapAlignment.center,
                       children: [
                         ElevatedButton(
-                          onPressed: () => _launchUrl('https://play.google.com/store/apps/details?id=com.thetact.ttact&pli=1'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green, 
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+                          onPressed: () => _launchUrl(
+                            'https://play.google.com/store/apps/details?id=com.thetact.ttact&pli=1',
                           ),
-                          child: const Text("Android", style: TextStyle(color: Colors.white, fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          child: const Text(
+                            "Android",
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
                         ),
                         ElevatedButton(
-                          onPressed: () => _launchUrl('https://apps.apple.com/za/app/dankie-mobile/id6767526580'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black, 
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+                          onPressed: () => _launchUrl(
+                            'https://apps.apple.com/za/app/dankie-mobile/id6767526580',
                           ),
-                          child: const Text("iOS", style: TextStyle(color: Colors.white, fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          child: const Text(
+                            "iOS",
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
                         ),
                         ElevatedButton(
-                          onPressed: () => _launchUrl('https://appgallery.huawei.com/app/C115359927'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red, 
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+                          onPressed: () => _launchUrl(
+                            'https://appgallery.huawei.com/app/C115359927',
                           ),
-                          child: const Text("Huawei", style: TextStyle(color: Colors.white, fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                          ),
+                          child: const Text(
+                            "Huawei",
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
                         ),
                       ],
                     ),
@@ -262,7 +319,10 @@ class _MyAppState extends State<MyApp> {
             }
 
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 12.0,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -271,7 +331,11 @@ class _MyAppState extends State<MyApp> {
                   const Expanded(
                     child: Text(
                       "For the best experience, download our official mobile applications:",
-                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                   Wrap(
@@ -280,19 +344,40 @@ class _MyAppState extends State<MyApp> {
                     alignment: WrapAlignment.center,
                     children: [
                       ElevatedButton(
-                        onPressed: () => _launchUrl('https://play.google.com/store/apps/details?id=com.thetact.ttact&pli=1'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                        child: const Text("Android", style: TextStyle(color: Colors.white)),
+                        onPressed: () => _launchUrl(
+                          'https://play.google.com/store/apps/details?id=com.thetact.ttact&pli=1',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                        ),
+                        child: const Text(
+                          "Android",
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                       ElevatedButton(
-                        onPressed: () => _launchUrl('https://apps.apple.com/za/app/dankie-mobile/id6767526580'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
-                        child: const Text("iOS", style: TextStyle(color: Colors.white)),
+                        onPressed: () => _launchUrl(
+                          'https://apps.apple.com/za/app/dankie-mobile/id6767526580',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                        ),
+                        child: const Text(
+                          "iOS",
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                       ElevatedButton(
-                        onPressed: () => _launchUrl('https://appgallery.huawei.com/app/C115359927'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                        child: const Text("Huawei", style: TextStyle(color: Colors.white)),
+                        onPressed: () => _launchUrl(
+                          'https://appgallery.huawei.com/app/C115359927',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: const Text(
+                          "Huawei",
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                     ],
                   ),
@@ -341,14 +426,12 @@ class _MyAppState extends State<MyApp> {
 
     return MaterialApp(
       localizationsDelegates: const [
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    FlutterQuillLocalizations.delegate, // <--- This fixes the crash
-  ],
-  supportedLocales: const [
-    Locale('en', 'US'),
-  ],
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        FlutterQuillLocalizations.delegate, // <--- This fixes the crash
+      ],
+      supportedLocales: const [Locale('en', 'US')],
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
       builder: (context, child) {
