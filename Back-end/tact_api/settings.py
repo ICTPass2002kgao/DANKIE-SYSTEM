@@ -20,11 +20,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ==========================================
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', get_random_secret_key())
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError('SECRET_KEY environment variable is not set')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # On Railway, ensure you set the Environment Variable DJANGO_DEBUG = False
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True') == 'True'
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = [
     "127.0.0.1",
@@ -33,15 +35,19 @@ ALLOWED_HOSTS = [
     "172.20.10.8",
     "mktechcloud.co.za",
     ".railway.app",  # <--- REQUIRED FOR RAILWAY
-    "*",             # CAUTION: Remove this '*' when fully live for better security
-]
+ ]
 
 # ==================================================================================
 # 2. CORS & CSRF (Flutter Connection)
 # ==================================================================================
 
 # CORS allows your Flutter app to make requests
-CORS_ALLOW_ALL_ORIGINS = True 
+CORS_ALLOW_ALL_ORIGINS = False
+
+CORS_ALLOWED_ORIGINS = [
+    'https://mktechcloud.co.za',
+    'https://www.mktechcloud.co.za',
+]
 
 # CSRF Trusted Origins (CRITICAL FOR RAILWAY)
 # Railway puts your app behind a proxy (HTTPS), so Django needs to know it's safe.
@@ -83,6 +89,18 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'tact_api.urls' # Double check if your inner folder is named 'tact_api'
+
+# ==========================================
+# REST FRAMEWORK (Global API Security)
+# ==========================================
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'api.views.FirebaseAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'api.views.IsFirebaseAuthenticated',
+    ],
+}
 
 TEMPLATES = [
     {
@@ -160,7 +178,7 @@ EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'setamict@gmail.com'
-EMAIL_HOST_PASSWORD = 'owwa msaz ueit juum'
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = 'setamict@gmail.com'
 LIVEKIT_API_KEY = os.environ.get("LIVEKIT_API_KEY")
 LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET")

@@ -161,6 +161,10 @@ class OverseerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Overseer
         fields = '__all__'
+        extra_kwargs = {
+            'paystack_auth_code': {'write_only': True},
+            'paystack_email': {'write_only': True},
+        }
 
     def create(self, validated_data): 
         districts_data = validated_data.pop('districts')
@@ -180,6 +184,7 @@ class OverseerCommitteeMemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = OverseerCommitteeMember
         fields = "__all__"
+        extra_kwargs = {'face_encorded_json': {'write_only': True}}
 
 class IssueReportSerializer(serializers.ModelSerializer):
     class Meta:
@@ -215,6 +220,7 @@ class TactsoCommitteeMemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = TactsoCommitteeMember
         fields = "__all__"
+        extra_kwargs = {'face_encorded_json': {'write_only': True}}
 
 class ApplicationRequestSerializer(serializers.ModelSerializer):
     branch_id = serializers.PrimaryKeyRelatedField(
@@ -237,6 +243,7 @@ class AdminStaffMemberSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdminStaffMember
         fields = "__all__"
+        extra_kwargs = {'face_encorded_json': {'write_only': True}}
 
 class AuditLogSerializer(serializers.ModelSerializer):
     class Meta:

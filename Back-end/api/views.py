@@ -405,8 +405,6 @@ def send_legal_broadcast(request):
     return Response({'message': 'Broadcast started via background worker.'})
 
 class ServeDecryptedImageView(APIView):
-    authentication_classes = []
-    permission_classes = []
     def get(self, request):
         encrypted_url = request.query_params.get('url')
         if not encrypted_url: 
@@ -828,16 +826,8 @@ class OverseerMeetingMinutesViewSet(CachedListMixin, viewsets.ModelViewSet):
         serializer.save()
         
 class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
-    def get_permissions(self):
-        if self.request.method == 'GET':
-            return [AllowAny()]
-        return [IsFirebaseAuthenticated()]
-    
-    def get_authenticators(self):
-        if self.request.method == 'GET':
-            return []
-        return [FirebaseAuthentication()]
-    
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
     queryset = Overseer.objects.all()
     serializer_class = OverseerSerializer
 
@@ -927,18 +917,10 @@ class OverseerViewSet(CachedListMixin, viewsets.ModelViewSet):
 
 # ⭐️ OPTIMIZED
 class CommunityViewSet(CachedListMixin, viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
     queryset = Community.objects.select_related('district', 'district__overseer').all()
     serializer_class = CommunitySerializer
-    
-    def get_permissions(self):
-        if self.request.method == 'GET': 
-            return [AllowAny()]
-        return [IsFirebaseAuthenticated()]
-        
-    def get_authenticators(self):
-        if self.request.method == 'GET': 
-            return []
-        return [FirebaseAuthentication()]
         
     def get_queryset(self):
         queryset = Community.objects.select_related('district', 'district__overseer').all()
@@ -992,17 +974,11 @@ class StaffMemberViewSet(CachedListMixin, viewsets.ModelViewSet):
         return Response(self.get_serializer(staff).data)
 
 class UsersViewSet(viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
     queryset = Users.objects.all()
     serializer_class = UsersSerializer
     lookup_field = 'uid'
-    def get_permissions(self):
-        if self.request.method == 'GET':
-            return [AllowAny()]
-        return [IsFirebaseAuthenticated()]
-    def get_authenticators(self):
-        if self.request.method == 'GET':
-            return []
-        return [FirebaseAuthentication()]
     def get_queryset(self):
         queryset = Users.objects.all()
         uid = self.request.query_params.get('uid')
@@ -1196,6 +1172,8 @@ def monthly_attendance_report(request):
     })
 
 class TactsoBranchViewSet(viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
     queryset = TactsoBranch.objects.all()
     serializer_class = TactsoBranchSerializer
     def get_queryset(self):
@@ -1245,14 +1223,10 @@ class TactsoBranchViewSet(viewsets.ModelViewSet):
         )
         return Response(serializer.data, status=201)
 class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
+    authentication_classes = [FirebaseAuthentication]
+    permission_classes = [IsFirebaseAuthenticated]
     queryset = District.objects.select_related('overseer').prefetch_related('communities').all()
     serializer_class = DistrictSerializer
-    def get_permissions(self):
-        if self.request.method == 'GET': return [AllowAny()]
-        return [IsFirebaseAuthenticated()]
-    def get_authenticators(self):
-        if self.request.method == 'GET': return []
-        return [FirebaseAuthentication()]
     def get_queryset(self):
         queryset = District.objects.select_related('overseer').prefetch_related('communities').all()
         province = self.request.query_params.get('province')
@@ -1313,7 +1287,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
     def perform_create(self, serializer): serializer.save()
-    @action(detail=True, methods=['get'], authentication_classes=[], permission_classes=[AllowAny])
+    @action(detail=True, methods=['get'], authentication_classes=[FirebaseAuthentication], permission_classes=[IsFirebaseAuthenticated])
     def verify_payment(self, request, pk=None):
         order = self.get_object()
         if order.status == 'paid' and order.is_paid: return Response(self.get_serializer(order).data)
@@ -1564,6 +1538,8 @@ def send_designed_email_via_node(recipient_email, subject, body_message, firebas
         return {"success": False, "error": str(e)}  
 
 @api_view(['POST'])
+@authentication_classes([FirebaseAuthentication])
+@permission_classes([IsFirebaseAuthenticated])
 def send_email(request):
     recipient = request.data.get('to')
     subject = request.data.get('subject')
