@@ -16,6 +16,11 @@ analyzer:
     use_build_context_synchronously: ignore
     file_names: ignore
     unused_import: ignore
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
 include: package:flutter_lints/flutter.yaml
 
 linter:

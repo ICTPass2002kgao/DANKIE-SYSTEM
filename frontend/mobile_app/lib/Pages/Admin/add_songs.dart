@@ -14,7 +14,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ionicons/flutter_ionicons.dart';
-import 'package:http/http.dart' as http; 
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart'; // REQUIRED to open and view the contract
 import 'package:ttact/Components/API.dart';
 
@@ -405,6 +405,7 @@ class _AddMusicState extends State<AddMusic> {
         'Success',
         Colors.green,
       );
+      Navigator.pop(context);
     } catch (e) {
       Api().showMessage(
         context,
@@ -412,6 +413,8 @@ class _AddMusicState extends State<AddMusic> {
         'Upload Failed',
         Colors.red,
       );
+
+      Navigator.pop(context);
     } finally {
       Navigator.pop(context);
     }
@@ -749,11 +752,7 @@ class _AddMusicState extends State<AddMusic> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Ionicons.folder_open,
-              size: 60,
-              color: color.hintColor,
-            ),
+            Icon(Ionicons.folder_open, size: 60, color: color.hintColor),
             SizedBox(height: 16),
             Text(
               'No artists found.\nUpload songs to manage contracts.',
@@ -833,11 +832,7 @@ class _AddMusicState extends State<AddMusic> {
                           color: bgColor,
                           borderRadius: 12,
                           padding: EdgeInsets.all(12),
-                          child: Icon(
-                            Ionicons.eye,
-                            color: primary,
-                            size: 22,
-                          ),
+                          child: Icon(Ionicons.eye, color: primary, size: 22),
                         ),
                       ),
                       SizedBox(width: 12),
