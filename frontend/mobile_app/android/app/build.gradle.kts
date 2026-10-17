@@ -1,6 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
-import org.gradle.api.GradleException 
+import org.gradle.api.GradleException
 
 val newBuildDir = rootProject.layout.projectDirectory.dir("../build")
 layout.buildDirectory.value(newBuildDir.dir(project.name))
@@ -37,24 +37,21 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
-    }
-
     defaultConfig {
         applicationId = "com.thetact.ttact"
         minSdk = 27
         targetSdk = 36
-        versionCode = 67
-        versionName = "1.0.67"
-        
+        versionCode = 69
+        versionName = "1.0.69"
+
         manifestPlaceholders["com.google.android.gms.permission.AD_ID"] = "true"
 
         ndk {
             abiFilters.add("arm64-v8a")
         }
-        multiDexEnabled = true 
-    } 
+        multiDexEnabled = true
+    }
+
     signingConfigs {
         create("release") {
             storeFile = file(getKeystoreProperties("storeFile"))
@@ -86,11 +83,18 @@ android {
     }
 
     // Tell Crashlytics to upload native .so debug symbols on every release build.
-    // This resolves the Play Console "missing debug symbols" warning and makes
-    // crash stack traces show real function names instead of obfuscated addresses.
     firebaseCrashlytics {
         nativeSymbolUploadEnabled = true
         unstrippedNativeLibsDir = "build/intermediates/merged_native_libs/release/out/lib"
+    }
+}
+
+// Set JVM target via KotlinCompile tasks — the correct approach when android.newDsl=false.
+// kotlinOptions{} inside android{} is removed in Kotlin 2.3+; compilerOptions{} inside
+// android{} only exists in the new DSL (android.newDsl=true). Task-based config works in both.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
 
@@ -99,12 +103,13 @@ flutter {
 }
 
 dependencies {
-    implementation("com.google.android.gms:play-services-ads:22.6.0")
+    implementation("com.google.android.gms:play-services-ads:23.6.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
     // Force a consistent CameraX version across all transitive dependencies.
-    // Mixing versions causes NoSuchFieldError on Camera2Config$Companion at runtime.
-    val cameraXVersion = "1.3.4"
+    // mobile_scanner ^7.x requires CameraX 1.4.x; pinning to 1.3.x causes
+    // NoSuchFieldError on Camera2Config$Companion at runtime.
+    val cameraXVersion = "1.6.2"
     implementation("androidx.camera:camera-core:$cameraXVersion")
     implementation("androidx.camera:camera-camera2:$cameraXVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
@@ -112,7 +117,8 @@ dependencies {
     implementation("androidx.camera:camera-view:$cameraXVersion")
     implementation("androidx.camera:camera-extensions:$cameraXVersion")
 }
- 
+
+// Propagate Java and Kotlin compile settings to all plugin subprojects.
 subprojects {
     afterEvaluate {
         if (plugins.hasPlugin("com.android.application") || plugins.hasPlugin("com.android.library")) {

@@ -1,11 +1,16 @@
-[{
-  "relation": ["delegate_permission/common.handle_all_urls"],
-  "target": {
-    "namespace": "android_app",
-    "package_name": "com.thetact.ttact",
-    "sha256_cert_fingerprints": [
-      "3937d5776b9a9d15d0bbae482e3b117e1cd2585668fd34ddc7fb5f25bbd33054", 
-      "96F3C00BA7A65C08FFA52D727352CD8C0B001A6A0A95D6A1A7FF38349940F94B"    
-    ]
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.thetact.ttact",
+      "sha256_cert_fingerprints": [
+        "39:37:D5:77:6B:9A:9D:15:D0:BB:AE:48:2E:3B:11:7E:1C:D2:58:56:68:FD:34:DD:C7:FB:5F:25:BB:D3:30:54",
+        "F8:A8:30:C1:EC:95:51:04:99:7C:3D:FE:4B:38:A3:3F:A4:89:8A:3B:4D:C6:45:87:BF:37:91:CF:11:C1:72:2C"
+      ]
+    }
   }
-}]
+]
