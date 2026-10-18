@@ -1152,8 +1152,13 @@ def monthly_attendance_report(request):
     })
 
 class TactsoBranchViewSet(viewsets.ModelViewSet):
+    # Anonymous Firebase tokens allowed on GET — public university branch info.
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFullyAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsFirebaseAuthenticated()]   # anonymous OK for read-only
+        return [IsFullyAuthenticated()]          # full account required for writes
     queryset = TactsoBranch.objects.all()
     serializer_class = TactsoBranchSerializer
     def get_queryset(self):
@@ -1220,8 +1225,13 @@ class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
         return queryset
 
 class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
+    # Anonymous Firebase tokens allowed on GET — public songs/hymns.
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFullyAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsFirebaseAuthenticated()]   # anonymous OK for read-only
+        return [IsFullyAuthenticated()]          # full account required for writes
     queryset = Songs.objects.all()
     serializer_class = SongSerializer
 
@@ -1345,8 +1355,13 @@ class OverseerExpenseReportViewSet(CachedListMixin, viewsets.ModelViewSet):
         return queryset   
      
 class UpcomingEventViewSet(CachedListMixin, viewsets.ModelViewSet):
+    # Anonymous Firebase tokens allowed on GET — public church events.
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFullyAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsFirebaseAuthenticated()]   # anonymous OK for read-only
+        return [IsFullyAuthenticated()]          # full account required for writes
     queryset = UpcomingEvent.objects.all()
     serializer_class = UpcomingEventSerializer
 
@@ -1857,8 +1872,13 @@ from .models import ApostolicGreeting
 from .serializers import ApostolicGreetingSerializer
 
 class ApostolicGreetingViewSet(viewsets.ModelViewSet):
+    # Anonymous Firebase tokens allowed on GET — public apostle greetings.
     authentication_classes = [FirebaseAuthentication]
-    permission_classes = [IsFullyAuthenticated]
+
+    def get_permissions(self):
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsFirebaseAuthenticated()]   # anonymous OK for read-only
+        return [IsFullyAuthenticated()]          # full account required for writes
     queryset = ApostolicGreeting.objects.all()
     serializer_class = ApostolicGreetingSerializer
     lookup_field = 'id'

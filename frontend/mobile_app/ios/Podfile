@@ -1,5 +1,5 @@
-source 'https://cdn.cocoapods.org/'
 
+source 'https://github.com/CocoaPods/Specs.git'
 # ⭐️ UPDATED: Changed deployment target to 15.5 for ML Kit compatibility
 platform :ios, '15.5'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
