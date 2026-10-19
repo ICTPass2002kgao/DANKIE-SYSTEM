@@ -1,5 +1,5 @@
 
-source 'https://github.com/CocoaPods/Specs.git'
+source 'https://cdn.cocoapods.org/'
 # ⭐️ UPDATED: Changed deployment target to 15.5 for ML Kit compatibility
 platform :ios, '15.5'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -30,11 +30,12 @@ flutter_ios_podfile_setup
 target 'Runner' do
   use_frameworks!
 
-  # Install all Flutter pods EXCEPT AdMob & its dependencies
+  # Install all Flutter pods EXCEPT AdMob & its dependencies and heavy tensorflow clone
   flutter_install_all_ios_pods(File.dirname(File.realpath(__FILE__))) do |pod_name|
     pod_name != 'Google-Mobile-Ads-SDK' &&
     pod_name != 'google_mobile_ads' &&
-    pod_name != 'webview_flutter_wkwebview'
+    pod_name != 'webview_flutter_wkwebview' &&
+    pod_name != 'TensorFlowLiteSwift'  # Huge repo that fails on unstable network
   end
 
   target 'RunnerTests' do
@@ -46,7 +47,7 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
-      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'   # optional, safe to keep
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'   
     end
   end
 end
