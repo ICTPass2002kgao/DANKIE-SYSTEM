@@ -1232,6 +1232,10 @@ class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
             return [IsFirebaseAuthenticated()]   # anonymous OK for read-only
         return [IsFullyAuthenticated()]          # full account required for writes
+    
+    def get_queryset(self):
+        return Songs.objects.filter(is_visible=True)
+    
     queryset = Songs.objects.all()
     serializer_class = SongSerializer
 
