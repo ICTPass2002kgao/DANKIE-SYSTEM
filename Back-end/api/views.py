@@ -21,11 +21,9 @@ from calendar import monthrange
 from livekit import api
 from django.core.exceptions import ImproperlyConfigured
 from celery import shared_task
-
 from cryptography.fernet import Fernet
 from sklearn.metrics.pairwise import cosine_similarity
 from insightface.app import FaceAnalysis
-
 from django.conf import settings
 from django.core.mail import send_mail, get_connection
 from django.http import HttpResponse, FileResponse
@@ -34,17 +32,15 @@ from rest_framework.decorators import api_view, action, authentication_classes, 
 from rest_framework.response import Response
 from rest_framework import viewsets, filters, status
 from rest_framework.views import APIView
-
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission, AllowAny
 from rest_framework.pagination import PageNumberPagination
-
+from django.db import transaction
+from django.db.models import Q
 import firebase_admin
 from firebase_admin import credentials, firestore, storage, auth as firebase_auth
-
 from django.core.mail import EmailMultiAlternatives
-
 from .mixins import CachedListMixin
 from django.db import transaction
 
@@ -112,11 +108,9 @@ if not firebase_admin._apps:
         logger.warning("⚠️ Warning: FIREBASE_SERVICE_ACCOUNT_JSON missing in .env")
 
 from .authentication import FirebaseUser, FirebaseAuthentication, IsFirebaseAuthenticated, IsFullyAuthenticated
-
 # ================================================================================================
 # 2. HELPER FUNCTIONS (Security, AI, Email)
 # ================================================================================================
-
 def generate_face_encoding(file_obj):
     if GLOBAL_FACE_APP is None: return "[]"
     try:
