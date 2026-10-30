@@ -38,6 +38,7 @@ from rest_framework.views import APIView
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import BasePermission, AllowAny
+from rest_framework.pagination import PageNumberPagination
 
 import firebase_admin
 from firebase_admin import credentials, firestore, storage, auth as firebase_auth
@@ -1224,20 +1225,86 @@ class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
             except ValueError: pass
         return queryset
 
+class SongPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+c
+class SongPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 200
+
+
 class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
-    # Anonymous Firebase tokens allowed on GET — public songs/hymns.
+    """
+    Songs API.
+
+    GET /api/songs/                         → paginated list of visible songs
+    GET /api/songs/?include_hidden=true     → include un-published songs
+    GET /api/songs/?search=amazing          → search name / artist / category
+    GET /api/songs/?artist=John             → filter by artist
+    GET /api/songs/?category=Praise         → filter by category
+    GET /api/songs/?song_name=Grace         → filter by song name
+    GET /api/songs/?page=2&page_size=50     → pagination
+    GET /api/songs/<uuid>/                  → full detail of one song
+    POST /api/songs/                        → create (auth required)
+    """
     authentication_classes = [FirebaseAuthentication]
+    pagination_class = SongPagination
+    queryset = Songs.objects.all().order_by('-id')
+    serializer_class = SongSerializer
 
     def get_permissions(self):
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
-            return [IsFirebaseAuthenticated()]   # anonymous OK for read-only
-        return [IsFullyAuthenticated()]          # full account required for writes
-    
+            return [IsFirebaseAuthenticated()]
+        return [IsFullyAuthenticated()]
+
     def get_queryset(self):
-        return Songs.objects.filter(is_visible=True)
-    
-    queryset = Songs.objects.all()
-    serializer_class = SongSerializer
+        queryset = Songs.objects.all().order_by('-id')
+
+        # 1) Visibility filter — default ONLY visible songs.
+        #    Pass `include_hidden=true` to retrieve every song (e.g. admin
+        #    moderation screen).
+        include_hidden = self.request.query_params.get('include_hidden', 'false').lower() == 'true'
+        if not include_hidden:
+            queryset = queryset.filter(is_visible=True)
+
+        # 2) Free-text search across name / artist / category
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(song_name__icontains=search) |
+                Q(artist__icontains=search) |
+                Q(category__icontains=search)
+            )
+
+        # 3) Targeted filters
+        artist = self.request.query_params.get('artist')
+        if artist:
+            queryset = queryset.filter(artist__icontains=artist)
+
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category__iexact=category)
+
+        song_name = self.request.query_params.get('song_name')
+        if song_name:
+            queryset = queryset.filter(song_name__icontains=song_name)
+
+        artist_type = self.request.query_params.get('artist_type')
+        if artist_type:
+            queryset = queryset.filter(artist_type__iexact=artist_type)
+
+        # 4) Contract workflow filter
+        contract_signed = self.request.query_params.get('contract_signed')
+        if contract_signed is not None:
+            queryset = queryset.filter(
+                contract_signed=(contract_signed.lower() == 'true')
+            )
+
+        return queryset
 
 class CatalogViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
