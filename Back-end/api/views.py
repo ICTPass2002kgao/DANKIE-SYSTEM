@@ -1218,32 +1218,16 @@ class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
             try: return queryset[:int(limit)]
             except ValueError: pass
         return queryset
-
-class SongPagination(PageNumberPagination):
-    page_size = 20
-    page_size_query_param = 'page_size'
-    max_page_size = 100
-
-
+ 
 class SongPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 200
 
-
-class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
+class SongViewSet(viewsets.ModelViewSet):
     """
     Songs API.
-
-    GET /api/songs/                         → paginated list of visible songs
-    GET /api/songs/?include_hidden=true     → include un-published songs
-    GET /api/songs/?search=amazing          → search name / artist / category
-    GET /api/songs/?artist=John             → filter by artist
-    GET /api/songs/?category=Praise         → filter by category
-    GET /api/songs/?song_name=Grace         → filter by song name
-    GET /api/songs/?page=2&page_size=50     → pagination
-    GET /api/songs/<uuid>/                  → full detail of one song
-    POST /api/songs/                        → create (auth required)
+    (CachedListMixin removed to prevent stale data and fix the 1-song bug)
     """
     authentication_classes = [FirebaseAuthentication]
     pagination_class = SongPagination
@@ -1258,14 +1242,17 @@ class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Songs.objects.all().order_by('-id')
 
-        # 1) Visibility filter — default ONLY visible songs.
-        #    Pass `include_hidden=true` to retrieve every song (e.g. admin
-        #    moderation screen).
+        # 1) Visibility filter
         include_hidden = self.request.query_params.get('include_hidden', 'false').lower() == 'true'
         if not include_hidden:
             queryset = queryset.filter(is_visible=True)
 
-        # 2) Free-text search across name / artist / category
+        # 2) Targeted filters (Category checked FIRST)
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category__iexact=category)
+
+        # 3) Free-text search
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
@@ -1274,14 +1261,10 @@ class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
                 Q(category__icontains=search)
             )
 
-        # 3) Targeted filters
+        # 4) Additional Filters
         artist = self.request.query_params.get('artist')
         if artist:
             queryset = queryset.filter(artist__icontains=artist)
-
-        category = self.request.query_params.get('category')
-        if category:
-            queryset = queryset.filter(category__iexact=category)
 
         song_name = self.request.query_params.get('song_name')
         if song_name:
@@ -1291,7 +1274,6 @@ class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
         if artist_type:
             queryset = queryset.filter(artist_type__iexact=artist_type)
 
-        # 4) Contract workflow filter
         contract_signed = self.request.query_params.get('contract_signed')
         if contract_signed is not None:
             queryset = queryset.filter(
@@ -1299,7 +1281,6 @@ class SongViewSet(CachedListMixin, viewsets.ModelViewSet):
             )
 
         return queryset
-
 class CatalogViewSet(viewsets.ModelViewSet):
     authentication_classes = [FirebaseAuthentication]
     permission_classes = [IsFullyAuthenticated]

@@ -12,7 +12,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
- import 'package:path_provider/path_provider.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:ttact/Components/API.dart';
 import 'package:ttact/Components/AdBanner.dart' hide isAndroidPlatform;
@@ -765,6 +765,8 @@ class MusicTabState extends State<MusicTab>
                             setState(() {
                               _selectedCategory = category;
                               _selectedSongIndex = null;
+                              _musicSearchController.clear();
+                              _musicSearchQuery = '';
                             });
                             _refreshData();
                           }
@@ -824,6 +826,8 @@ class MusicTabState extends State<MusicTab>
                             setState(() {
                               _selectedCategory = category;
                               _selectedSongIndex = null;
+                              _musicSearchController.clear();
+                              _musicSearchQuery = '';
                             });
                             _refreshData();
                           }
