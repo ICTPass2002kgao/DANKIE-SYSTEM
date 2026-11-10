@@ -28,17 +28,16 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
- 
-  # Force Google-Mobile-Ads-SDK to 12.2.0 (stable, no Beta.h header issues)
-  pod 'Google-Mobile-Ads-SDK', '12.2.0'
+  use_frameworks! :linkage => :static
 
-  # Install all Flutter pods EXCEPT AdMob & its dependencies and heavy tensorflow clone
+  # Use locally pre-downloaded BoringSSL to avoid git clone timeout on slow connections.
+  # The source was downloaded as a tarball from GitHub CDN and the prepare_command was run manually.
+  pod 'BoringSSL-GRPC', :path => 'BoringSSL-GRPC'
+
+  # Install all Flutter pods EXCEPT heavy tensorflow clone
   flutter_install_all_ios_pods(File.dirname(File.realpath(__FILE__))) do |pod_name|
-    pod_name != 'Google-Mobile-Ads-SDK' &&
-    pod_name != 'google_mobile_ads' &&
-    pod_name != 'webview_flutter_wkwebview' &&
-    pod_name != 'TensorFlowLiteSwift'  # Huge repo that fails on unstable network
+    pod_name != 'TensorFlowLiteSwift' &&  # Huge repo that fails on unstable network
+    pod_name != 'tflite_flutter'          # Pulls in TensorFlowLiteSwift which clones 5GB+ repo
   end
 
   target 'RunnerTests' do
@@ -50,8 +49,15 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
-      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'   
+      config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
       # Fix for the Google Mobile Ads modular header error
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+    end
+  end
+
+  # Also apply to the main app target so archive builds pick up the setting
+  installer.pods_project.root_object.targets.each do |target|
+    target.build_configurations.each do |config|
       config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
     end
   end
