@@ -49,15 +49,8 @@ class MusicTabState extends State<MusicTab>
   int? _selectedSongIndex;
   Timer? _debounce;
 
-  // Lazy Loading / Pagination State Variables
-  final ScrollController _scrollController = ScrollController();
-  final List<dynamic> _allLoadedSongs = [];
-  bool _isLoadingNextPage = false;
-  bool _hasMoreSongs = true;
-  int _currentPage = 1;
-  final int _pageSize = 20;
-
   // Data State
+  List<dynamic> _allLoadedSongs = [];
   List<dynamic> _currentFilteredSongs = [];
   late Future<void> _initialLoadFuture;
   late AnimationController _rotationController;
@@ -74,7 +67,6 @@ class MusicTabState extends State<MusicTab>
     _initLocalPath();
 
     _initialLoadFuture = _refreshData();
-    _scrollController.addListener(_onScroll);
 
     // ⭐️ SEARCH LOGIC FIX: Instant local filtering + Server Debounce
     _musicSearchController.addListener(() {
@@ -99,8 +91,6 @@ class MusicTabState extends State<MusicTab>
   @override
   void dispose() {
     _debounce?.cancel();
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
     _rotationController.dispose();
     _musicSearchController.dispose();
     super.dispose();
@@ -131,8 +121,8 @@ class MusicTabState extends State<MusicTab>
     }
   }
 
-  // --- FETCH MUSIC PAGE (DJANGO - SECURED) ---
-  Future<List<dynamic>> _fetchMusicPage(int page) async {
+  // --- FETCH ALL SONGS (NO PAGINATION) ---
+  Future<List<dynamic>> _fetchAllSongs() async {
     try {
       User? user = FirebaseAuth.instance.currentUser;
       if (user == null) {
@@ -146,16 +136,18 @@ class MusicTabState extends State<MusicTab>
         return [];
       }
 
-      // Build query string
-      String queryParams = '?page=$page&page_size=$_pageSize';
+      // Build query string (no page params)
+      String queryParams = '';
 
       if (_musicSearchQuery.trim().isNotEmpty) {
         queryParams +=
-            '&search=${Uri.encodeComponent(_musicSearchQuery.trim())}';
+            '?search=${Uri.encodeComponent(_musicSearchQuery.trim())}';
       }
 
       if (_selectedCategory != 'All') {
-        queryParams += '&category=${Uri.encodeComponent(_selectedCategory)}';
+        queryParams += queryParams.isEmpty
+            ? '?category=${Uri.encodeComponent(_selectedCategory)}'
+            : '&category=${Uri.encodeComponent(_selectedCategory)}';
       }
 
       final url = Uri.parse(
@@ -173,15 +165,17 @@ class MusicTabState extends State<MusicTab>
       if (response.statusCode == 200) {
         final decodedData = json.decode(response.body);
 
-        if (decodedData is Map<String, dynamic> &&
-            decodedData.containsKey('results')) {
-          return decodedData['results'] as List<dynamic>;
-        } else if (decodedData is List<dynamic>) {
+        // Without pagination, the response is a plain array
+        if (decodedData is List<dynamic>) {
           return decodedData;
+        } else if (decodedData is Map<String, dynamic> &&
+            decodedData.containsKey('results')) {
+          // Fallback: if pagination is somehow still active
+          return decodedData['results'] as List<dynamic>;
         }
         return [];
       } else {
-        print("Error fetching music page $page: ${response.statusCode}");
+        print("Error fetching songs: ${response.statusCode}");
         return [];
       }
     } catch (e) {
@@ -191,65 +185,13 @@ class MusicTabState extends State<MusicTab>
   }
 
   Future<void> _refreshData() async {
-    setState(() {
-      _currentPage = 1;
-      _hasMoreSongs = true;
-      _allLoadedSongs.clear();
-      _currentFilteredSongs.clear();
-    });
-
-    final firstPageData = await _fetchMusicPage(_currentPage);
+    final songs = await _fetchAllSongs();
 
     if (mounted) {
       setState(() {
-        if (firstPageData.isEmpty || firstPageData.length < _pageSize) {
-          _hasMoreSongs = false;
-        }
-        _allLoadedSongs.addAll(firstPageData);
-        _applyLocalFilter(); // Ensure the filter is applied to the fresh data
+        _allLoadedSongs = songs;
+        _applyLocalFilter();
       });
-    }
-  }
-
-  void _onScroll() async {
-    if (!_scrollController.hasClients || _isLoadingNextPage || !_hasMoreSongs)
-      return;
-
-    final threshold = _scrollController.position.maxScrollExtent * 0.85;
-    if (_scrollController.position.pixels >= threshold) {
-      setState(() {
-        _isLoadingNextPage = true;
-      });
-
-      int nextPage = _currentPage + 1;
-      final nextPageData = await _fetchMusicPage(nextPage);
-
-      if (mounted) {
-        setState(() {
-          if (nextPageData.isEmpty || nextPageData.length < _pageSize) {
-            _hasMoreSongs = false;
-          }
-
-          final existingUrls = _allLoadedSongs
-              .map((song) => song['song_url'] ?? song['songUrl'])
-              .toSet();
-
-          final newSongs = nextPageData.where((song) {
-            final url = song['song_url'] ?? song['songUrl'];
-            return url != null && !existingUrls.contains(url);
-          }).toList();
-
-          if (nextPageData.isNotEmpty && newSongs.isEmpty) {
-            _hasMoreSongs = false;
-          } else {
-            _allLoadedSongs.addAll(newSongs);
-            _currentPage = nextPage;
-            _applyLocalFilter(); // Apply local filter to newly fetched data
-          }
-
-          _isLoadingNextPage = false;
-        });
-      }
     }
   }
 
@@ -893,20 +835,9 @@ class MusicTabState extends State<MusicTab>
         }
 
         return ListView.builder(
-          controller: _scrollController,
           physics: BouncingScrollPhysics(),
-          itemCount: _currentFilteredSongs.length + (_hasMoreSongs ? 1 : 0),
+          itemCount: _currentFilteredSongs.length,
           itemBuilder: (context, index) {
-            if (index == _currentFilteredSongs.length) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16.0),
-                child: Center(
-                  child: Api().isIOSPlatform
-                      ? CupertinoActivityIndicator()
-                      : CircularProgressIndicator(strokeWidth: 2),
-                ),
-              );
-            }
             return _buildSongListItem(
               theme,
               baseColor,

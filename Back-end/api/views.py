@@ -1219,18 +1219,13 @@ class DistrictViewSet(CachedListMixin, viewsets.ModelViewSet):
             except ValueError: pass
         return queryset
  
-class SongPagination(PageNumberPagination):
-    page_size = 20
-    page_size_query_param = 'page_size'
-    max_page_size = 200
-
 class SongViewSet(viewsets.ModelViewSet):
     """
     Songs API.
-    (CachedListMixin removed to prevent stale data and fix the 1-song bug)
+    No pagination — all songs returned in one response.
     """
     authentication_classes = [FirebaseAuthentication]
-    pagination_class = SongPagination
+    pagination_class = None
     queryset = Songs.objects.all().order_by('-id')
     serializer_class = SongSerializer
 
