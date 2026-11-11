@@ -77,6 +77,6 @@ urlpatterns = [
     path('paystack-webhook/', paystack_webhook),
     path('send-email/', views.send_email, name='send-email'),
     path('monthly_attendance_report/', views.monthly_attendance_report, name='monthly_attendance_report'),
-    
+    path('flush-cache/', views.flush_cache, name='flush_cache'),
      
 ]

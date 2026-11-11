@@ -2183,3 +2183,20 @@ class CommunicationReadStatusViewSet(CachedListMixin, viewsets.ModelViewSet):
             serializer.save(user=auth_user)
         else:
             serializer.save()
+
+
+# ============================================================
+# ADMIN: Cache Flush (temporary — remove after use)
+# ============================================================
+@api_view(['POST'])
+@authentication_classes([FirebaseAuthentication])
+@permission_classes([IsFullyAuthenticated])
+def flush_cache(request):
+    """
+    Flush all Redis caches. Call once after deploying cache fixes.
+    Protected by Firebase auth — only authenticated users can call it.
+    """
+    from django.core.cache import cache
+    cache.clear()
+    logger.info(f"✅ Redis cache flushed by {getattr(request.user, 'uid', 'unknown')}")
+    return Response({'message': '✅ All caches cleared successfully.'})
