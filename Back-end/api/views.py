@@ -1237,11 +1237,6 @@ class SongViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Songs.objects.all().order_by('-id')
 
-        # 1) Visibility filter
-        include_hidden = self.request.query_params.get('include_hidden', 'false').lower() == 'true'
-        if not include_hidden:
-            queryset = queryset.filter(is_visible=True)
-
         # 2) Targeted filters (Category checked FIRST)
         category = self.request.query_params.get('category')
         if category:
